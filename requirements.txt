@@ -1,0 +1,35 @@
+# Core RAG components
+chromadb
+sentence-transformers
+anthropic
+numpy
+pandas
+
+# PyTorch (CPU version for embeddings)
+torch
+torchvision
+torchaudio
+
+# Document processing
+pypdf2
+python-docx
+beautifulsoup4
+pdfplumber
+python-magic
+
+# Croatian NLP
+spacy
+nltk
+
+# Configuration and utilities
+python-dotenv
+pyyaml
+pydantic
+click
+tqdm
+
+# Development and testing
+jupyter
+pytest
+black
+flake8
