@@ -1,0 +1,23 @@
+{
+  "total_documents": 5,
+  "total_chunks": 421,
+  "strategies_tested": [
+    "paragraph",
+    "sentence",
+    "sliding_window"
+  ],
+  "chunk_statistics": {
+    "paragraph": {
+      "count": 146,
+      "avg_length": 494.16438356164383
+    },
+    "sentence": {
+      "count": 133,
+      "avg_length": 499.5864661654135
+    },
+    "sliding_window": {
+      "count": 142,
+      "avg_length": 515.8661971830986
+    }
+  }
+}

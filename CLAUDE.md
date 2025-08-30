@@ -66,6 +66,7 @@ This is a **learning-focused project** where each component should be built step
 - **Batch Processing**: Implement efficient Claude Sonnet batch API usage for cost optimization
 - **Learning Documentation**: Explain each component's purpose in the RAG pipeline
 - **Component Testing**: Test each piece independently with Croatian text before integration
+- **Comprehensive Testing**: Unit tests for each module, integration tests for complete pipeline, Croatian-specific test cases
 
 ### Claude Model Selection Strategy
 
@@ -105,8 +106,11 @@ deactivate                        # Deactivate environment
 
 # Testing and quality
 python test_setup.py              # Verify setup
-pytest tests/                     # Run unit tests
-python -m pytest -v               # Verbose testing
+pytest tests/                     # Run all unit and integration tests
+python -m pytest tests/test_extractors.py -v   # Test document extractors
+python -m pytest tests/test_cleaners.py -v     # Test Croatian text cleaners
+python -m pytest tests/test_chunkers.py -v     # Test document chunkers
+python -m pytest tests/test_preprocessing_integration.py -v  # Integration tests
 black src/                        # Format code
 flake8 src/                       # Lint code
 

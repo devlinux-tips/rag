@@ -4,9 +4,13 @@ A hands-on learning project to build a complete Retrieval-Augmented Generation (
 
 ## Quick Start
 
-1. **Activate virtual environment:**
+1. **Activate virtual environment, install requirements and test setup:**
    ```bash
+   python3 -m venv venv
    source venv/bin/activate
+   pip install -r requirements.txt
+   python -m spacy download hr_core_news_sm
+   python test_setup.py
    ```
 
 2. **Configure environment:**
