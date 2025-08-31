@@ -16,6 +16,7 @@ python-docx
 beautifulsoup4
 pdfplumber
 python-magic
+rank-bm25
 
 # Croatian NLP
 spacy

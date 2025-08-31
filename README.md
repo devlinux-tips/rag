@@ -15,7 +15,7 @@ python -m spacy download hr_core_news_sm
 
 # Install Ollama for local LLM
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3.1:8b
+ollama pull jobautomation/openeurollm-croatian:latest
 
 # Verify setup
 python test_setup.py
