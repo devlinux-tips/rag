@@ -19,7 +19,7 @@ from ..utils.croatian_utils import preserve_croatian_encoding, detect_croatian_c
 class OllamaConfig:
     """Configuration for Ollama client."""
     base_url: str = "http://localhost:11434"
-    model: str = "llama3.1:8b"
+    model: str = "qwen2.5:7b-instruct"
     temperature: float = 0.7
     max_tokens: int = 2000
     top_p: float = 0.9
@@ -380,7 +380,7 @@ class OllamaClient:
 
 
 def create_ollama_client(
-    model: str = "llama3.1:8b",
+    model: str = "qwen2.5:7b-instruct",
     base_url: str = "http://localhost:11434",
     temperature: float = 0.7
 ) -> OllamaClient:

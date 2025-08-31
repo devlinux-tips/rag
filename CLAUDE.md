@@ -57,13 +57,13 @@ This is a **learning-focused project** where each component should be built step
 1. **Document Processing** (`src/preprocessing/`) - Handle Croatian text extraction and chunking
 2. **Vector Database** (`src/vectordb/`) - Implement embeddings and similarity search
 3. **Retrieval System** (`src/retrieval/`) - Build intelligent document retrieval
-4. **Local LLM Integration** (`src/generation/`) - Implement Ollama client for answer generation
+4. **Local LLM Integration** (`src/generation/`) - Implement Ollama client with qwen2.5:32b
 5. **Complete Pipeline** (`src/pipeline/`) - Orchestrate all components
 
 ### Key implementation priorities
 - **Croatian Language Support**: Proper UTF-8 encoding, diacritics handling (Č, Ć, Š, Ž, Đ)
-- **Free/Local Focus**: Use ChromaDB, sentence-transformers, and Ollama (completely free, no paid APIs)
-- **Local Processing**: Implement efficient Ollama integration for fast local answer generation
+- **Free/Local Focus**: ChromaDB, distiluse embeddings, qwen2.5:32b via Ollama (completely free)
+- **Local Processing**: qwen2.5:32b model for Croatian language generation (requires 64GB+ RAM)
 - **Learning Documentation**: Explain each component's purpose in the RAG pipeline
 - **Component Testing**: Test each piece independently with Croatian text before integration
 - **Comprehensive Testing**: Unit tests for each module, integration tests for complete pipeline, Croatian-specific test cases
@@ -94,8 +94,8 @@ Use `/model` command in Claude Code when Claude suggests switching, or when you 
 ### Technical stack
 - **Python 3.9+** with sentence-transformers, chromadb, requests
 - **Vector DB**: ChromaDB (free, local storage)
-- **Embeddings**: Multilingual sentence-transformers models
-- **LLM**: Ollama with llama3.1:8b or mistral:7b (free, local)
+- **Embeddings**: distiluse-base-multilingual-cased (512 dimensions, better Croatian support)
+- **LLM**: Ollama with qwen2.5:7b-instruct (free, local, efficient on most hardware)
 - **Documents**: PDF, DOCX, TXT support with Croatian encoding
 
 ### Development Commands
@@ -116,7 +116,7 @@ flake8 src/                       # Lint code
 
 # Development
 jupyter notebook                  # Start Jupyter for exploration
-python src/pipeline/rag_system.py # Run main pipeline
+python rag.py                     # Run interactive Croatian RAG system
 ```
 
 ### Code Style

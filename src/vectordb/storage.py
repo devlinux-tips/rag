@@ -268,7 +268,8 @@ class ChromaDBStorage:
             
             results = self.collection.query(**query_kwargs)
             
-            self.logger.debug(f"Query returned {len(results.get('ids', [[]]))[0]} results")
+            result_count = len(results.get('ids', [[]])[0]) if results.get('ids') and results['ids'] else 0
+            self.logger.debug(f"Query returned {result_count} results")
             return results
             
         except Exception as e:
