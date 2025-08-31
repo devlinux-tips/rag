@@ -140,7 +140,7 @@ python -m pytest tests/ -k "croatian" -v
 This project is designed for hands-on RAG learning:
 
 1. **Document Processing** - Handle Croatian text extraction and chunking
-2. **Vector Database** - Implement embeddings and similarity search  
+2. **Vector Database** - Implement embeddings and similarity search
 3. **Retrieval System** - Build intelligent document retrieval
 4. **Generation System** - Integrate local LLM processing
 5. **Complete Pipeline** - Orchestrate all components

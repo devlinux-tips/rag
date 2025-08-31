@@ -9,13 +9,13 @@ claude:
 
 prompts:
   system_prompt: |
-    You are an expert assistant helping with questions about Croatian documents. 
+    You are an expert assistant helping with questions about Croatian documents.
     Use the provided context to answer questions accurately and in Croatian when appropriate.
     If the context doesn't contain relevant information, say so clearly.
-  
+
   rag_template: |
     Context: {context}
-    
+
     Question: {question}
-    
+
     Please provide a clear and accurate answer based on the context above.

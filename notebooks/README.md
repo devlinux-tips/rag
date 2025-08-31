@@ -39,12 +39,12 @@ Croatian is **highly inflected** - words change endings:
 1. **Dense Search** (Embeddings)
    - Gets 20 semantically similar candidates
    - Handles synonyms and conceptual matches
-   
+
 2. **Hybrid Filtering** (Dense + BM25)
    - Combines semantic + lexical signals
    - Reduces to 10 best candidates
    - Weights: 70% dense, 30% BM25
-   
+
 3. **Cross-Encoder Reranking**
    - Sees full query + document context
    - Final precision scoring
@@ -81,7 +81,7 @@ jupyter notebook
 
 ## 🔧 Integration
 
-The notebooks demonstrate techniques used in the main RAG system (`rag.py`). 
+The notebooks demonstrate techniques used in the main RAG system (`rag.py`).
 
 To use in production:
 ```python

@@ -212,3 +212,4 @@ temp_cache
 temp_chroma_db
 models/embeddings
 data/vectordb
+data/chromadb

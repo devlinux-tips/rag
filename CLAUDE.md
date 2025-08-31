@@ -72,7 +72,7 @@ This is a **learning-focused project** where each component should be built step
 
 **Default: Claude Sonnet 4**
 - Document processing and chunking
-- Basic embedding and retrieval implementation  
+- Basic embedding and retrieval implementation
 - Standard prompt engineering
 - Code debugging and refactoring
 - Configuration and setup tasks
@@ -140,7 +140,7 @@ python rag.py                     # Run interactive Croatian RAG system
 ### Learning objectives
 - **Understand RAG Architecture**: Learn how retrieval and generation work together
 - **Master Each Component**: Build preprocessing, embeddings, retrieval, and generation from scratch
-- **Croatian NLP Challenges**: Handle non-English text processing complexities  
+- **Croatian NLP Challenges**: Handle non-English text processing complexities
 - **API Efficiency**: Implement batch processing for cost-effective Claude usage
 - **System Integration**: Connect components into a production-ready pipeline
 

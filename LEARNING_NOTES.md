@@ -13,7 +13,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 #### Document Extractors (`extractors.py`)
 - **PDF extraction** using PyPDF2 - handles Croatian government documents
-- **DOCX extraction** using python-docx - processes official Croatian documents  
+- **DOCX extraction** using python-docx - processes official Croatian documents
 - **TXT extraction** with multiple encoding support (UTF-8, CP1250, ISO-8859-2)
 - **Error handling** for various document formats and encoding issues
 
@@ -27,7 +27,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 #### Document Chunkers (`chunkers.py`)
 - **Three chunking strategies**:
   - **Sliding Window**: Consistent chunk sizes with character overlap
-  - **Sentence-based**: Semantic coherence by grouping sentences  
+  - **Sentence-based**: Semantic coherence by grouping sentences
   - **Paragraph-based**: Structural preservation of document organization
 - **Croatian sentence boundary detection** - handles Croatian punctuation and capitalization
 - **Overlap handling** - maintains context between chunks
@@ -37,14 +37,14 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 **Documents Processed**: 5 Croatian government documents (2 DOCX, 3 PDF)
 - NN - 2025 - 116 - 1671.pdf (6,310 chars) → 12 chunks per strategy
-- NN - 2025 - 115 - 1666.pdf (51,023 chars) → 95-109 chunks per strategy  
+- NN - 2025 - 115 - 1666.pdf (51,023 chars) → 95-109 chunks per strategy
 - 110 - 8.docx (4,826 chars) → 10-11 chunks per strategy
 - 110 - 11.docx (2,854 chars) → 6-7 chunks per strategy
 - NN - 2025 - 116 - 1683.pdf (3,764 chars) → 8 chunks per strategy
 
 **Total Output**: 421 chunks across all strategies
 - **Paragraph Strategy**: 146 chunks, avg 494.2 chars, 66.5 words
-- **Sentence Strategy**: 133 chunks, avg 499.6 chars, 66.9 words  
+- **Sentence Strategy**: 133 chunks, avg 499.6 chars, 66.9 words
 - **Sliding Window**: 142 chunks, avg 515.9 chars, 69.4 words
 
 ### Key Learning Points
@@ -64,7 +64,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 ### Files Created
 - `src/preprocessing/extractors.py` - Document text extraction
-- `src/preprocessing/cleaners.py` - Croatian text normalization  
+- `src/preprocessing/cleaners.py` - Croatian text normalization
 - `src/preprocessing/chunkers.py` - Document chunking strategies
 - `src/preprocessing/__init__.py` - Pipeline integration
 - `data/processed/*.json` - Processed chunk data for each document and strategy
@@ -100,7 +100,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 **Key Testing Achievements:**
 - ✅ Croatian encoding detection and preservation validated
-- ✅ All chunking strategies tested with real Croatian government documents  
+- ✅ All chunking strategies tested with real Croatian government documents
 - ✅ Integration pipeline verified from extraction to final chunks
 - ✅ Croatian-specific text features (diacritics, sentence boundaries) preserved
 - ✅ Error handling and edge cases covered comprehensively
@@ -113,7 +113,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 ### 2. Vector Database (`src/vectordb/`) - *Pending*
 - Implement multilingual embeddings using sentence-transformers
-- Set up ChromaDB for local vector storage  
+- Set up ChromaDB for local vector storage
 - Create similarity search functionality
 - Evaluate embedding quality on Croatian text
 
@@ -136,7 +136,7 @@ This document tracks the step-by-step implementation of a complete Retrieval-Aug
 
 ## Learning Resources Used
 - Croatian language processing techniques
-- RAG architecture best practices  
+- RAG architecture best practices
 - ChromaDB local vector database
 - Sentence-transformers multilingual models
 - Claude Sonnet batch API optimization

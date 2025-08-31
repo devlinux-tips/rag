@@ -185,7 +185,7 @@ cat > .env.template << 'EOF'
 # Claude API Configuration
 ANTHROPIC_API_KEY=your_claude_api_key_here
 
-# Vector Database Configuration  
+# Vector Database Configuration
 CHROMA_DB_PATH=./data/vectordb
 CHROMA_COLLECTION_NAME=croatian_documents
 
@@ -256,15 +256,15 @@ claude:
 
 prompts:
   system_prompt: |
-    You are an expert assistant helping with questions about Croatian documents. 
+    You are an expert assistant helping with questions about Croatian documents.
     Use the provided context to answer questions accurately and in Croatian when appropriate.
     If the context doesn't contain relevant information, say so clearly.
-  
+
   rag_template: |
     Context: {context}
-    
+
     Question: {question}
-    
+
     Please provide a clear and accurate answer based on the context above.
 EOF
 
@@ -291,25 +291,25 @@ from typing import List
 
 class CroatianTextProcessor:
     """Utilities for processing Croatian text."""
-    
+
     CROATIAN_CHARS = "ČčĆćŠšŽžĐđ"
-    
+
     def __init__(self):
         self.diacritic_map = {
             'č': 'c', 'ć': 'c', 'š': 's', 'ž': 'z', 'đ': 'd',
             'Č': 'C', 'Ć': 'C', 'Š': 'S', 'Ž': 'Z', 'Đ': 'D'
         }
-    
+
     def normalize_text(self, text: str) -> str:
         """Normalize Croatian text while preserving diacritics."""
         # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text.strip())
         return text
-    
+
     def has_croatian_chars(self, text: str) -> bool:
         """Check if text contains Croatian-specific characters."""
         return any(char in text for char in self.CROATIAN_CHARS)
-    
+
     def remove_diacritics(self, text: str) -> str:
         """Remove Croatian diacritics (use sparingly for search)."""
         for croatian, latin in self.diacritic_map.items():
@@ -331,22 +331,22 @@ from typing import Dict, Any
 
 class RAGConfig(BaseSettings):
     """Main configuration for RAG system."""
-    
+
     # API Configuration
     anthropic_api_key: str = ""
     claude_model: str = "claude-3-sonnet-20240229"
-    
+
     # Database Configuration
     chroma_db_path: str = "./data/vectordb"
     chroma_collection_name: str = "croatian_documents"
-    
+
     # Embedding Configuration
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
-    
+
     # Processing Configuration
     max_chunk_size: int = 512
     chunk_overlap: int = 50
-    
+
     class Config:
         env_file = ".env"
 
@@ -364,13 +364,13 @@ EOF
 print_status "Creating test Croatian document..."
 mkdir -p data/test
 cat > data/test/sample_croatian.txt << 'EOF'
-Zagreb je glavni grad Republike Hrvatske i najveći grad u zemlji. 
+Zagreb je glavni grad Republike Hrvatske i najveći grad u zemlji.
 Nalazi se na slivetišću rijeke Save i Medvednice na nadmorskoj visini od približno 122 metra.
 
-Zagreb ima bogatu povijesnu baštinu koja seže u rimsko doba. 
+Zagreb ima bogatu povijesnu baštinu koja seže u rimsko doba.
 Današnji Zagreb nastao je 1850. godine spaјanjem gradova Gradeca i Kaptola.
 
-Grad je poznat po svojoj arhitekturi, muzejima i kulturnim ustanovama. 
+Grad je poznat po svojoj arhitekturi, muzejima i kulturnim ustanovama.
 Ban Jelačić trg je središnji trg grada i jedno od najpoznatijih mjesta u Zagrebu.
 
 Sveučilište u Zagrebu osnovano je 1669. godine i jedno je od najstarijih sveučilišta u Europi.
@@ -453,7 +453,7 @@ def test_embeddings():
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-        
+
         # Test with Croatian text
         text = "Ovo je test rečenica na hrvatskom jeziku."
         embedding = model.encode(text)
@@ -466,15 +466,15 @@ def test_embeddings():
 def test_file_structure():
     """Test that project structure is created correctly."""
     required_dirs = [
-        "src/preprocessing", "src/vectordb", "src/retrieval", 
+        "src/preprocessing", "src/vectordb", "src/retrieval",
         "src/claude_api", "src/pipeline", "data/raw", "data/processed"
     ]
-    
+
     missing = []
     for dir_path in required_dirs:
         if not Path(dir_path).exists():
             missing.append(dir_path)
-    
+
     if missing:
         print(f"❌ Missing directories: {missing}")
         return False
@@ -484,22 +484,22 @@ def test_file_structure():
 
 if __name__ == "__main__":
     print("🧪 Testing Croatian RAG setup...\n")
-    
+
     tests = [
         test_file_structure,
         test_imports,
         test_croatian_model,
         test_embeddings,
     ]
-    
+
     passed = 0
     for test in tests:
         if test():
             passed += 1
         print()
-    
+
     print(f"Results: {passed}/{len(tests)} tests passed")
-    
+
     if passed == len(tests):
         print("🎉 Setup complete! Ready to start building your Croatian RAG system.")
         print("\nNext steps:")
