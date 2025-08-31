@@ -1,13 +1,18 @@
 """
 Ollama client for local LLM integration in Croatian RAG system.
-Handles communication with Ollama API for answer generation.
+Handles communication with Ollama API for answer generation with Croatian language support.
 """
 
+import asyncio
 import json
 import logging
-from typing import Dict, List, Optional, Any
+import time
+from typing import Dict, List, Optional, Any, AsyncGenerator
+import httpx
 import requests
 from dataclasses import dataclass
+
+from ..utils.croatian_utils import preserve_croatian_encoding, detect_croatian_content
 
 
 @dataclass
@@ -16,22 +21,60 @@ class OllamaConfig:
     base_url: str = "http://localhost:11434"
     model: str = "llama3.1:8b"
     temperature: float = 0.7
-    max_tokens: int = 1000
-    timeout: int = 30
+    max_tokens: int = 2000
+    top_p: float = 0.9
+    top_k: int = 40
+    timeout: float = 60.0
+    
+    # Croatian-specific settings
+    preserve_diacritics: bool = True
+    prefer_formal_style: bool = True
+    include_cultural_context: bool = True
+
+
+@dataclass
+class GenerationRequest:
+    """Request for text generation."""
+    
+    prompt: str
+    context: List[str]
+    query: str
+    query_type: str = "general"
+    language: str = "hr"
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class GenerationResponse:
+    """Response from text generation."""
+    
+    text: str
+    model: str
+    tokens_used: int
+    generation_time: float
+    confidence: float
+    metadata: Dict[str, Any]
+    
+    @property
+    def has_croatian_content(self) -> bool:
+        """Check if response contains Croatian content."""
+        return detect_croatian_content(self.text) > 0.3
 
 
 class OllamaClient:
-    """Client for interacting with Ollama API for text generation."""
+    """Enhanced client for interacting with Ollama API for Croatian text generation."""
     
     def __init__(self, config: OllamaConfig = None):
         """
-        Initialize Ollama client.
+        Initialize Ollama client with Croatian language support.
         
         Args:
             config: Configuration object for Ollama settings
         """
         self.config = config or OllamaConfig()
         self.logger = logging.getLogger(__name__)
+        self._async_client = None
+        self._model_info = None
         
     def _make_request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -105,51 +148,108 @@ class OllamaClient:
             self.logger.error(f"Failed to pull model {self.config.model}: {e}")
             return False
     
+    async def generate_text_async(self, request: GenerationRequest) -> GenerationResponse:
+        """Generate text using Ollama with async support and Croatian optimization."""
+        start_time = time.time()
+        
+        if self._async_client is None:
+            self._async_client = httpx.AsyncClient(timeout=self.config.timeout)
+        
+        try:
+            # Ensure model is available
+            if not await self._is_available_async():
+                raise ConnectionError("Ollama service is not available")
+            
+            # Prepare generation request
+            ollama_request = {
+                "model": self.config.model,
+                "prompt": request.prompt,
+                "stream": False,
+                "options": {
+                    "temperature": self.config.temperature,
+                    "num_predict": self.config.max_tokens,
+                    "top_p": self.config.top_p,
+                    "top_k": self.config.top_k,
+                }
+            }
+            
+            # Make request
+            response = await self._async_client.post(
+                f"{self.config.base_url}/api/generate",
+                json=ollama_request
+            )
+            response.raise_for_status()
+            
+            # Parse response
+            data = response.json()
+            generated_text = data.get("response", "")
+            
+            # Preserve Croatian encoding
+            if self.config.preserve_diacritics and request.language == "hr":
+                generated_text = preserve_croatian_encoding(generated_text)
+            
+            # Calculate confidence
+            confidence = self._calculate_confidence(generated_text, request)
+            
+            # Prepare metadata
+            metadata = {
+                "model_info": data.get("model", {}),
+                "prompt_eval_count": data.get("prompt_eval_count", 0),
+                "eval_count": data.get("eval_count", 0),
+                "total_duration": data.get("total_duration", 0),
+                "context_length": len(" ".join(request.context)),
+                "query_type": request.query_type,
+                "language": request.language
+            }
+            
+            if request.metadata:
+                metadata.update(request.metadata)
+            
+            return GenerationResponse(
+                text=generated_text,
+                model=self.config.model,
+                tokens_used=data.get("eval_count", 0),
+                generation_time=time.time() - start_time,
+                confidence=confidence,
+                metadata=metadata
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Generation failed: {e}")
+            return GenerationResponse(
+                text=f"Greška u generiranju odgovora: {str(e)}",
+                model=self.config.model,
+                tokens_used=0,
+                generation_time=time.time() - start_time,
+                confidence=0.0,
+                metadata={"error": str(e), "query_type": request.query_type}
+            )
+    
     def generate_response(
         self, 
         prompt: str, 
         context: Optional[List[str]] = None,
         system_prompt: Optional[str] = None
     ) -> str:
-        """
-        Generate response using Ollama model.
+        """Synchronous wrapper for generate_text_async (backward compatibility)."""
+        request = GenerationRequest(
+            prompt=self._build_prompt(prompt, context, system_prompt),
+            context=context or [],
+            query=prompt,
+            query_type="general",
+            language="hr"
+        )
         
-        Args:
-            prompt: User query or prompt
-            context: List of context chunks from retrieval
-            system_prompt: Optional system prompt for behavior control
-            
-        Returns:
-            Generated response text
-            
-        Raises:
-            ValueError: If model is not available
-            ConnectionError: If cannot connect to Ollama
-        """
-        if not self.is_model_available():
-            if not self.pull_model():
-                raise ValueError(f"Model {self.config.model} is not available")
-        
-        # Build full prompt with context
-        full_prompt = self._build_prompt(prompt, context, system_prompt)
-        
-        payload = {
-            "model": self.config.model,
-            "prompt": full_prompt,
-            "stream": False,
-            "options": {
-                "temperature": self.config.temperature,
-                "num_predict": self.config.max_tokens
-            }
-        }
-        
+        # Run async function in sync context
+        loop = None
         try:
-            response = self._make_request("api/generate", payload)
-            return response.get("response", "").strip()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to generate response: {e}")
-            raise
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        response = loop.run_until_complete(self.generate_text_async(request))
+        return response.text
     
     def _build_prompt(
         self, 
@@ -200,6 +300,57 @@ class OllamaClient:
             self.logger.error(f"Failed to get available models: {e}")
             return []
     
+    async def _is_available_async(self) -> bool:
+        """Check if Ollama service is available (async)."""
+        try:
+            if self._async_client is None:
+                self._async_client = httpx.AsyncClient(timeout=self.config.timeout)
+            
+            response = await self._async_client.get(f"{self.config.base_url}/api/tags")
+            return response.status_code == 200
+        except Exception as e:
+            self.logger.error(f"Ollama service not available: {e}")
+            return False
+    
+    def _calculate_confidence(self, generated_text: str, request: GenerationRequest) -> float:
+        """Calculate confidence score for generated text."""
+        confidence = 0.5  # Base confidence
+        
+        # Length check
+        if len(generated_text.strip()) < 10:
+            confidence -= 0.3
+        elif len(generated_text.strip()) > 50:
+            confidence += 0.1
+        
+        # Croatian content check
+        if request.language == "hr":
+            croatian_score = detect_croatian_content(generated_text)
+            confidence += croatian_score * 0.3
+        
+        # Query relevance (simple keyword check)
+        query_words = set(request.query.lower().split())
+        text_words = set(generated_text.lower().split())
+        overlap = len(query_words.intersection(text_words))
+        if len(query_words) > 0:
+            relevance = overlap / len(query_words)
+            confidence += relevance * 0.2
+        
+        # Context usage check
+        if request.context:
+            context_text = " ".join(request.context).lower()
+            context_words = set(context_text.split())
+            context_overlap = len(context_words.intersection(text_words))
+            if len(context_words) > 0:
+                context_usage = min(context_overlap / len(context_words), 0.3)
+                confidence += context_usage
+        
+        # Error indicators
+        error_phrases = ["greška", "error", "ne znam", "ne mogu", "sorry"]
+        if any(phrase in generated_text.lower() for phrase in error_phrases):
+            confidence -= 0.2
+        
+        return max(0.0, min(1.0, confidence))
+    
     def health_check(self) -> bool:
         """
         Check if Ollama service is healthy.
@@ -213,6 +364,19 @@ class OllamaClient:
             
         except Exception:
             return False
+    
+    async def close(self):
+        """Close async client."""
+        if self._async_client:
+            await self._async_client.aclose()
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.close()
 
 
 def create_ollama_client(

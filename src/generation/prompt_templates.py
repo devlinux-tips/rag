@@ -22,7 +22,14 @@ class CroatianRAGPrompts:
     BASE_SYSTEM_PROMPT = """Ti si korisni asistent koji odgovara na pitanja na hrvatskom jeziku. 
 Koristi kontekst iz dokumenata da pružiš točne i korisne odgovore. 
 Ako informacije nisu dostupne u kontekstu, jasno to naglasi.
-Odgovori uvijek na hrvatskom jeziku, čak i ako je pitanje postavljeno na drugom jeziku."""
+Odgovori uvijek na hrvatskom jeziku, čak i ako je pitanje postavljeno na drugom jeziku.
+
+VAŽNE UPUTE:
+- Koristi hrvatski standardni jezik sa dijakritičkim znakovima (č, ć, š, ž, đ)
+- Prepoznaj hrvatski kulturni kontekst (npr. "biser Jadrana" = Dubrovnik)
+- Koristi formalni stil osim ako nije drugačije navedeno
+- Struktuirana odgovore jasno i logično
+- Ne izmišljaj informacije koje nisu u kontekstu"""
 
     # Template for general question answering
     QUESTION_ANSWERING = PromptTemplate(
@@ -67,6 +74,25 @@ Koristi kontekst da napraviš detaljnu usporedbu.
 Istaknuti sličnosti i razlike, te navedi specifične primjere iz konteksta.""",
         user_template="Usporedi sljedeće: {query}\n\nUsporedba:",
         context_template="Informacije za usporedbu:\n{context}\n\n"
+    )
+    
+    # Template for Croatian cultural/historical queries
+    CULTURAL_CONTEXT = PromptTemplate(
+        system_prompt="""Ti si stručnjak za hrvatsku kulturu, povijest i zemljopis koji odgovara na hrvatskom jeziku.
+Koristi kontekst da daš bogat, kulturalno kontekstiran odgovor.
+Prepoznaj hrvatske toponime, povijesne osobe, kulturne reference i tradicije.
+Objasni kulturni značaj i kontekst gdje je to relevantno.""",
+        user_template="Kulturno/povijesno pitanje: {query}\n\nOdgovor s kulturnim kontekstom:",
+        context_template="Relevantne kulturne i povijesne informacije:\n{context}\n\n"
+    )
+    
+    # Template for tourism/travel queries
+    TOURISM = PromptTemplate(
+        system_prompt="""Ti si turistički vodič za Hrvatsku koji odgovara na hrvatskom jeziku.
+Koristi kontekst da daš praktičan i informativan odgovor o hrvatskim odredištima.
+Fokusiraj se na korisne informacije za posjetitelje i ističi posebne značajke.""",
+        user_template="Turističko pitanje: {query}\n\nTuristički odgovor:",
+        context_template="Turističke informacije:\n{context}\n\n"
     )
 
 
@@ -163,10 +189,34 @@ def get_prompt_for_query_type(query: str) -> PromptTemplate:
     query_lower = query.lower()
     
     # Keywords for different query types
-    summary_keywords = ['sažetak', 'sažmi', 'ukratko', 'glavne točke', 'resume']
-    comparison_keywords = ['usporedi', 'razlika', 'sličnost', 'vs', 'nasuprot']
-    explanation_keywords = ['objasni', 'što je', 'kako', 'zašto', 'definiraj']
-    factual_keywords = ['kada', 'gdje', 'tko', 'koliko', 'koji', 'koja']
+    summary_keywords = ['sažetak', 'sažmi', 'ukratko', 'glavne točke', 'resume', 'pregled']
+    comparison_keywords = ['usporedi', 'razlika', 'sličnost', 'vs', 'nasuprot', 'razlikuje', 'bolje']
+    explanation_keywords = ['objasni', 'što je', 'kako', 'zašto', 'definiraj', 'opiši']
+    factual_keywords = ['kada', 'gdje', 'tko', 'koliko', 'koji', 'koja', 'ime', 'broj']
+    
+    # Croatian cultural/historical keywords
+    cultural_keywords = [
+        'povijest', 'kultura', 'tradicija', 'umjetnost', 'književnost', 
+        'zagreb', 'dubrovnik', 'split', 'pula', 'rijeka', 'osijek',
+        'jadran', 'dalmacija', 'slavonija', 'istra', 'hrvatsko primorje',
+        'biser jadrana', 'plitvi', 'krka', 'mljet', 'brač', 'hvar',
+        'franjo tuđman', 'ante starčević', 'josip jelačić', 'miroslav krleža'
+    ]
+    
+    # Tourism keywords
+    tourism_keywords = [
+        'turizam', 'odmorište', 'plaža', 'hotel', 'restoran', 'znamenitost',
+        'posjetiti', 'vidjeti', 'doći', 'putovanje', 'odmor', 'ljetovanje',
+        'nacionalni park', 'unesco', 'baština'
+    ]
+    
+    # Check for cultural/historical context
+    if any(keyword in query_lower for keyword in cultural_keywords):
+        return CroatianRAGPrompts.CULTURAL_CONTEXT
+    
+    # Check for tourism queries
+    if any(keyword in query_lower for keyword in tourism_keywords):
+        return CroatianRAGPrompts.TOURISM
     
     # Check for summary request
     if any(keyword in query_lower for keyword in summary_keywords):
