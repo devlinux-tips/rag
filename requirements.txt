@@ -1,7 +1,7 @@
 # Core RAG components
 chromadb
 sentence-transformers
-anthropic
+requests
 numpy
 pandas
 

@@ -2,14 +2,14 @@
 
 ## What this project does
 
-This is a hands-on learning project to build a complete Retrieval-Augmented Generation (RAG) system for Croatian documents using Claude Sonnet API with batch processing. The system will process Croatian text documents, create vector embeddings for semantic search, and generate answers using Claude Sonnet with retrieved context.
+This is a hands-on learning project to build a complete Retrieval-Augmented Generation (RAG) system for Croatian documents using local LLM integration (Ollama). The system will process Croatian text documents, create vector embeddings for semantic search, and generate answers using local multilingual models with retrieved context.
 
 **Key capabilities being built:**
 - Process Croatian documents (PDF, DOCX, TXT) with proper encoding
 - Create semantic embeddings using free multilingual models
 - Store vectors in local ChromaDB for fast similarity search
 - Retrieve relevant document chunks for user queries
-- Generate contextual answers via Claude Sonnet batch API
+- Generate contextual answers via local LLM (Ollama with multilingual models)
 - Handle Croatian language-specific challenges (diacritics, morphology)
 
 ## Project structure
@@ -29,8 +29,8 @@ local-rag-croatian/
 │   │   ├── query_processor.py # Croatian query preprocessing
 │   │   ├── retriever.py       # Main retrieval logic
 │   │   └── ranker.py          # Result ranking & filtering
-│   ├── claude_api/            # Claude API integration
-│   │   ├── batch_client.py    # Batch processing client
+│   ├── generation/            # Local LLM integration
+│   │   ├── ollama_client.py   # Ollama client for local LLMs
 │   │   ├── prompt_templates.py # RAG prompt engineering
 │   │   └── response_parser.py # Response processing
 │   ├── pipeline/              # Complete RAG orchestration
@@ -57,13 +57,13 @@ This is a **learning-focused project** where each component should be built step
 1. **Document Processing** (`src/preprocessing/`) - Handle Croatian text extraction and chunking
 2. **Vector Database** (`src/vectordb/`) - Implement embeddings and similarity search
 3. **Retrieval System** (`src/retrieval/`) - Build intelligent document retrieval
-4. **Claude Integration** (`src/claude_api/`) - Implement batch API processing
+4. **Local LLM Integration** (`src/generation/`) - Implement Ollama client for answer generation
 5. **Complete Pipeline** (`src/pipeline/`) - Orchestrate all components
 
 ### Key implementation priorities
 - **Croatian Language Support**: Proper UTF-8 encoding, diacritics handling (Č, Ć, Š, Ž, Đ)
-- **Free/Local Focus**: Use ChromaDB and sentence-transformers (no paid services except Claude API)
-- **Batch Processing**: Implement efficient Claude Sonnet batch API usage for cost optimization
+- **Free/Local Focus**: Use ChromaDB, sentence-transformers, and Ollama (completely free, no paid APIs)
+- **Local Processing**: Implement efficient Ollama integration for fast local answer generation
 - **Learning Documentation**: Explain each component's purpose in the RAG pipeline
 - **Component Testing**: Test each piece independently with Croatian text before integration
 - **Comprehensive Testing**: Unit tests for each module, integration tests for complete pipeline, Croatian-specific test cases
@@ -92,10 +92,10 @@ Add to your requests: "Suggest if this requires Opus-level reasoning" and Claude
 Use `/model` command in Claude Code when Claude suggests switching, or when you encounter tasks requiring deep analytical thinking rather than speed.
 
 ### Technical stack
-- **Python 3.9+** with sentence-transformers, chromadb, anthropic
+- **Python 3.9+** with sentence-transformers, chromadb, requests
 - **Vector DB**: ChromaDB (free, local storage)
 - **Embeddings**: Multilingual sentence-transformers models
-- **API**: Claude Sonnet with batch processing
+- **LLM**: Ollama with llama3.1:8b or mistral:7b (free, local)
 - **Documents**: PDF, DOCX, TXT support with Croatian encoding
 
 ### Development Commands
