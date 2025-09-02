@@ -450,3 +450,206 @@ general_config = get_generation_config()  # Missing Croatian templates
 ✅ **Error Handling**: Graceful degradation when components unavailable
 
 **Ready for production use** with RAGSystem as the primary interface (currently optimized for Croatian with multilingual expansion planned).
+
+## 📋 TODO: Performance & Feature Enhancements
+
+### **🚀 High Priority Performance Optimizations**
+
+#### **Response Caching System**
+- **Priority**: High 🔥
+- **Status**: Not implemented
+- **Implementation Strategy**:
+  ```python
+  # Implement Redis/Memory-based caching for repeated queries
+  class ResponseCache:
+      def __init__(self, max_size: int = 100, ttl: int = 3600):
+          self.cache: Dict[str, CachedResponse] = {}
+          self.max_size = max_size
+          self.ttl = ttl  # Time to live in seconds
+
+      def get_cache_key(self, query: str, context_hash: str) -> str:
+          # Create unique cache key from query + context fingerprint
+
+      def get_cached_response(self, query: str, context: List[str]) -> Optional[RAGResponse]:
+          # Return cached response if available and not expired
+
+      def cache_response(self, query: str, context: List[str], response: RAGResponse):
+          # Store response with timestamp and context hash
+  ```
+- **Expected Benefit**: 95%+ speedup for repeated queries
+- **Use Cases**: FAQ queries, document summaries, common Croatian phrases
+- **Implementation Time**: 2-4 hours
+
+#### **Parallel Processing for Multiple Queries**
+- **Priority**: High 🔥
+- **Status**: Not implemented
+- **Implementation Strategy**:
+  ```python
+  # Implement async batch processing with concurrent limits
+  class BatchQueryProcessor:
+      def __init__(self, max_concurrent: int = 3):
+          self.semaphore = asyncio.Semaphore(max_concurrent)
+
+      async def process_batch(self, queries: List[RAGQuery]) -> List[RAGResponse]:
+          # Process multiple queries concurrently with rate limiting
+          tasks = [self._process_single_query(q) for q in queries]
+          return await asyncio.gather(*tasks, return_exceptions=True)
+
+      async def _process_single_query(self, query: RAGQuery) -> RAGResponse:
+          async with self.semaphore:
+              # Single query processing with resource management
+  ```
+- **Expected Benefit**: 2-3x throughput for multiple queries
+- **Use Cases**: Batch document analysis, multi-user scenarios
+- **Implementation Time**: 3-5 hours
+
+### **⚡ Medium Priority Optimizations**
+
+#### **GPU Acceleration Enhancement**
+- **Priority**: Medium ⚡
+- **Status**: Partial (embeddings only)
+- **Strategy**: Investigate Ollama GPU utilization on desktop (13GB available vs 3-4GB used)
+- **Expected Benefit**: 5-10x speedup for generation (currently 83s → 8-15s)
+
+#### **Model Quantization**
+- **Priority**: Medium ⚡
+- **Status**: Not implemented
+- **Strategy**: Test quantized versions of qwen2.5:7b-instruct (q4_k_m, q8_0)
+- **Expected Benefit**: 2-3x speedup with minimal quality loss
+
+#### **Context Window Optimization**
+- **Priority**: Medium ⚡
+- **Status**: Partially implemented (reduced to 3 chunks)
+- **Strategy**: Implement smart context truncation based on relevance scores
+- **Expected Benefit**: 20-30% speedup for long documents
+
+### **🌐 Feature Enhancements**
+
+#### **Web Interface Implementation**
+- **Priority**: High 🔥
+- **Status**: Documented in WEB_INTERFACE_PLAN.md
+- **Strategy**: FastAPI + React implementation
+- **Timeline**: 3-4 weeks (as documented)
+
+#### **Mobile Application Development**
+- **Priority**: Medium 🔥
+- **Status**: Not implemented
+- **Implementation Strategy**:
+  ```
+  Option 1: React Native (Recommended)
+  - Shared codebase with web React components
+  - Native performance on iOS and Android
+  - Croatian keyboard and language support
+  - Offline capability for cached responses
+
+  Option 2: Flutter
+  - Single codebase for iOS/Android
+  - Excellent performance and Croatian text rendering
+  - Rich widget ecosystem
+
+  Option 3: Progressive Web App (PWA)
+  - Leverage existing web interface
+  - Works on all mobile browsers
+  - Push notifications and offline support
+  ```
+- **Key Mobile Features**:
+  - **Voice Input**: Croatian speech-to-text integration
+  - **Offline Mode**: Cached responses and local document storage
+  - **Camera Integration**: Document scanning and OCR for Croatian text
+  - **Push Notifications**: Query results and system updates
+  - **Responsive Croatian UI**: Proper diacritic input and display
+- **Technical Architecture**:
+  ```
+  Mobile App (React Native/Flutter/PWA)
+       ↓ HTTP/WebSocket
+  FastAPI Backend (from web interface)
+       ↓
+  RAG System (existing)
+  ```
+- **Expected Timeline**: 4-6 weeks after web interface completion
+- **Croatian-Specific Considerations**:
+  - Croatian keyboard layouts (QWERTZ with đ, č, ć, š, ž)
+  - Voice recognition for Croatian language
+  - Offline Croatian language models for basic queries
+  - Cultural UI/UX design appropriate for Croatian users
+
+#### **Advanced Croatian Language Features**
+- **Priority**: Medium ⚡
+- **Features**:
+  - Morphological analysis with CLASSLA
+  - Regional dialect support
+  - Historical Croatian text processing
+  - Enhanced cultural context integration
+
+#### **Production Monitoring**
+- **Priority**: Medium ⚡
+- **Features**:
+  - Performance metrics dashboard
+  - Query analytics and patterns
+  - System health monitoring
+  - Error tracking and alerting
+
+### **🔧 System Architecture Improvements**
+
+#### **Configuration Management Enhancement**
+- **Priority**: Low 🔧
+- **Strategy**: Implement runtime configuration updates without restart
+- **Benefit**: Better development and production flexibility
+
+#### **Testing & CI/CD**
+- **Priority**: Medium ⚡
+- **Strategy**: Comprehensive test suite for Croatian language processing
+- **Coverage**: Unit tests, integration tests, performance benchmarks
+
+#### **Documentation & Examples**
+- **Priority**: Low 🔧
+- **Strategy**: Enhanced documentation with Croatian use cases
+- **Content**: API docs, deployment guides, Croatian language examples
+
+### **📊 Performance Benchmarks & Targets**
+
+#### **Current Performance (Post-Optimization)**
+- **Generation Time**: 83.5s (CPU, qwen2.5:7b-instruct)
+- **Retrieval Time**: 0.12s (excellent)
+- **Croatian Quality**: ✅ Excellent
+- **Memory Usage**: ~3-4GB (GPU has 13GB available)
+
+#### **Target Performance Goals**
+- **With Caching**: < 1s for repeated queries (95% of FAQ use cases)
+- **With GPU**: 8-15s generation time (5-10x improvement)
+- **With Batch Processing**: 2-3x concurrent query throughput
+- **With Quantization**: 40-60s generation time (additional 30-50% improvement)
+
+### **🎯 Implementation Roadmap**
+
+#### **Phase 1: Quick Wins (Next 1-2 weeks)**
+1. ✅ Model optimization (qwen2.5:7b-instruct) - COMPLETED
+2. ✅ Configuration optimization - COMPLETED
+3. 🔲 Response caching implementation
+4. 🔲 GPU utilization investigation
+
+#### **Phase 2: Scalability (Weeks 3-4)**
+1. 🔲 Parallel processing implementation
+2. 🔲 Advanced monitoring setup
+3. 🔲 Performance benchmarking suite
+
+#### **Phase 3: Production Features (Month 2)**
+1. 🔲 Web interface implementation
+2. 🔲 Advanced Croatian language features
+3. 🔲 Production deployment optimization
+
+#### **Phase 4: Mobile & Advanced Features (Month 3)**
+1. 🔲 Mobile application development (React Native/Flutter/PWA)
+2. 🔲 Croatian voice recognition integration
+3. 🔲 Offline mode and document scanning
+4. 🔲 Advanced analytics and user insights
+
+#### **Phase 5: Enterprise Features (Month 4+)**
+1. 🔲 Multi-tenant architecture
+2. 🔲 Enterprise authentication and authorization
+3. 🔲 API rate limiting and usage analytics
+4. 🔲 Advanced Croatian language models fine-tuning
+
+---
+
+**Note**: Performance optimizations should be implemented incrementally with proper benchmarking to measure actual impact on Croatian language quality and system responsiveness.

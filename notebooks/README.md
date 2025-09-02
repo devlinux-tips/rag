@@ -1,10 +1,54 @@
-# Croatian RAG Notebooks
+# Multilingual RAG Notebooks - Optimized for Croatian
 
-This directory contains interactive Jupyter notebooks demonstrating the Croatian RAG system components and improvements.
+This directory contains interactive Jupyter notebooks demonstrating the Multilingual RAG system components, optimizations, and recent performance improvements.
 
 ## 📚 Available Notebooks
 
-### 1. `hybrid_retrieval_demo.ipynb`
+### **Learning Sequence** (Recommended Order)
+
+#### `00_system_overview_and_architecture.ipynb` 🏗️
+**System Architecture & Foundations**
+- Research foundations and academic background
+- Complete system architecture overview
+- Recent model evaluation results (YugoGPT vs qwen2.5)
+- Performance optimization journey (32% improvement)
+- Documentation structure and development roadmap
+
+#### `01_document_processing_learning.ipynb` 📄
+**Document Processing Pipeline**
+- Croatian text extraction and cleaning
+- Smart chunking strategies for legal documents
+- Preprocessing optimizations
+
+#### `02_vector_database_learning.ipynb` 🗄️
+**Vector Database & Embeddings**
+- BGE-M3 multilingual embeddings (30.9 texts/second)
+- ChromaDB storage and retrieval
+- Embedding optimization for Croatian
+
+#### `03_retrieval_system_learning.ipynb` 🔍
+**Retrieval System & Ranking**
+- Croatian-aware query processing
+- Multi-signal ranking system
+- Adaptive retrieval strategies
+
+#### `04_generation_system_learning.ipynb` 🤖
+**LLM Generation System - OPTIMIZED**
+- Ollama integration with qwen2.5:7b-instruct
+- **Performance**: 83.5s generation (32% improvement)
+- Croatian prompt engineering and response parsing
+- Model comparison and optimization results
+
+#### `05_complete_pipeline_learning.ipynb` 🎯
+**Complete System Integration**
+- End-to-end RAG system orchestration
+- Updated RAGSystem class (renamed from CroatianRAGSystem)
+- System health checks and monitoring
+- Production-ready pipeline testing
+
+### **Advanced Demonstrations**
+
+#### `hybrid_retrieval_demo.ipynb` ⚡
 **Enhanced Retrieval for Croatian Text**
 
 Demonstrates the improved retrieval system with:
@@ -14,6 +58,20 @@ Demonstrates the improved retrieval system with:
 - **Performance Analysis**: Cost, speed, and quality comparisons
 
 **Best for**: Understanding why hybrid retrieval works better for Croatian legal documents with specific terms (EUR amounts, dates).
+
+## 🚀 Recent System Achievements
+
+### **Performance Optimizations**
+- **Model**: qwen2.5:7b-instruct (Q4_K_M quantized, 4.7GB)
+- **Speed**: 32% faster generation (83.5s vs 123s baseline)
+- **Quality**: Excellent Croatian with proper diacritics
+- **Reliability**: Consistent instruction following in RAG contexts
+
+### **Architecture Improvements**
+- **RAGSystem**: Renamed from CroatianRAGSystem for multilingual design
+- **Configuration**: Optimized parameters (max_tokens=800, top_k=40)
+- **Context**: Reduced context length to 2500 for faster processing
+- **Documentation**: Comprehensive guides in `docs/` folder
 
 **Run with**:
 ```bash

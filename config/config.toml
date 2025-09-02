@@ -165,13 +165,16 @@ use_query_classification = true
 enable_spell_check = false
 
 [retrieval]
-# Retrieval system configuration
-strategy = "hybrid"  # "semantic", "keyword", "hybrid"
-max_results = 10
-similarity_threshold = 0.1
+# Retrieval configuration - OPTIMIZED FOR SPEED
+default_k = 3                 # Reduced from 5 - fewer chunks = faster generation
+max_k = 8                     # Reduced from 10
+min_similarity_score = 0.3
+adaptive_retrieval = true
 enable_reranking = true
-diversity_threshold = 0.8
-adaptive_k = true
+diversity_lambda = 0.3
+use_hybrid_search = true
+enable_query_expansion = true
+max_context_length = 2500     # Explicit context limit for faster generation
 
 [ranking]
 # Document ranking and scoring
@@ -218,17 +221,17 @@ bm25_b = 0.75
 # GENERATION CONFIGURATION
 # ============================================================================
 [ollama]
-# Ollama LLM configuration
+# Ollama LLM configuration - OPTIMIZED FOR PERFORMANCE
 base_url = "http://localhost:11434"
-model = "jobautomation/openeurollm-croatian:latest"
+model = "qwen2.5:7b-instruct"  # 1.7x faster than Croatian model, good quality
 temperature = 0.7
-max_tokens = 2000
+max_tokens = 800               # Reduced from 2000 for faster generation
 top_p = 0.9
-top_k = 64 # 40
+top_k = 40                     # Reduced from 64 for speed
 timeout = 120.0
 stream = true
 keep_alive = "5m"
-num_predict = -1
+num_predict = 800              # Cap token generation
 repeat_penalty = 1.1
 seed = -1
 

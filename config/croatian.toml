@@ -265,14 +265,14 @@ respect_croatian_grammar = true
 enable_sentence_boundary_detection = true
 croatian_specific_chunking = true
 
-# Croatian generation settings
+# Croatian generation settings - OPTIMIZED FOR SPEED
 [pipeline.generation]
 preserve_diacritics = true
-prefer_formal_style = true
-include_cultural_context = true
+prefer_formal_style = false          # Disabled for speed
+include_cultural_context = false     # Disabled for speed
 response_language = "croatian"
 cultural_context = "balkans"
-formality_level = "polite"
+formality_level = "casual"           # Changed from "polite" for speed
 
 # Croatian retrieval settings
 [pipeline.retrieval]
