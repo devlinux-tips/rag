@@ -1,0 +1,56 @@
+[extraction]
+# Document extraction settings
+supported_formats = [".pdf", ".docx", ".txt"]
+
+# Text encoding fallbacks for Croatian documents
+text_encodings = ["utf-8", "utf-8-sig", "cp1250", "iso-8859-2"]
+
+# PDF extraction settings
+pdf_extract_images = false
+pdf_ignore_empty_pages = true
+
+# DOCX extraction settings
+docx_include_headers = false
+docx_include_footers = false
+
+[chunking]
+# Document chunking configuration
+default_chunk_size = 512
+default_overlap = 50
+min_chunk_size = 100
+respect_sentences = true
+
+# Chunking strategies
+available_strategies = ["sliding_window", "sentence", "paragraph"]
+default_strategy = "sliding_window"
+
+# Sentence boundary detection
+sentence_search_range = 100
+min_sentence_length = 10
+
+[cleaning]
+# Text cleaning and normalization
+preserve_structure = true
+remove_formatting_artifacts = true
+fix_ocr_errors = true
+min_meaningful_words = 3
+min_word_char_ratio = 0.5
+
+# Whitespace normalization
+normalize_multiple_spaces = true
+max_consecutive_linebreaks = 2
+convert_single_linebreaks_to_space = true
+
+# Document artifact removal
+remove_page_numbers = true
+remove_standalone_markers = true
+remove_excessive_punctuation = true
+
+[formatting_patterns]
+# Regex patterns for cleaning (preprocessing-specific)
+multiple_whitespace = "\\s+"
+multiple_linebreaks = "\\n\\s*\\n"
+excessive_dots = "[.]{3,}"
+excessive_dashes = "[-]{3,}"
+isolated_formatting = "\\s+[_*-]\\s+"
+standalone_formatting = "^\\s*[_*-]+\\s*$"

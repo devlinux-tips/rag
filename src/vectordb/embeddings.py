@@ -14,29 +14,76 @@ import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
 
+logger = logging.getLogger(__name__)
+
+from ..utils.config_loader import get_croatian_vectordb, get_embeddings_config, get_vectordb_config
+from ..utils.error_handler import handle_config_error
+
 
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding models."""
 
-    model_name: str = "sentence-transformers/LaBSE"
-    cache_dir: str = "./models/embeddings"
-    device: str = "auto"  # "auto", "cpu", "cuda"
-    max_seq_length: int = 512
-    batch_size: int = 32
-    normalize_embeddings: bool = True
+    model_name: str
+    cache_dir: str
+    device: str
+    max_seq_length: int
+    batch_size: int
+    normalize_embeddings: bool
+    use_safetensors: bool = True
+    trust_remote_code: bool = False
+    torch_dtype: str = "auto"
+
+    @classmethod
+    def from_config(cls) -> "EmbeddingConfig":
+        """Load configuration from TOML files."""
+        return handle_config_error(
+            operation=lambda: cls(
+                model_name=get_embeddings_config()["model_name"],
+                cache_dir=get_embeddings_config()["cache_dir"],
+                device=get_embeddings_config()["device"],
+                max_seq_length=get_embeddings_config()["max_seq_length"],
+                batch_size=get_embeddings_config()["batch_size"],
+                normalize_embeddings=get_embeddings_config()["normalize_embeddings"],
+                use_safetensors=get_embeddings_config().get("use_safetensors", True),
+                trust_remote_code=get_embeddings_config().get("trust_remote_code", False),
+                torch_dtype=get_embeddings_config().get("torch_dtype", "auto"),
+            ),
+            fallback_value=cls(
+                model_name="BAAI/bge-m3",  # Default to BGE-M3
+                cache_dir="./models/embeddings",
+                device="auto",
+                max_seq_length=512,
+                batch_size=32,
+                normalize_embeddings=True,
+                use_safetensors=True,
+                trust_remote_code=False,
+                torch_dtype="auto",
+            ),
+            config_file="config/config.toml",
+            section="[embeddings]",
+            error_level="error",
+        )
 
 
 class CroatianEmbeddingModel:
     """Multilingual embedding model optimized for Croatian text."""
 
-    # Recommended models for Croatian language
-    RECOMMENDED_MODELS = {
-        "multilingual-minilm": "paraphrase-multilingual-MiniLM-L12-v2",
-        "multilingual-mpnet": "paraphrase-multilingual-mpnet-base-v2",
-        "distiluse-multilingual": "distiluse-base-multilingual-cased",
-        "labse": "sentence-transformers/LaBSE",
-    }
+    @property
+    def recommended_models(self) -> Dict[str, str]:
+        """Get recommended models from config."""
+        return handle_config_error(
+            operation=lambda: get_embeddings_config()["recommended_models"],
+            fallback_value={
+                "bge_m3": "BAAI/bge-m3",  # Primary: BGE-M3 (Best for Croatian)
+                "labse": "sentence-transformers/LaBSE",  # Secondary: Language-Agnostic BERT
+                "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
+                "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
+                "distiluse_multilingual": "distiluse-base-multilingual-cased",
+            },
+            config_file="config/config.toml",
+            section="[embeddings.recommended_models]",
+        )
 
     def __init__(self, config: EmbeddingConfig = None):
         """
@@ -45,7 +92,7 @@ class CroatianEmbeddingModel:
         Args:
             config: Configuration for embedding model
         """
-        self.config = config or EmbeddingConfig()
+        self.config = config or EmbeddingConfig.from_config()
         self.logger = logging.getLogger(__name__)
         self.model = None
         self._model_loaded = False
@@ -58,30 +105,146 @@ class CroatianEmbeddingModel:
         self.logger.info(f"Using device: {self.device}")
 
     def _get_device(self) -> str:
-        """Determine the best available device."""
+        """Determine the best available device with detailed logging."""
         if self.config.device == "auto":
-            if torch.cuda.is_available():
-                return "cuda"
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                return "mps"
+            # Auto-detect best available device
+            # Priority: MPS (Apple Silicon) > CUDA (NVIDIA) > CPU
+
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+                self.logger.info("Apple Silicon Metal Performance Shaders (MPS) detected")
+
+                # Try to get Apple Silicon chip info
+                try:
+                    import platform
+
+                    machine = platform.machine()
+                    if machine == "arm64":
+                        # Running on Apple Silicon
+                        self.logger.info(f"Apple Silicon detected: {machine}")
+                        if "M4" in platform.processor() or torch.backends.mps.is_built():
+                            self.logger.info("Optimized for M4 Pro/Max performance")
+                    self.logger.info(f"Using device: {device}")
+                except:
+                    self.logger.info(f"Using device: {device}")
+
+                return device
+
+            # Check CUDA with graceful error handling
+            cuda_available = False
+            try:
+                # Suppress CUDA initialization warnings temporarily
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=".*CUDA initialization.*")
+                    cuda_available = torch.cuda.is_available()
+            except Exception as e:
+                self.logger.debug(f"CUDA check failed: {e}")
+                cuda_available = False
+
+            if cuda_available:
+                try:
+                    device = "cuda"
+                    # Log CUDA info
+                    cuda_count = torch.cuda.device_count()
+                    current_device = torch.cuda.current_device()
+                    device_name = torch.cuda.get_device_name(current_device)
+                    memory_info = torch.cuda.get_device_properties(current_device)
+                    total_memory = memory_info.total_memory / 1024**3  # GB
+
+                    self.logger.info(f"CUDA detected: {device_name}")
+                    self.logger.info(f"CUDA memory: {total_memory:.1f}GB total")
+                    self.logger.info(f"Using device: cuda (device {current_device})")
+
+                    return device
+                except Exception as e:
+                    self.logger.warning(f"CUDA detected but initialization failed: {e}")
+                    self.logger.info("Falling back to CPU (restart terminal to fix CUDA)")
+                    device = "cpu"
             else:
+                device = "cpu"
+                self.logger.info("No GPU acceleration available")
+                self.logger.info(f"Using device: {device}")
+                return device
+                self.logger.info(f"Using device: {device}")
+                return device
+        else:
+            # Use specified device
+            device = self.config.device
+
+            # Validate specified device
+            if device == "mps":
+                if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+                    self.logger.warning("MPS requested but not available, falling back to CPU")
+                    return "cpu"
+                self.logger.info(f"Using specified device: {device}")
+
+            elif device.startswith("cuda"):
+                if not torch.cuda.is_available():
+                    self.logger.warning(f"CUDA requested but not available, falling back to CPU")
+                    return "cpu"
+
+                # Check specific CUDA device if specified (e.g., "cuda:1")
+                if ":" in device:
+                    device_id = int(device.split(":")[1])
+                    if device_id >= torch.cuda.device_count():
+                        self.logger.warning(f"CUDA device {device_id} not available, using cuda:0")
+                        device = "cuda:0"
+
+                self.logger.info(f"Using specified device: {device}")
+
+            elif device == "cpu":
+                self.logger.info(f"Using specified device: {device}")
+
+            else:
+                self.logger.warning(f"Unknown device '{device}', falling back to CPU")
                 return "cpu"
-        return self.config.device
+
+            return device
 
     def load_model(self) -> None:
-        """Load the sentence transformer model."""
+        """Load the sentence transformer model with safetensors support."""
         if self._model_loaded:
             return
 
         try:
             self.logger.info(f"Loading embedding model: {self.config.model_name}")
 
-            # Load model with caching
-            self.model = SentenceTransformer(
-                self.config.model_name,
-                cache_folder=self.config.cache_dir,
-                device=self.device,
-            )
+            # Get safetensors preference from config
+            embeddings_config = get_embeddings_config()
+            use_safetensors = embeddings_config.get("use_safetensors", True)
+            trust_remote_code = embeddings_config.get("trust_remote_code", False)
+            torch_dtype = embeddings_config.get("torch_dtype", "auto")
+
+            # Prepare model loading kwargs
+            model_kwargs = {
+                "cache_folder": self.config.cache_dir,
+                "device": self.device,
+                "trust_remote_code": trust_remote_code,
+            }
+
+            # Add torch_dtype if specified
+            if torch_dtype != "auto":
+                model_kwargs["torch_dtype"] = getattr(torch, torch_dtype, None)
+
+            # For BGE-M3 and newer models, prefer safetensors
+            if use_safetensors:
+                try:
+                    # SentenceTransformer doesn't directly support use_safetensors parameter
+                    # but will use safetensors automatically if available and secure
+                    self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
+                    self.logger.info("Model loaded (safetensors preferred)")
+                except Exception as safetensors_error:
+                    self.logger.warning(
+                        f"Model loading with safetensors preference failed: {safetensors_error}"
+                    )
+                    # Fallback to regular loading
+                    self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
+                    self.logger.info("Model loaded with standard format")
+            else:
+                # Standard loading
+                self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
 
             # Configure model settings
             self.model.max_seq_length = self.config.max_seq_length
@@ -91,6 +254,13 @@ class CroatianEmbeddingModel:
 
         except Exception as e:
             self.logger.error(f"Failed to load embedding model: {e}")
+            # Check if it's the PyTorch security error
+            if "torch.load" in str(e) and "vulnerability" in str(e).lower():
+                self.logger.error("PyTorch security vulnerability detected!")
+                self.logger.error("Solutions:")
+                self.logger.error("1. Upgrade PyTorch: pip install torch>=2.6.0")
+                self.logger.error("2. Install safetensors: pip install safetensors>=0.4.0")
+                self.logger.error("3. Set use_safetensors=true in config.toml")
             raise
 
     def encode_text(
@@ -206,8 +376,8 @@ class CroatianEmbeddingModel:
         self,
         query_embedding: np.ndarray,
         candidate_embeddings: np.ndarray,
-        top_k: int = 5,
-        metric: str = "cosine",
+        top_k: int = None,
+        metric: str = None,
     ) -> List[tuple[int, float]]:
         """
         Find most similar embeddings to a query.
@@ -221,6 +391,25 @@ class CroatianEmbeddingModel:
         Returns:
             List of (index, similarity_score) tuples, sorted by similarity
         """
+        # Use config defaults if not provided
+        if top_k is None:
+            top_k = handle_config_error(
+                operation=lambda: get_embeddings_config()["similarity"]["top_k_default"],
+                fallback_value=5,
+                config_file="config/config.toml",
+                section="[embeddings.similarity]",
+                logger=logger,
+            )
+
+        if metric is None:
+            metric = handle_config_error(
+                operation=lambda: get_embeddings_config()["similarity"]["default_metric"],
+                fallback_value="cosine",
+                config_file="config/config.toml",
+                section="[embeddings.similarity]",
+                logger=logger,
+            )
+
         similarities = []
 
         for i, candidate in enumerate(candidate_embeddings):
@@ -241,14 +430,184 @@ class CroatianEmbeddingModel:
         if not self._model_loaded:
             self.load_model()
 
-        return {
+        info = {
             "model_name": self.config.model_name,
             "max_seq_length": self.model.max_seq_length,
             "embedding_dimension": self.model.get_sentence_embedding_dimension(),
             "device": str(self.device),
             "normalize_embeddings": self.config.normalize_embeddings,
             "pooling_mode": str(self.model._modules.get("1", "unknown")),
+            "pytorch_version": torch.__version__,
         }
+
+        # Add device-specific information
+        if self.device.startswith("cuda"):
+            if torch.cuda.is_available():
+                device_id = 0
+                if ":" in self.device:
+                    device_id = int(self.device.split(":")[1])
+
+                info.update(
+                    {
+                        "cuda_device_name": torch.cuda.get_device_name(device_id),
+                        "cuda_memory_total": f"{torch.cuda.get_device_properties(device_id).total_memory / 1024**3:.1f}GB",
+                        "cuda_memory_allocated": f"{torch.cuda.memory_allocated(device_id) / 1024**3:.1f}GB",
+                        "cuda_memory_cached": f"{torch.cuda.memory_reserved(device_id) / 1024**3:.1f}GB",
+                        "cuda_version": torch.version.cuda,
+                    }
+                )
+        elif self.device == "mps":
+            info["mps_available"] = torch.backends.mps.is_available()
+            if torch.backends.mps.is_available():
+                info["mps_built"] = torch.backends.mps.is_built()
+
+                # Apple Silicon specific info
+                try:
+                    import platform
+
+                    import psutil
+
+                    machine = platform.machine()
+                    if machine == "arm64":
+                        info["apple_silicon"] = True
+                        info["platform_machine"] = machine
+
+                        # Get system memory (unified memory on Apple Silicon)
+                        memory = psutil.virtual_memory()
+                        info["unified_memory_total"] = f"{memory.total / 1024**3:.1f}GB"
+                        info["unified_memory_available"] = f"{memory.available / 1024**3:.1f}GB"
+
+                        # Try to detect specific M-series chip
+                        try:
+                            processor = platform.processor()
+                            if "M4" in processor:
+                                info["apple_chip"] = "M4 Pro/Max/Ultra"
+                                info["performance_cores"] = "10-16"  # M4 Pro/Max range
+                                info["gpu_cores"] = "16-40"  # M4 Pro/Max range
+                            elif any(m in processor for m in ["M1", "M2", "M3"]):
+                                info["apple_chip"] = processor
+                            else:
+                                info["apple_chip"] = "Apple Silicon (M-series)"
+                        except:
+                            info["apple_chip"] = "Apple Silicon"
+                except ImportError:
+                    info["apple_silicon"] = "unknown (install psutil for detailed info)"
+                except:
+                    info["apple_silicon"] = "unknown"
+
+        return info
+
+    def get_device_info(self) -> Dict[str, Any]:
+        """
+        Get detailed information about available devices.
+
+        Returns:
+            Dictionary with device capabilities
+        """
+        info = {
+            "current_device": str(self.device),
+            "pytorch_version": torch.__version__,
+            "cpu_available": True,
+        }
+
+        # CUDA information with graceful error handling
+        try:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*CUDA initialization.*")
+                cuda_available = torch.cuda.is_available()
+
+            info["cuda_available"] = cuda_available
+
+            if cuda_available:
+                try:
+                    info["cuda_version"] = torch.version.cuda
+                    info["cuda_device_count"] = torch.cuda.device_count()
+                    info["cuda_devices"] = []
+
+                    for i in range(torch.cuda.device_count()):
+                        props = torch.cuda.get_device_properties(i)
+                        device_info = {
+                            "id": i,
+                            "name": torch.cuda.get_device_name(i),
+                            "memory_total": f"{props.total_memory / 1024**3:.1f}GB",
+                            "memory_allocated": f"{torch.cuda.memory_allocated(i) / 1024**3:.1f}GB",
+                            "memory_cached": f"{torch.cuda.memory_reserved(i) / 1024**3:.1f}GB",
+                            "compute_capability": f"{props.major}.{props.minor}",
+                        }
+                        info["cuda_devices"].append(device_info)
+                except Exception as e:
+                    info["cuda_error"] = f"CUDA detected but initialization failed: {e}"
+                    info["cuda_solution"] = "Restart terminal to fix CUDA initialization"
+        except Exception as e:
+            info["cuda_available"] = False
+            info["cuda_error"] = str(e)
+
+        # MPS information (Apple Silicon)
+        if hasattr(torch.backends, "mps"):
+            info["mps_available"] = torch.backends.mps.is_available()
+            if torch.backends.mps.is_available():
+                info["mps_built"] = torch.backends.mps.is_built()
+
+                # Try to detect Apple Silicon chip info
+                try:
+                    import platform
+
+                    machine = platform.machine()
+                    if machine == "arm64":
+                        info["apple_silicon"] = True
+                        info["platform_machine"] = machine
+
+                        # Try to detect M-series chip
+                        try:
+                            processor = platform.processor()
+                            if any(m in processor for m in ["M1", "M2", "M3", "M4"]):
+                                info["apple_chip"] = processor
+                            else:
+                                info["apple_chip"] = "Apple Silicon (M-series)"
+                        except:
+                            info["apple_chip"] = "Apple Silicon"
+                    else:
+                        info["apple_silicon"] = False
+                except:
+                    info["apple_silicon"] = "unknown"
+        else:
+            info["mps_available"] = False
+
+        return info
+
+    def switch_device(self, new_device: str) -> None:
+        """
+        Switch the model to a different device.
+
+        Args:
+            new_device: Target device ("cpu", "cuda", "cuda:0", etc.)
+        """
+        if not self._model_loaded:
+            self.logger.warning("Model not loaded yet, updating device configuration")
+            self.config.device = new_device
+            self.device = self._get_device()
+            return
+
+        old_device = self.device
+        self.config.device = new_device
+        self.device = self._get_device()
+
+        if old_device != self.device:
+            self.logger.info(f"Switching model from {old_device} to {self.device}")
+            try:
+                # Move model to new device
+                self.model = self.model.to(self.device)
+                self.logger.info(f"Model successfully moved to {self.device}")
+            except Exception as e:
+                self.logger.error(f"Failed to move model to {self.device}: {e}")
+                # Revert to old device
+                self.config.device = old_device
+                self.device = old_device
+                raise
+        else:
+            self.logger.info(f"Device unchanged: {self.device}")
 
     def save_embeddings(self, embeddings: np.ndarray, metadata: List[Dict], filepath: str) -> None:
         """
@@ -294,7 +653,16 @@ class CroatianEmbeddingModel:
 class EmbeddingCache:
     """Cache for storing and retrieving embeddings."""
 
-    def __init__(self, cache_dir: str = "./cache/embeddings"):
+    def __init__(self, cache_dir: str = None):
+        if cache_dir is None:
+            cache_dir = handle_config_error(
+                operation=lambda: get_vectordb_config()["factory"]["cache_embeddings_dir"],
+                fallback_value="./cache/embeddings",
+                config_file="config/config.toml",
+                section="[factory]",
+                logger=logger,
+            )
+
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
@@ -347,22 +715,45 @@ class EmbeddingCache:
 
 
 def create_embedding_model(
-    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
-    device: str = "auto",
-    cache_dir: str = "./models/embeddings",
+    model_name: str = None,
+    device: str = None,
+    cache_dir: str = None,
 ) -> CroatianEmbeddingModel:
     """
     Factory function to create embedding model.
 
     Args:
-        model_name: Sentence transformer model name
-        device: Device to use ("auto", "cpu", "cuda")
-        cache_dir: Directory for model cache
+        model_name: Sentence transformer model name (defaults from config)
+        device: Device to use (defaults from config)
+        cache_dir: Directory for model cache (defaults from config)
 
     Returns:
         Configured CroatianEmbeddingModel instance
     """
-    config = EmbeddingConfig(model_name=model_name, device=device, cache_dir=cache_dir)
+    # Use config defaults if not provided
+    factory_config = handle_config_error(
+        operation=lambda: get_vectordb_config()["factory"],
+        fallback_value={
+            "default_model": "paraphrase-multilingual-MiniLM-L12-v2",
+            "default_device": "auto",
+            "default_cache_dir": "./models/embeddings",
+        },
+        config_file="config/config.toml",
+        section="[factory]",
+    )
+
+    model_name = model_name or factory_config["default_model"]
+    device = device or factory_config["default_device"]
+    cache_dir = cache_dir or factory_config["default_cache_dir"]
+
+    config = EmbeddingConfig(
+        model_name=model_name,
+        device=device,
+        cache_dir=cache_dir,
+        max_seq_length=512,
+        batch_size=32,
+        normalize_embeddings=True,
+    )
     return CroatianEmbeddingModel(config)
 
 
@@ -376,13 +767,27 @@ def get_recommended_model(use_case: str = "general") -> str:
     Returns:
         Recommended model name
     """
-    models = CroatianEmbeddingModel.RECOMMENDED_MODELS
+    models = handle_config_error(
+        operation=lambda: get_embeddings_config()["recommended_models"],
+        fallback_value={
+            "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
+            "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
+            "distiluse_multilingual": "distiluse-base-multilingual-cased",
+            "labse": "sentence-transformers/LaBSE",
+        },
+        config_file="config/config.toml",
+        section="[embeddings.recommended_models]",
+    )
 
     recommendations = {
-        "general": models["multilingual-minilm"],  # Good balance
-        "fast": models["multilingual-minilm"],  # Fastest option
-        "accurate": models["multilingual-mpnet"],  # Most accurate
-        "cross-lingual": models["labse"],  # Best for multiple languages
+        "general": models.get("bge_m3", "BAAI/bge-m3"),  # BGE-M3: Best overall
+        "fast": models.get(
+            "multilingual_minilm", "paraphrase-multilingual-MiniLM-L12-v2"
+        ),  # Fastest option
+        "accurate": models.get("bge_m3", "BAAI/bge-m3"),  # BGE-M3: Also most accurate
+        "cross-lingual": models.get(
+            "bge_m3", "BAAI/bge-m3"
+        ),  # BGE-M3: Excellent for multiple languages
     }
 
-    return recommendations.get(use_case, models["multilingual-minilm"])
+    return recommendations.get(use_case, models.get("bge_m3", "BAAI/bge-m3"))

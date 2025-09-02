@@ -1,0 +1,81 @@
+# Pipeline Configuration
+# Main orchestration settings for Croatian RAG system
+
+[processing]
+# Document processing settings
+max_chunk_size = 512
+chunk_overlap = 50
+min_chunk_size = 100
+sentence_chunk_overlap = 2
+preserve_paragraphs = true
+enable_smart_chunking = true
+respect_document_structure = true
+
+[embedding]
+# Embedding model configuration (references vectordb config)
+model_name = "BAAI/bge-m3"  # Primary embedding model
+cache_folder = "./models/embeddings"
+batch_size = 32
+max_seq_length = 512
+device = "auto"
+normalize_embeddings = true
+
+[chroma]
+# ChromaDB configuration
+db_path = "./data/chromadb"
+collection_name = "croatian_documents"
+distance_metric = "cosine"  # "cosine", "l2", "ip"
+ef_construction = 200
+m = 16
+persist = true
+allow_reset = false
+
+[retrieval]
+# Retrieval system configuration
+default_k = 5
+max_k = 10
+min_similarity_score = 0.3
+adaptive_retrieval = true
+enable_reranking = true
+diversity_lambda = 0.3
+use_hybrid_search = true
+enable_query_expansion = true
+
+[ollama]
+# Ollama LLM configuration
+base_url = "http://localhost:11434"
+model = "llama3.1:8b"
+temperature = 0.7
+max_tokens = 2000
+top_p = 0.9
+top_k = 40
+timeout = 60.0
+stream = true
+keep_alive = "5m"
+
+[system]
+# System-wide settings
+log_level = "INFO"
+enable_caching = true
+cache_dir = "./data/cache"
+max_concurrent_requests = 5
+request_timeout = 120.0
+enable_metrics = true
+metrics_dir = "./data/metrics"
+
+[paths]
+# Data paths
+documents_dir = "./data/raw"
+processed_dir = "./data/processed"
+test_data_dir = "./data/test"
+models_dir = "./models"
+logs_dir = "./logs"
+
+[performance]
+# Performance optimization settings
+use_async_processing = true
+parallel_document_processing = true
+max_workers = 4
+batch_processing_size = 10
+memory_limit_mb = 2048
+enable_gpu_acceleration = false

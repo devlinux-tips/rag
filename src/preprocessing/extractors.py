@@ -10,6 +10,9 @@ from typing import Optional
 import PyPDF2
 from docx import Document
 
+from ..utils.config_loader import get_extraction_config
+from ..utils.error_handler import handle_config_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +21,17 @@ class DocumentExtractor:
 
     def __init__(self):
         """Initialize the document extractor."""
-        self.supported_formats = {".pdf", ".docx", ".txt"}
+        self._config = handle_config_error(
+            operation=lambda: get_extraction_config(),
+            fallback_value={
+                "supported_formats": [".txt", ".pdf", ".docx", ".doc"],
+                "encoding": "utf-8",
+                "text_encodings": ["utf-8", "cp1252", "iso-8859-2"],
+            },
+            config_file="config/config.toml",
+            section="[extraction]",
+        )
+        self.supported_formats = set(self._config["supported_formats"])
 
     def extract_text(self, file_path: Path) -> str:
         """
@@ -94,7 +107,7 @@ class DocumentExtractor:
         """Extract text from TXT file with proper UTF-8 encoding."""
         try:
             # Try UTF-8 first, then fallback to other encodings common for Croatian
-            encodings = ["utf-8", "utf-8-sig", "cp1250", "iso-8859-2"]
+            encodings = self._config["text_encodings"]
 
             for encoding in encodings:
                 try:

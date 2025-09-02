@@ -1,0 +1,306 @@
+# Croatian RAG System - Main Configuration
+# Consolidated configuration file for all system components
+
+# ============================================================================
+# PROJECT SETTINGS
+# ============================================================================
+[project]
+name = "Croatian RAG System"
+version = "1.0.0"
+description = "Advanced RAG system optimized for Croatian language"
+author = "RAG Team"
+
+[paths]
+documents_dir = "./data/raw"
+processed_dir = "./data/processed"
+test_data_dir = "./data/test"
+models_dir = "./models"
+logs_dir = "./logs"
+cache_dir = "./data/cache"
+metrics_dir = "./data/metrics"
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_to_file = true
+
+# ============================================================================
+# EMBEDDING CONFIGURATION
+# ============================================================================
+[embeddings]
+# Primary embedding model settings
+model_name = "BAAI/bge-m3"  # BGE-M3: Best multilingual model for Croatian
+cache_dir = "./models/embeddings"
+device = "auto"  # "auto", "cpu", "cuda"
+max_seq_length = 512
+batch_size = 32
+normalize_embeddings = true
+
+# Security and loading preferences
+use_safetensors = true  # Use safetensors format for security (PyTorch 2.6+ vulnerability fix)
+trust_remote_code = false  # Security setting for model loading
+torch_dtype = "auto"  # or "float32", "float16", "bfloat16"
+
+# Recommended models for multilingual support
+[embeddings.recommended_models]
+bge_m3 = "BAAI/bge-m3"  # Primary: BGE-M3 (Best for Croatian)
+labse = "sentence-transformers/LaBSE"  # Secondary: Language-Agnostic BERT
+multilingual_minilm = "paraphrase-multilingual-MiniLM-L12-v2"  # Fast option
+multilingual_mpnet = "paraphrase-multilingual-mpnet-base-v2"  # Accuracy option
+distiluse_multilingual = "distiluse-base-multilingual-cased"  # Lightweight option
+
+# Similarity calculation settings
+[embeddings.similarity]
+default_metric = "cosine"
+top_k_default = 5
+
+# ============================================================================
+# VECTOR DATABASE CONFIGURATION
+# ============================================================================
+[storage]
+# ChromaDB storage settings
+db_path = "./data/chromadb"
+collection_name = "croatian_documents"
+distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
+persist = true
+allow_reset = false
+
+# Document metadata defaults
+[storage.metadata]
+content_types = ["pdf", "docx", "txt"]
+
+[search]
+# Search configuration
+default_method = "semantic"  # "semantic", "keyword", "hybrid"
+top_k = 5
+similarity_threshold = 0.0
+max_context_length = 2000
+rerank = true
+include_metadata = true
+include_distances = true
+
+# Hybrid search weights
+[search.weights]
+semantic_weight = 0.7
+keyword_weight = 0.3
+
+[vectordb.factory]
+# Factory settings for vectordb components
+auto_create_collection = true
+default_embedding_function = "sentence_transformers"
+chunk_size = 1000
+chunk_overlap = 100
+
+# ============================================================================
+# DOCUMENT PROCESSING CONFIGURATION
+# ============================================================================
+[processing]
+# Document processing settings
+max_chunk_size = 512
+chunk_overlap = 50
+min_chunk_size = 100
+sentence_chunk_overlap = 2
+preserve_paragraphs = true
+enable_smart_chunking = true
+respect_document_structure = true
+
+[extraction]
+# Document extraction settings
+supported_formats = [".pdf", ".docx", ".txt", ".html", ".md"]
+preserve_formatting = true
+extract_metadata = true
+handle_images = false
+ocr_enabled = false
+encoding_detection = true
+
+[chunking]
+# Text chunking configuration
+strategy = "sliding_window"  # "sliding_window", "sentence", "paragraph"
+chunk_size = 512
+overlap_size = 50
+min_chunk_size = 100
+max_chunk_size = 1024
+preserve_sentence_boundaries = true
+respect_paragraph_breaks = true
+enable_smart_splitting = true
+sentence_search_range = 100
+
+[cleaning]
+# Text cleaning settings
+remove_extra_whitespace = true
+normalize_unicode = true
+preserve_formatting = false
+remove_headers_footers = true
+handle_tables = true
+extract_links = false
+preserve_line_breaks = false
+fix_encoding_issues = true
+remove_page_numbers = true
+clean_ocr_artifacts = true
+normalize_punctuation = true
+
+[formatting_patterns]
+# Croatian-specific formatting patterns (references croatian.toml)
+date_formats = ["dd.mm.yyyy", "d.m.yyyy", "dd/mm/yyyy"]
+number_formats = ["1.234,56", "1 234,56"]
+currency_symbols = ["kn", "HRK", "€", "EUR"]
+address_patterns = ["\\d{5}\\s+[A-ZČĆŽŠĐ][a-zčćžšđ]+"]
+phone_patterns = ["\\+385\\s*\\d{1,2}\\s*\\d{3}\\s*\\d{3,4}"]
+email_patterns = ["[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"]
+
+# ============================================================================
+# RETRIEVAL CONFIGURATION
+# ============================================================================
+[query_processing]
+# Query processing settings
+language = "hr"  # Croatian language code
+expand_synonyms = true
+normalize_case = true
+remove_stopwords = true
+min_query_length = 3
+max_query_length = 500
+max_expanded_terms = 10
+enable_morphological_analysis = true
+use_query_classification = true
+enable_spell_check = false
+
+[retrieval]
+# Retrieval system configuration
+strategy = "hybrid"  # "semantic", "keyword", "hybrid"
+max_results = 10
+similarity_threshold = 0.1
+enable_reranking = true
+diversity_threshold = 0.8
+adaptive_k = true
+
+[ranking]
+# Document ranking and scoring
+method = "croatian"
+enable_diversity = true
+diversity_threshold = 0.8
+boost_recent = true
+boost_authoritative = true
+content_length_factor = true
+keyword_density_factor = true
+croatian_specific_boost = true
+boost_exact_match = 1.5
+boost_title_match = 1.3
+boost_metadata_match = 1.2
+decay_factor = 0.95
+
+[ranking.weights]
+# Ranking component weights
+content_weight = 0.6
+title_weight = 0.2
+metadata_weight = 0.1
+freshness_weight = 0.1
+
+[reranking]
+# Cross-encoder reranking settings
+enabled = true
+model_name = "BAAI/bge-reranker-v2-m3"  # BGE-reranker-v2-m3: Best multilingual reranker for Croatian
+device = "auto"  # "auto", "cpu", "cuda", "mps"
+max_length = 512
+batch_size = 4
+top_k = 20
+use_fp16 = true  # Speed up computation with slight performance degradation
+normalize = true  # Map scores to 0-1 range using sigmoid
+
+[hybrid_retrieval]
+# Hybrid retrieval combining dense and sparse
+dense_weight = 0.7
+sparse_weight = 0.3
+fusion_method = "rrf"  # "linear", "rrf" (Reciprocal Rank Fusion)
+bm25_k1 = 1.2
+bm25_b = 0.75
+
+# ============================================================================
+# GENERATION CONFIGURATION
+# ============================================================================
+[ollama]
+# Ollama LLM configuration
+base_url = "http://localhost:11434"
+model = "jobautomation/openeurollm-croatian:latest"
+temperature = 0.7
+max_tokens = 2000
+top_p = 0.9
+top_k = 64 # 40
+timeout = 120.0
+stream = true
+keep_alive = "5m"
+num_predict = -1
+repeat_penalty = 1.1
+seed = -1
+
+[prompts]
+# Prompt configuration
+system_prompt_template = "rag_system"
+user_prompt_template = "rag_user"
+context_template = "rag_context"
+use_few_shot_examples = true
+max_context_length = 4000
+include_source_references = true
+
+[response_parsing]
+# Response parsing and validation
+validate_responses = true
+extract_confidence_scores = true
+parse_citations = true
+handle_incomplete_responses = true
+max_response_length = 3000
+min_response_length = 50
+filter_hallucinations = true
+require_source_grounding = true
+confidence_threshold = 0.7
+response_format = "markdown"
+include_metadata = true
+
+# ============================================================================
+# SYSTEM CONFIGURATION
+# ============================================================================
+[system]
+# System-wide settings
+log_level = "INFO"
+enable_caching = true
+cache_dir = "./data/cache"
+max_concurrent_requests = 5
+request_timeout = 120.0
+enable_metrics = true
+metrics_dir = "./data/metrics"
+
+[performance]
+# Performance optimization settings
+use_async_processing = true
+parallel_document_processing = true
+max_workers = 4
+batch_processing_size = 10
+memory_limit_mb = 2048
+enable_gpu_acceleration = false
+
+# ============================================================================
+# PIPELINE ORCHESTRATION
+# ============================================================================
+[pipeline]
+# Main pipeline settings
+enable_preprocessing = true
+enable_embeddings = true
+enable_storage = true
+enable_retrieval = true
+enable_generation = true
+enable_monitoring = true
+
+[pipeline.timeouts]
+# Component timeout settings
+preprocessing_timeout = 300.0
+embedding_timeout = 180.0
+retrieval_timeout = 60.0
+generation_timeout = 120.0
+total_pipeline_timeout = 600.0
+
+[pipeline.retries]
+# Retry configuration
+max_retries = 3
+retry_delay = 1.0
+exponential_backoff = true
+retry_on_timeout = true
+retry_on_connection_error = true

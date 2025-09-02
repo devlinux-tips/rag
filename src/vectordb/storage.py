@@ -14,16 +14,47 @@ import numpy as np
 from chromadb.api.models.Collection import Collection
 from chromadb.config import Settings
 
+from ..utils.config_loader import get_croatian_vectordb, get_search_config, get_storage_config
+from ..utils.error_handler import create_config_loader, handle_config_error
+
+logger = logging.getLogger(__name__)
+
+# Create specialized config loaders
+load_vectordb_config = create_config_loader("config/config.toml", __name__)
+load_croatian_config = create_config_loader("config/croatian.toml", __name__)
+
 
 @dataclass
 class StorageConfig:
     """Configuration for ChromaDB storage."""
 
-    db_path: str = "./data/chromadb"
-    collection_name: str = "croatian_documents"
-    distance_metric: str = "cosine"  # "cosine", "l2", "ip" (inner product)
-    persist: bool = True
-    allow_reset: bool = True
+    db_path: str
+    collection_name: str
+    distance_metric: str
+    persist: bool
+    allow_reset: bool
+
+    @classmethod
+    def from_config(cls) -> "StorageConfig":
+        """Load configuration from TOML files."""
+        return load_vectordb_config(
+            operation=lambda: cls(
+                db_path=get_storage_config()["db_path"],
+                collection_name=get_storage_config()["collection_name"],
+                distance_metric=get_storage_config()["distance_metric"],
+                persist=get_storage_config()["persist"],
+                allow_reset=get_storage_config()["allow_reset"],
+            ),
+            fallback_value=cls(
+                db_path="./data/chromadb",
+                collection_name="croatian_documents",
+                distance_metric="cosine",
+                persist=True,
+                allow_reset=True,
+            ),
+            section="[storage]",
+            error_level="error",
+        )
 
 
 @dataclass
@@ -34,10 +65,27 @@ class DocumentMetadata:
     title: Optional[str] = None
     chunk_index: Optional[int] = None
     total_chunks: Optional[int] = None
-    language: str = "hr"
+    language: str = None
     processed_at: Optional[str] = None
     content_type: Optional[str] = None
     file_size: Optional[int] = None
+
+    def __post_init__(self):
+        """Set default language from config if not provided."""
+        if self.language is None:
+            try:
+                # Use Croatian language code from Croatian config
+                from ..utils.config_loader import get_croatian_language_code
+
+                self.language = get_croatian_language_code()
+                # Note: No logging here as this is normal operation
+            except Exception as e:
+                self.language = "hr"
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to load Croatian language code, using fallback 'hr': {e}")
+                logger.warning("Check your config/croatian.toml file")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for ChromaDB storage."""
@@ -54,7 +102,7 @@ class ChromaDBStorage:
         Args:
             config: Storage configuration
         """
-        self.config = config or StorageConfig()
+        self.config = config or StorageConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
         # Create database directory
@@ -213,7 +261,7 @@ class ChromaDBStorage:
         self,
         query_texts: Optional[List[str]] = None,
         query_embeddings: Optional[List[List[float]]] = None,
-        n_results: int = 5,
+        n_results: int = None,
         where: Optional[Dict[str, Any]] = None,
         where_document: Optional[Dict[str, Any]] = None,
         include: List[str] = None,
@@ -224,7 +272,7 @@ class ChromaDBStorage:
         Args:
             query_texts: Query texts (will be embedded automatically)
             query_embeddings: Pre-computed query embeddings
-            n_results: Number of results to return
+            n_results: Number of results to return (defaults from config)
             where: Metadata filter conditions
             where_document: Document content filter conditions
             include: What to include in results ("embeddings", "documents", "metadatas", "distances")
@@ -237,6 +285,19 @@ class ChromaDBStorage:
 
         if not query_texts and not query_embeddings:
             raise ValueError("Either query_texts or query_embeddings must be provided")
+
+        # Use config default for n_results if not provided
+        if n_results is None:
+            try:
+                search_config = get_search_config()
+                n_results = search_config["top_k"]
+                self.logger.debug(f"Using search config top_k: {n_results}")
+            except Exception as e:
+                n_results = 5
+                self.logger.warning(
+                    f"Failed to load search config for n_results, using fallback value {n_results}: {e}"
+                )
+                self.logger.warning("Check your config/vectordb.toml and config/search.toml files")
 
         # Default include list
         if include is None:
@@ -448,22 +509,81 @@ class ChromaDBStorage:
             self.logger.error(f"Failed to list collections: {e}")
             return []
 
+    def get_document_count(self, collection_name: Optional[str] = None) -> int:
+        """
+        Get the total number of documents in the collection.
+
+        Args:
+            collection_name: Optional collection name, uses default if None
+
+        Returns:
+            Number of documents in the collection
+        """
+        try:
+            collection_name = collection_name or self.config.collection_name
+            collection = self.client.get_collection(collection_name)
+            return collection.count()
+        except Exception as e:
+            self.logger.error(f"Failed to get document count: {e}")
+            return 0
+
+    async def close(self) -> None:
+        """
+        Close the ChromaDB storage connection gracefully.
+
+        Note: ChromaDB persistent client doesn't require explicit closing,
+        but this method provides a standard interface for cleanup.
+        """
+        try:
+            self.logger.info("Closing ChromaDB storage connection...")
+            # ChromaDB persistent client automatically handles cleanup
+            # No explicit close needed for the client
+            self.logger.info("ChromaDB storage connection closed successfully")
+        except Exception as e:
+            self.logger.error(f"Error during ChromaDB storage cleanup: {e}")
+
 
 def create_storage_client(
-    db_path: str = "./data/chromadb",
-    collection_name: str = "croatian_documents",
-    persist: bool = True,
+    db_path: str = None,
+    collection_name: str = None,
+    persist: bool = None,
 ) -> ChromaDBStorage:
     """
     Factory function to create ChromaDB storage client.
 
     Args:
-        db_path: Database storage path
-        collection_name: Default collection name
-        persist: Whether to persist data to disk
+        db_path: Database storage path (defaults from config)
+        collection_name: Default collection name (defaults from config)
+        persist: Whether to persist data to disk (defaults from config)
 
     Returns:
         Configured ChromaDBStorage instance
     """
-    config = StorageConfig(db_path=db_path, collection_name=collection_name, persist=persist)
+    # Use config defaults if not provided
+    if any(param is None for param in [db_path, collection_name, persist]):
+        try:
+            storage_config = get_storage_config()
+            db_path = db_path or storage_config["db_path"]
+            collection_name = collection_name or storage_config["collection_name"]
+            persist = persist if persist is not None else storage_config["persist"]
+        except Exception as e:
+            # Fallback to hardcoded defaults
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Failed to load storage config for factory function, using hardcoded defaults: {e}"
+            )
+            logger.warning("Check your config/vectordb.toml file")
+            db_path = db_path or "./data/chromadb"
+            collection_name = collection_name or "croatian_documents"
+            persist = persist if persist is not None else True
+
+    config = StorageConfig(
+        db_path=db_path,
+        collection_name=collection_name,
+        distance_metric="cosine",
+        persist=persist,
+        allow_reset=True,
+    )
     return ChromaDBStorage(config)

@@ -8,6 +8,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from ..utils.config_loader import get_croatian_response_parsing_config, get_response_parsing_config
+from ..utils.error_handler import handle_config_error
+
 
 @dataclass
 class ParsedResponse:
@@ -33,48 +36,44 @@ class CroatianResponseParser:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-        # Patterns for Croatian language processing
-        self.no_answer_patterns = [
-            r"ne mogu pronaći",
-            r"nije dostupno",
-            r"nema informacija",
-            r"ne znam",
-            r"nije jasno",
-            r"nedostaju podaci",
-        ]
+        # Load Croatian-specific configuration first, fall back to general config
+        croatian_config = handle_config_error(
+            operation=lambda: get_croatian_response_parsing_config(),
+            fallback_value={},
+            config_file="config/croatian.toml",
+            section="[response_parsing]",
+        )
 
-        # Patterns for source references
-        self.source_patterns = [
-            r"\[dokument \d+\]",
-            r"prema dokumentu",
-            r"u tekstu se navodi",
-            r"dokument spominje",
-        ]
+        # Load general configuration as fallback
+        general_config = handle_config_error(
+            operation=lambda: get_response_parsing_config(),
+            fallback_value={
+                "no_answer_patterns": ["ne znam", "ne mogu", "nema podataka"],
+                "source_patterns": ["izvor:", "prema:", "dokumentu:"],
+                "confidence_indicators": {
+                    "high": ["sigurno"],
+                    "medium": ["možda"],
+                    "low": ["nisam siguran"],
+                },
+            },
+            config_file="config/config.toml",
+            section="[response_parsing]",
+        )
 
-        # Confidence indicators
-        self.confidence_indicators = {
-            "high": [
-                r"jasno je da",
-                r"definitvno",
-                r"sigurno",
-                r"bez sumnje",
-                r"očigledno",
-            ],
-            "medium": [
-                r"vjerovatno",
-                r"moguće je",
-                r"čini se",
-                r"indicira",
-                r"sugerira",
-            ],
-            "low": [
-                r"možda",
-                r"nije sigurno",
-                r"teško je reći",
-                r"nedovoljno informacija",
-                r"ograničeno",
-            ],
-        }
+        # Merge Croatian config with general config (Croatian takes priority)
+        self._config = {**general_config, **croatian_config}
+
+        # Load patterns from merged config
+        self.no_answer_patterns = self._config.get(
+            "no_answer_patterns", ["ne znam", "ne mogu", "nema podataka"]
+        )
+        self.source_patterns = self._config.get(
+            "source_patterns", ["izvor:", "prema:", "dokumentu:"]
+        )
+        self.confidence_indicators = self._config.get(
+            "confidence_indicators",
+            {"high": ["sigurno"], "medium": ["možda"], "low": ["nisam siguran"]},
+        )
 
     def parse_response(
         self,
@@ -95,7 +94,7 @@ class CroatianResponseParser:
         """
         if not raw_response or not raw_response.strip():
             return ParsedResponse(
-                content="Žao mi je, nisam mogao generirati odgovor.",
+                content=self._config["display"]["no_answer_message"],
                 has_answer=False,
                 confidence=0.0,
             )
@@ -146,11 +145,7 @@ class CroatianResponseParser:
         cleaned = re.sub(r"\s+", " ", response.strip())
 
         # Remove common prefixes that models might add
-        prefixes_to_remove = [
-            r"^(odgovor|answer):\s*",
-            r"^(rezultat|result):\s*",
-            r"^(zaključak|conclusion):\s*",
-        ]
+        prefixes_to_remove = self._config["cleaning"]["prefixes_to_remove"]
 
         for pattern in prefixes_to_remove:
             cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
@@ -246,24 +241,8 @@ class CroatianResponseParser:
             Language code ('hr' for Croatian, 'en' for English, etc.)
         """
         # Simple heuristic based on Croatian-specific characters and words
-        croatian_chars = "čćšžđČĆŠŽĐ"
-        croatian_words = [
-            "je",
-            "se",
-            "na",
-            "za",
-            "da",
-            "su",
-            "ili",
-            "ako",
-            "kad",
-            "što",
-            "biti",
-            "imati",
-            "moći",
-            "htjeti",
-            "trebati",
-        ]
+        croatian_chars = self._config["language_detection"]["croatian_chars"]
+        croatian_words = self._config["language_detection"]["croatian_words"]
 
         # Count Croatian indicators
         char_score = sum(1 for char in response if char in croatian_chars)
@@ -274,7 +253,9 @@ class CroatianResponseParser:
         # Simple threshold-based detection
         if total_score > 2:
             return "hr"
-        elif any(word in response.lower() for word in ["the", "and", "or", "but", "with"]):
+        elif any(
+            word in response.lower() for word in self._config["language_detection"]["english_words"]
+        ):
             return "en"
         else:
             return "unknown"
@@ -293,18 +274,20 @@ class CroatianResponseParser:
 
         # Add confidence indicator if available
         if parsed_response.confidence is not None:
+            display_config = self._config["display"]
             if parsed_response.confidence >= 0.8:
-                confidence_label = "visoka pouzdanost"
+                confidence_label = display_config["high_confidence_label"]
             elif parsed_response.confidence >= 0.5:
-                confidence_label = "umjerena pouzdanost"
+                confidence_label = display_config["medium_confidence_label"]
             else:
-                confidence_label = "niska pouzdanost"
+                confidence_label = display_config["low_confidence_label"]
 
             formatted += f"\n\n[{confidence_label}]"
 
         # Add source information if available
         if parsed_response.sources_mentioned:
-            formatted += f"\n\nIzvori: {', '.join(parsed_response.sources_mentioned)}"
+            sources_prefix = self._config["display"]["sources_prefix"]
+            formatted += f"\n\n{sources_prefix}: {', '.join(parsed_response.sources_mentioned)}"
 
         return formatted
 

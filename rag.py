@@ -12,9 +12,10 @@ from src.generation.ollama_client import GenerationRequest, OllamaClient, Ollama
 from src.preprocessing.chunkers import DocumentChunker
 from src.preprocessing.cleaners import CroatianTextCleaner
 from src.preprocessing.extractors import DocumentExtractor
-from src.retrieval.hybrid_retriever import HybridRetriever
+from src.retrieval.hybrid_retriever import HybridRetrievalConfig, HybridRetriever
 from src.retrieval.query_processor import CroatianQueryProcessor
 from src.retrieval.reranker import MultilingualReranker
+from src.utils.error_handler import handle_config_error
 from src.vectordb.embeddings import CroatianEmbeddingModel, EmbeddingConfig
 from src.vectordb.storage import ChromaDBStorage, StorageConfig
 
@@ -36,19 +37,38 @@ class CroatianRAG:
         """Initialize all RAG components."""
         print("🔧 Initializing Croatian RAG System...")
 
-        # Embedding model
-        embedding_config = EmbeddingConfig(
-            # model_name="LaBSE",
-            device="cuda",
-            cache_dir="./temp_cache",
+        # Embedding model - use config system
+        embedding_config = handle_config_error(
+            operation=lambda: EmbeddingConfig.from_config(),
+            fallback_value=EmbeddingConfig(
+                model_name="BAAI/bge-m3",  # Default to BGE-M3
+                device="cpu",
+                cache_dir="./temp_cache",
+                max_seq_length=512,
+                batch_size=32,
+                normalize_embeddings=True,
+            ),
+            config_file="config/config.toml",
+            section="[embeddings]",
         )
         print(f"Embedding Config: {embedding_config}")
         self.embedding_model = CroatianEmbeddingModel(embedding_config)
         self.embedding_model.load_model()
         print("✅ Embedding model loaded")
 
-        # Vector storage
-        storage_config = StorageConfig(collection_name="croatian_rag", db_path="./data/chromadb")
+        # Vector storage - use config system
+        storage_config = handle_config_error(
+            operation=lambda: StorageConfig.from_config(),
+            fallback_value=StorageConfig(
+                collection_name="croatian_rag",
+                db_path="./data/chromadb",
+                distance_metric="cosine",
+                persist=True,
+                allow_reset=True,
+            ),
+            config_file="config/config.toml",
+            section="[storage]",
+        )
         self.storage = ChromaDBStorage(storage_config)
         self.storage.create_collection()
 
@@ -57,17 +77,41 @@ class CroatianRAG:
         doc_count = info.get("count", 0)
         print(f"📊 Vector database: {doc_count} document chunks")
 
-        # Query processor
-        self.query_processor = CroatianQueryProcessor()
+        # Query processor - use config system
+        self.query_processor = handle_config_error(
+            operation=lambda: CroatianQueryProcessor(),
+            fallback_value=CroatianQueryProcessor(),
+            config_file="config/config.toml",
+            section="[query_processing]",
+        )
 
-        # Hybrid retriever
-        self.hybrid_retriever = HybridRetriever(dense_weight=0.7, sparse_weight=0.3)
+        # Hybrid retriever - use config system
+        hybrid_config = handle_config_error(
+            operation=lambda: HybridRetrievalConfig.from_config(),
+            fallback_value=HybridRetrievalConfig(dense_weight=0.7, sparse_weight=0.3),
+            config_file="config/config.toml",
+            section="[hybrid_retrieval]",
+        )
+        self.hybrid_retriever = HybridRetriever(hybrid_config)
 
-        # Reranker (lightweight, loads on first use)
-        self.reranker = MultilingualReranker(device="cuda", batch_size=4)
+        # Reranker - use config system
+        reranker_config = handle_config_error(
+            operation=lambda: {"device": "cpu", "batch_size": 4},  # Could come from search config
+            fallback_value={"device": "cpu", "batch_size": 4},
+            config_file="config/config.toml",
+            section="[reranking]",
+        )
+        self.reranker = MultilingualReranker(
+            device=reranker_config["device"], batch_size=reranker_config["batch_size"]
+        )
 
-        # Ollama client
-        ollama_config = OllamaConfig()  # Uses qwen2.5:7b-instruct by default
+        # Ollama client - use config system (already working!)
+        ollama_config = handle_config_error(
+            operation=lambda: OllamaConfig.from_config(),
+            fallback_value=OllamaConfig(),  # Default constructor
+            config_file="config/config.toml",
+            section="[generation] and [ollama]",
+        )
         self.ollama_client = OllamaClient(ollama_config)
 
         # Check Ollama status
@@ -87,9 +131,30 @@ class CroatianRAG:
         if not self.initialized:
             await self.initialize()
 
-        extractor = DocumentExtractor()
-        cleaner = CroatianTextCleaner()
-        chunker = DocumentChunker(chunk_size=512, overlap=50)
+        # Initialize processing components with config
+        extractor = handle_config_error(
+            operation=lambda: DocumentExtractor(),
+            fallback_value=DocumentExtractor(),
+            config_file="config/config.toml",
+            section="[extraction]",
+        )
+        cleaner = handle_config_error(
+            operation=lambda: CroatianTextCleaner(),
+            fallback_value=CroatianTextCleaner(),
+            config_file="config/config.toml",
+            section="[cleaning]",
+        )
+
+        # Chunker with config
+        chunker_config = handle_config_error(
+            operation=lambda: {"chunk_size": 512, "overlap": 50},  # Could come from chunking config
+            fallback_value={"chunk_size": 512, "overlap": 50},
+            config_file="config/config.toml",
+            section="[chunking]",
+        )
+        chunker = DocumentChunker(
+            chunk_size=chunker_config["chunk_size"], overlap=chunker_config["overlap"]
+        )
 
         doc_path = Path(doc_dir)
         if not doc_path.exists():

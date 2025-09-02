@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
+from ..utils.config_loader import get_retrieval_config
+from ..utils.error_handler import handle_config_error
 from ..vectordb.embeddings import CroatianEmbeddingModel
 from ..vectordb.search import SearchMethod, SearchResponse, SemanticSearchEngine
 from ..vectordb.storage import ChromaDBStorage
@@ -36,6 +38,36 @@ class RetrievalConfig:
     adaptive_top_k: bool = True
     fallback_enabled: bool = True
     timeout_seconds: int = 30
+
+    @classmethod
+    def from_config(cls) -> "RetrievalConfig":
+        """Load configuration from TOML files."""
+
+        def load_config():
+            config = get_retrieval_config()["retrieval"]
+
+            # Convert string to enum
+            strategy_str = config["default_strategy"]
+            strategy = RetrievalStrategy.HYBRID  # default
+            for strategy_enum in RetrievalStrategy:
+                if strategy_enum.value == strategy_str:
+                    strategy = strategy_enum
+                    break
+
+            return cls(
+                strategy=strategy,
+                max_results=config["top_k"],
+                min_similarity=config["similarity_threshold"],
+                fallback_enabled=config["fallback_enabled"],
+                timeout_seconds=config.get("max_retries", 30),  # Reuse as timeout
+            )
+
+        return handle_config_error(
+            operation=load_config,
+            fallback_value=cls(),  # Default constructor
+            config_file="config/config.toml",
+            section="[retrieval]",
+        )
 
 
 @dataclass

@@ -1,0 +1,19 @@
+# Main Project Configuration - Development Environment
+# Croatian RAG Learning Project
+
+[project]
+name = "croatian-rag"
+version = "0.1.0"
+environment = "development"
+debug = true
+
+[paths]
+data_dir = "data"
+config_dir = "config"
+models_dir = "models"
+temp_cache_dir = "temp_cache"
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+file = "logs/app.log"

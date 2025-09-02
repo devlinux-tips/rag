@@ -9,6 +9,9 @@ import numpy as np
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from ..utils.config_loader import get_reranking_config
+from ..utils.error_handler import handle_config_error
+
 
 @dataclass
 class RerankerResult:
@@ -26,24 +29,37 @@ class MultilingualReranker:
 
     def __init__(
         self,
-        model_name: str = "BAAI/bge-reranker-v2-m3",
-        device: str = "cpu",
-        max_length: int = 512,
-        batch_size: int = 8,
+        model_name: str = None,
+        device: str = None,
+        max_length: int = None,
+        batch_size: int = None,
     ):
         """
-        Initialize multilingual reranker.
+        Initialize multilingual reranker with config.
 
         Args:
-            model_name: HuggingFace model name
-            device: Device to run on ("cpu" or "cuda")
-            max_length: Maximum sequence length
-            batch_size: Batch size for processing
+            model_name: HuggingFace model name (from config if None)
+            device: Device to run on (from config if None)
+            max_length: Maximum sequence length (from config if None)
+            batch_size: Batch size for processing (from config if None)
         """
-        self.model_name = model_name
-        self.device = device
-        self.max_length = max_length
-        self.batch_size = batch_size
+        # Load configuration with DRY pattern
+        config = handle_config_error(
+            operation=lambda: get_reranking_config(),
+            fallback_value={
+                "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+                "device": "cpu",
+                "batch_size": 4,
+                "confidence_threshold": 0.5,
+            },
+            config_file="config/config.toml",
+            section="[reranking]",
+        )
+
+        self.model_name = model_name or config["model_name"]
+        self.device = device or config["device"]
+        self.max_length = max_length or 512  # Not in config yet
+        self.batch_size = batch_size or config["batch_size"]
 
         self.tokenizer = None
         self.model = None
@@ -56,13 +72,16 @@ class MultilingualReranker:
 
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
 
+            # Determine optimal dtype based on device
+            model_dtype = torch.float32 if self.device == "cpu" else torch.float16
+
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 self.model_name,
                 trust_remote_code=True,
-                torch_dtype=torch.float32 if self.device == "cpu" else torch.float16,
             )
 
-            self.model.to(self.device)
+            # Convert to appropriate dtype and device
+            self.model = self.model.to(device=self.device, dtype=model_dtype)
             self.model.eval()
 
             self.is_loaded = True

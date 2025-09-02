@@ -8,31 +8,116 @@ import json
 import logging
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 import requests
 
+from ..utils.config_loader import (
+    get_croatian_confidence_settings,
+    get_croatian_formal_prompts,
+    get_croatian_language_code,
+    get_croatian_prompts,
+    get_croatian_settings,
+    get_generation_config,
+    get_ollama_config,
+)
 from ..utils.croatian_utils import detect_croatian_content, preserve_croatian_encoding
+from ..utils.error_handler import create_config_loader, handle_config_error
+
+# Create specialized config loaders
+load_generation_config = create_config_loader("config/config.toml", __name__)
+load_croatian_config = create_config_loader("config/croatian.toml", __name__)
 
 
 @dataclass
 class OllamaConfig:
     """Configuration for Ollama client."""
 
-    base_url: str = "http://localhost:11434"
-    model: str = "jobautomation/openeurollm-croatian:latest"
-    temperature: float = 0.7
-    max_tokens: int = 2000
-    top_p: float = 0.9
-    top_k: int = 64  # 40
-    timeout: float = 120.0
+    # Server settings
+    base_url: str = field(default="http://localhost:11434")
+    timeout: float = field(default=120.0)
+
+    # Model settings
+    model: str = field(default="jobautomation/openeurollm-croatian:latest")
+    temperature: float = field(default=0.7)
+    max_tokens: int = field(default=2000)
+    top_p: float = field(default=0.9)
+    top_k: int = field(default=64)
 
     # Croatian-specific settings
-    preserve_diacritics: bool = True
-    prefer_formal_style: bool = True
-    include_cultural_context: bool = True
+    preserve_diacritics: bool = field(default=True)
+    prefer_formal_style: bool = field(default=True)
+    include_cultural_context: bool = field(default=True)
+
+    # Generation settings
+    streaming: bool = field(default=True)
+    confidence_threshold: float = field(default=0.5)
+
+    # Fallback models
+    fallback_models: List[str] = field(
+        default_factory=lambda: ["qwen2.5:7b-instruct", "llama3.1:8b", "mistral:7b"]
+    )
+
+    @classmethod
+    def from_config(cls, config_path: Optional[str] = None) -> "OllamaConfig":
+        """
+        Load configuration from TOML files using centralized config loader.
+
+        Args:
+            config_path: Unused, kept for backwards compatibility
+
+        Returns:
+            OllamaConfig instance with loaded values from ollama.toml and croatian.toml
+        """
+
+        def load_config():
+            # Load generation config
+            generation_config = get_generation_config()
+            ollama_config = get_ollama_config()
+
+            # Load Croatian settings
+            croatian_config = get_croatian_settings()
+
+            # Extract server settings directly from config
+            base_url = ollama_config.get("base_url", "http://localhost:11434")
+
+            # Get fallback models
+            fallback_models = [ollama_config.get("fallback_model", "qwen2.5:7b-instruct")]
+
+            return cls(
+                # Server settings
+                base_url=base_url,
+                timeout=ollama_config.get("timeout", 60.0),
+                # Model settings
+                model=ollama_config.get("model", "llama3.1:8b"),
+                temperature=ollama_config.get("temperature", 0.7),
+                max_tokens=ollama_config.get("max_tokens", 2000),
+                top_p=ollama_config.get("top_p", 0.9),
+                top_k=ollama_config.get("top_k", 40),
+                # Croatian settings from Croatian config
+                preserve_diacritics=ollama_config.get("preserve_diacritics", True),
+                prefer_formal_style=croatian_config.get("generation", {}).get(
+                    "formality_level", "polite"
+                )
+                == "polite",
+                include_cultural_context=ollama_config.get("cultural_context", True),
+                # Generation settings
+                streaming=ollama_config.get("stream", True),
+                confidence_threshold=0.5,  # Keep default for now
+                # Fallback models
+                fallback_models=fallback_models,
+            )
+
+        return handle_config_error(
+            operation=load_config,
+            fallback_value=cls(),  # Default constructor
+            config_file="config/config.toml",
+            section="[generation] and [ollama]",
+            error_level="error",
+        )
 
 
 @dataclass
@@ -43,8 +128,13 @@ class GenerationRequest:
     context: List[str]
     query: str
     query_type: str = "general"
-    language: str = "hr"
+    language: str = None  # Will be set from config
     metadata: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        """Set default language from config if not provided."""
+        if self.language is None:
+            self.language = get_croatian_language_code()
 
 
 @dataclass
@@ -67,14 +157,14 @@ class GenerationResponse:
 class OllamaClient:
     """Enhanced client for interacting with Ollama API for Croatian text generation."""
 
-    def __init__(self, config: OllamaConfig = None):
+    def __init__(self, config: Optional[OllamaConfig] = None):
         """
         Initialize Ollama client with Croatian language support.
 
         Args:
-            config: Configuration object for Ollama settings
+            config: Configuration object for Ollama settings. If None, loads from TOML.
         """
-        self.config = config or OllamaConfig()
+        self.config = config or OllamaConfig.from_config()
         self.logger = logging.getLogger(__name__)
         self._async_client = None
         self._model_info = None
@@ -148,8 +238,8 @@ class OllamaClient:
             return False
 
     async def generate_text_async(self, request: GenerationRequest) -> GenerationResponse:
-        """Generate text using Ollama with async support and Croatian optimization (streaming).
-        TODO: maybe add toggle between streaming/non-streaming via a flag in request or config (instead of hardcoding)? That way you can choose per-use-case.
+        """Generate text using Ollama with async support and Croatian optimization.
+        Uses streaming mode based on configuration settings.
         """
         start_time = time.time()
 
@@ -164,15 +254,19 @@ class OllamaClient:
             # Step 2: Prepare prompt with config-driven enrichments
             prompt = request.prompt
             if self.config.prefer_formal_style:
-                prompt = f"Odgovaraj uvijek u formalnom stilu.\n\n{prompt}"
+                formal_prompts = get_croatian_formal_prompts()
+                formal_instruction = formal_prompts["formal_instruction"]
+                prompt = f"{formal_instruction}\n\n{prompt}"
             if self.config.include_cultural_context:
-                prompt = f"{prompt}\n\nAko je prikladno, uključi kulturni kontekst u odgovoru."
+                formal_prompts = get_croatian_formal_prompts()
+                cultural_instruction = formal_prompts["cultural_context_instruction"]
+                prompt = f"{prompt}\n\n{cultural_instruction}"
 
-            # Step 3: Prepare request for streaming
+            # Step 3: Prepare request (streaming based on config)
             ollama_request = {
-                "model": self.config.model,  # "jobautomation/openeurollm-croatian:latest"
+                "model": self.config.model,
                 "prompt": prompt,
-                "stream": True,
+                "stream": self.config.streaming,
                 "options": {
                     "temperature": self.config.temperature,
                     "num_predict": self.config.max_tokens,
@@ -180,44 +274,28 @@ class OllamaClient:
                     "top_k": self.config.top_k,
                 },
             }
-            self.logger.debug(f"Sending streaming request to Ollama: {ollama_request}")
+            self.logger.debug(f"Sending request to Ollama: {ollama_request}")
 
-            # Step 4: Collect streamed response
-            generated_chunks = []
-            async with self._async_client.stream(
-                "POST",
-                f"http://127.0.0.1:11434/api/generate",  # use 127.0.0.1 instead of localhost
-                json=ollama_request,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        data = json.loads(line)
-                        chunk = data.get("response", "")
-                        if chunk:
-                            generated_chunks.append(chunk)
-                    except Exception as parse_err:
-                        self.logger.warning(
-                            f"Failed to parse stream chunk: {parse_err} | raw={line}"
-                        )
-
-            generated_text = "".join(generated_chunks)
+            # Step 4: Handle response based on streaming setting
+            if self.config.streaming:
+                generated_text = await self._handle_streaming_response(ollama_request)
+            else:
+                generated_text = await self._handle_non_streaming_response(ollama_request)
 
             # Step 5: Preserve Croatian encoding if needed
-            if self.config.preserve_diacritics and request.language == "hr":
+            croatian_lang_code = get_croatian_language_code()
+            if self.config.preserve_diacritics and request.language == croatian_lang_code:
                 generated_text = preserve_croatian_encoding(generated_text)
 
             # Step 6: Confidence calculation
             confidence = self._calculate_confidence(generated_text, request)
 
-            # Step 7: Metadata (streaming mode gives limited stats)
+            # Step 7: Metadata
             metadata = {
                 "query_type": request.query_type,
                 "language": request.language,
                 "context_length": len(" ".join(request.context)),
-                "streaming": True,
+                "streaming": self.config.streaming,
                 "formal_style": self.config.prefer_formal_style,
                 "cultural_context": self.config.include_cultural_context,
             }
@@ -227,7 +305,7 @@ class OllamaClient:
             return GenerationResponse(
                 text=generated_text,
                 model=self.config.model,
-                tokens_used=len(generated_chunks),  # rough estimate
+                tokens_used=len(generated_text.split()) if generated_text else 0,  # rough estimate
                 generation_time=time.time() - start_time,
                 confidence=confidence,
                 metadata=metadata,
@@ -239,8 +317,13 @@ class OllamaClient:
             self.logger.debug(f"Traceback:\n{tb}")
             error_msg = f"{type(e).__name__}: {str(e)}"
 
+            # Get error message template from Croatian config
+            croatian_prompts = get_croatian_prompts()
+            error_template = croatian_prompts["error_message_template"]
+            error_text = error_template.format(error=error_msg)
+
             return GenerationResponse(
-                text=f"Greška u generiranju odgovora: {error_msg}",
+                text=error_text,
                 model=self.config.model,
                 tokens_used=0,
                 generation_time=time.time() - start_time,
@@ -260,7 +343,7 @@ class OllamaClient:
             context=context or [],
             query=prompt,
             query_type="general",
-            language="hr",
+            language=get_croatian_language_code(),
         )
 
         # Run async function in sync context
@@ -316,8 +399,12 @@ class OllamaClient:
             List of model names
         """
         try:
-            response = self._make_request("api/tags", {})
-            return [model["name"] for model in response.get("models", [])]
+            # Use GET request for /api/tags endpoint (not POST like other endpoints)
+            url = f"{self.config.base_url}/api/tags"
+            response = requests.get(url, timeout=self.config.timeout)
+            response.raise_for_status()
+            data = response.json()
+            return [model["name"] for model in data.get("models", [])]
 
         except Exception as e:
             self.logger.error(f"Failed to get available models: {e}")
@@ -335,6 +422,36 @@ class OllamaClient:
             self.logger.error(f"Ollama service not available: {e}")
             return False
 
+    async def _handle_streaming_response(self, ollama_request: Dict[str, Any]) -> str:
+        """Handle streaming response from Ollama."""
+        generated_chunks = []
+        async with self._async_client.stream(
+            "POST",
+            f"{self.config.base_url}/api/generate",
+            json=ollama_request,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    chunk = data.get("response", "")
+                    if chunk:
+                        generated_chunks.append(chunk)
+                except Exception as parse_err:
+                    self.logger.warning(f"Failed to parse stream chunk: {parse_err} | raw={line}")
+        return "".join(generated_chunks)
+
+    async def _handle_non_streaming_response(self, ollama_request: Dict[str, Any]) -> str:
+        """Handle non-streaming response from Ollama."""
+        response = await self._async_client.post(
+            f"{self.config.base_url}/api/generate", json=ollama_request
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "")
+
     def _calculate_confidence(self, generated_text: str, request: GenerationRequest) -> float:
         """Calculate confidence score for generated text."""
         confidence = 0.5  # Base confidence
@@ -346,7 +463,8 @@ class OllamaClient:
             confidence += 0.1
 
         # Croatian content check
-        if request.language == "hr":
+        croatian_lang_code = get_croatian_language_code()
+        if request.language == croatian_lang_code:
             croatian_score = detect_croatian_content(generated_text)
             confidence += croatian_score * 0.3
 
@@ -367,8 +485,9 @@ class OllamaClient:
                 context_usage = min(context_overlap / len(context_words), 0.3)
                 confidence += context_usage
 
-        # Error indicators
-        error_phrases = ["greška", "error", "ne znam", "ne mogu", "sorry"]
+        # Error indicators from config
+        confidence_settings = get_croatian_confidence_settings()
+        error_phrases = confidence_settings["error_phrases"]
         if any(phrase in generated_text.lower() for phrase in error_phrases):
             confidence -= 0.2
 
@@ -403,20 +522,32 @@ class OllamaClient:
 
 
 def create_ollama_client(
-    model: str = "qwen2.5:7b-instruct",
-    base_url: str = "http://localhost:11434",
-    temperature: float = 0.7,
+    config_path: Optional[str] = None,
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    temperature: Optional[float] = None,
 ) -> OllamaClient:
     """
     Factory function to create configured Ollama client.
 
     Args:
-        model: Model name to use
-        base_url: Ollama API base URL
-        temperature: Generation temperature
+        config_path: Unused, kept for backwards compatibility
+        model: Model name to use (overrides config)
+        base_url: Ollama API base URL (overrides config)
+        temperature: Generation temperature (overrides config)
 
     Returns:
         Configured OllamaClient instance
     """
-    config = OllamaConfig(model=model, base_url=base_url, temperature=temperature)
+    # Load config from TOML files
+    config = OllamaConfig.from_config(config_path)
+
+    # Override with provided parameters
+    if model is not None:
+        config.model = model
+    if base_url is not None:
+        config.base_url = base_url
+    if temperature is not None:
+        config.temperature = temperature
+
     return OllamaClient(config)

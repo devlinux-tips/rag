@@ -11,8 +11,16 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ..utils.config_loader import get_croatian_vectordb, get_search_config
+from ..utils.error_handler import create_config_loader, handle_config_error
 from .embeddings import CroatianEmbeddingModel
 from .storage import ChromaDBStorage
+
+logger = logging.getLogger(__name__)
+
+# Create specialized config loaders
+load_vectordb_config = create_config_loader("config/config.toml", __name__)
+load_croatian_config = create_config_loader("config/croatian.toml", __name__)
 
 
 class SearchMethod(Enum):
@@ -27,13 +35,53 @@ class SearchMethod(Enum):
 class SearchConfig:
     """Configuration for search operations."""
 
-    method: SearchMethod = SearchMethod.SEMANTIC
-    top_k: int = 5
-    similarity_threshold: float = 0.0
-    max_context_length: int = 2000
-    rerank: bool = True
-    include_metadata: bool = True
-    include_distances: bool = True
+    method: SearchMethod
+    top_k: int
+    similarity_threshold: float
+    max_context_length: int
+    rerank: bool
+    include_metadata: bool
+    include_distances: bool
+
+    @classmethod
+    def from_config(cls) -> "SearchConfig":
+        """Load configuration from TOML files."""
+
+        def load_config():
+            search_config = get_search_config()
+
+            # Convert string to enum
+            method_str = search_config["default_method"]
+            method = SearchMethod.SEMANTIC  # default
+            for search_method in SearchMethod:
+                if search_method.value == method_str:
+                    method = search_method
+                    break
+
+            return cls(
+                method=method,
+                top_k=search_config["top_k"],
+                similarity_threshold=search_config["similarity_threshold"],
+                max_context_length=search_config["max_context_length"],
+                rerank=search_config["rerank"],
+                include_metadata=search_config["include_metadata"],
+                include_distances=search_config["include_distances"],
+            )
+
+        return load_vectordb_config(
+            operation=load_config,
+            fallback_value=cls(
+                method=SearchMethod.SEMANTIC,
+                top_k=5,
+                similarity_threshold=0.0,
+                max_context_length=2000,
+                rerank=True,
+                include_metadata=True,
+                include_distances=True,
+            ),
+            section="[search]",
+            error_level="error",
+        )
 
 
 @dataclass
@@ -86,7 +134,7 @@ class SemanticSearchEngine:
         """
         self.embedding_model = embedding_model
         self.storage = storage
-        self.config = config or SearchConfig()
+        self.config = config or SearchConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
         # Ensure collection exists
@@ -176,6 +224,10 @@ class SemanticSearchEngine:
         """
         # Encode query
         query_embedding = self.embedding_model.encode_text(query)
+
+        # Ensure embedding is 1D for ChromaDB (BGE-M3 returns 2D array)
+        if query_embedding.ndim == 2:
+            query_embedding = query_embedding[0]  # Take first (and only) embedding
 
         # Search in ChromaDB
         chroma_results = self.storage.query_similar(
@@ -288,18 +340,31 @@ class SemanticSearchEngine:
         # Combine and deduplicate results
         combined_results = {}
 
+        # Get weights from config
+        weights = load_vectordb_config(
+            operation=lambda: {
+                "semantic": get_search_config()["weights"]["semantic_weight"],
+                "keyword": get_search_config()["weights"]["keyword_weight"],
+            },
+            fallback_value={"semantic": 0.7, "keyword": 0.3},
+            section="[search.weights]",
+        )
+
+        semantic_weight = weights["semantic"]
+        keyword_weight = weights["keyword"]
+
         # Add semantic results with weight
         for result in semantic_results:
             combined_results[result.id] = result
-            result.score *= 0.7  # Weight semantic score
+            result.score *= semantic_weight
 
         # Add keyword results with weight
         for result in keyword_results:
             if result.id in combined_results:
                 # Combine scores for documents found by both methods
-                combined_results[result.id].score += result.score * 0.3
+                combined_results[result.id].score += result.score * keyword_weight
             else:
-                result.score *= 0.3  # Weight keyword score
+                result.score *= keyword_weight
                 combined_results[result.id] = result
 
         # Convert back to list and sort
@@ -331,14 +396,26 @@ class SemanticSearchEngine:
 
             # 2. Content length (prefer neither too short nor too long)
             content_length = len(result.content)
-            length_score = 1.0
+            try:
+                scoring_config = get_search_config()["scoring"]
+                length_score_short = scoring_config["length_score_short"]
+                length_score_medium = scoring_config["length_score_medium"]
+                length_score_optimal = scoring_config["length_score_optimal"]
+                metadata_title_boost = scoring_config["metadata_title_boost"]
+            except Exception:
+                length_score_short = 0.8
+                length_score_medium = 0.9
+                length_score_optimal = 1.0
+                metadata_title_boost = 1.1
+
+            length_score = length_score_optimal
             if content_length < 100:
-                length_score = 0.8
+                length_score = length_score_short
             elif content_length > 1000:
-                length_score = 0.9
+                length_score = length_score_medium
 
             # 3. Metadata quality (if title exists, boost score)
-            metadata_boost = 1.1 if result.metadata.get("title") else 1.0
+            metadata_boost = metadata_title_boost if result.metadata.get("title") else 1.0
 
             # Apply boosts
             result.score = result.score * (1 + term_overlap * 0.2) * length_score * metadata_boost
@@ -403,7 +480,12 @@ class SemanticSearchEngine:
         # Boost for exact phrase matches
         query_phrase = " ".join(query_terms)
         if query_phrase in doc_text:
-            score *= 1.5
+            try:
+                scoring_config = get_search_config()["scoring"]
+                phrase_match_boost = scoring_config["phrase_match_boost"]
+            except Exception:
+                phrase_match_boost = 1.5
+            score *= phrase_match_boost
 
         return min(1.0, score)
 
@@ -477,17 +559,25 @@ class SearchResultFormatter:
         return "\n".join(lines)
 
     @staticmethod
-    def extract_context_chunks(response: SearchResponse, max_length: int = 2000) -> List[str]:
+    def extract_context_chunks(response: SearchResponse, max_length: int = None) -> List[str]:
         """
         Extract context chunks for RAG generation.
 
         Args:
             response: Search response
-            max_length: Maximum total length of context
+            max_length: Maximum total length of context (defaults from config)
 
         Returns:
             List of context chunks
         """
+        # Use config default for max_length if not provided
+        if max_length is None:
+            try:
+                search_config = get_search_config()
+                max_length = search_config["max_context_length"]
+            except Exception:
+                max_length = 2000
+
         chunks = []
         total_length = 0
 
@@ -510,8 +600,8 @@ class SearchResultFormatter:
 def create_search_engine(
     embedding_model: CroatianEmbeddingModel,
     storage: ChromaDBStorage,
-    method: SearchMethod = SearchMethod.SEMANTIC,
-    top_k: int = 5,
+    method: SearchMethod = None,
+    top_k: int = None,
 ) -> SemanticSearchEngine:
     """
     Factory function to create search engine.
@@ -519,11 +609,36 @@ def create_search_engine(
     Args:
         embedding_model: Embedding model instance
         storage: Storage client instance
-        method: Default search method
-        top_k: Default number of results
+        method: Default search method (defaults from config)
+        top_k: Default number of results (defaults from config)
 
     Returns:
         Configured SemanticSearchEngine
     """
-    config = SearchConfig(method=method, top_k=top_k)
+    # Use config defaults if not provided
+    if method is None or top_k is None:
+        try:
+            search_config = get_search_config()
+            if method is None:
+                method_str = search_config["default_method"]
+                method = SearchMethod.SEMANTIC  # default
+                for search_method in SearchMethod:
+                    if search_method.value == method_str:
+                        method = search_method
+                        break
+            if top_k is None:
+                top_k = search_config["top_k"]
+        except Exception:
+            method = method or SearchMethod.SEMANTIC
+            top_k = top_k or 5
+
+    config = SearchConfig(
+        method=method,
+        top_k=top_k,
+        similarity_threshold=0.0,
+        max_context_length=2000,
+        rerank=True,
+        include_metadata=True,
+        include_distances=True,
+    )
     return SemanticSearchEngine(embedding_model, storage, config)

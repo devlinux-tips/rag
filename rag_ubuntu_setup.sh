@@ -80,6 +80,8 @@ pip install --upgrade pip setuptools wheel
 # Install PyTorch (CUDA version for embeddings)
 print_status "Installing PyTorch (CUDA version)..."
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# OR
+# pip install torch==2.5.1+cu121 torchvision==0.20.1+cu121 torchaudio==2.5.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Make scripts executable
 chmod +x test_setup.py

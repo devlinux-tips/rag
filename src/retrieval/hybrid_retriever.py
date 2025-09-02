@@ -11,6 +11,41 @@ from rank_bm25 import BM25Okapi
 
 
 @dataclass
+class HybridRetrievalConfig:
+    """Configuration for hybrid retrieval."""
+
+    dense_weight: float = 0.7
+    sparse_weight: float = 0.3
+    bm25_k1: float = 1.5
+    bm25_b: float = 0.75
+    min_bm25_score: float = 0.1
+    normalize_scores: bool = True
+
+    @classmethod
+    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "HybridRetrievalConfig":
+        """Create config from dictionary with DRY error handling."""
+        from ..utils.config_loader import get_hybrid_retrieval_config
+        from ..utils.error_handler import handle_config_error
+
+        # Load config with fallback
+        hybrid_config = config_dict or handle_config_error(
+            operation=get_hybrid_retrieval_config,
+            fallback_value={},
+            config_file="config/config.toml",
+            section="hybrid_retrieval",
+        )
+
+        return cls(
+            dense_weight=hybrid_config.get("dense_weight", 0.7),
+            sparse_weight=hybrid_config.get("sparse_weight", 0.3),
+            bm25_k1=hybrid_config.get("bm25_k1", 1.5),
+            bm25_b=hybrid_config.get("bm25_b", 0.75),
+            min_bm25_score=hybrid_config.get("min_bm25_score", 0.1),
+            normalize_scores=hybrid_config.get("normalize_scores", True),
+        )
+
+
+@dataclass
 class HybridResult:
     """Result from hybrid retrieval."""
 
@@ -34,9 +69,21 @@ class CroatianBM25:
             k1: BM25 parameter controlling term frequency saturation
             b: BM25 parameter controlling length normalization
         """
+        from ..utils.config_loader import get_croatian_retrieval
+        from ..utils.error_handler import handle_config_error
+
         self.documents = documents
         self.k1 = k1
         self.b = b
+
+        # Load Croatian stop words from config
+        croatian_config = handle_config_error(
+            operation=get_croatian_retrieval,
+            fallback_value={"stop_words": []},
+            config_file="config/croatian.toml",
+            section="croatian retrieval",
+        )
+        self.stop_words = set(croatian_config.get("stop_words", []))
 
         # Preprocess documents for BM25
         self.processed_docs = [self._preprocess_croatian(doc) for doc in documents]
@@ -61,8 +108,12 @@ class CroatianBM25:
         # Split into tokens
         tokens = text.split()
 
-        # Remove very short tokens and numbers
-        tokens = [token for token in tokens if len(token) > 2 and not token.isdigit()]
+        # Remove very short tokens, numbers, and stop words
+        tokens = [
+            token
+            for token in tokens
+            if len(token) > 2 and not token.isdigit() and token not in self.stop_words
+        ]
 
         return tokens
 
@@ -81,26 +132,19 @@ class CroatianBM25:
 class HybridRetriever:
     """Hybrid retrieval combining dense embeddings and BM25."""
 
-    def __init__(
-        self,
-        dense_weight: float = 0.7,
-        sparse_weight: float = 0.3,
-        bm25_k1: float = 1.5,
-        bm25_b: float = 0.75,
-    ):
+    def __init__(self, config: HybridRetrievalConfig = None):
         """
         Initialize hybrid retriever.
 
         Args:
-            dense_weight: Weight for dense (embedding) scores
-            sparse_weight: Weight for sparse (BM25) scores
-            bm25_k1: BM25 parameter k1
-            bm25_b: BM25 parameter b
+            config: Hybrid retrieval configuration
         """
-        self.dense_weight = dense_weight
-        self.sparse_weight = sparse_weight
-        self.bm25_k1 = bm25_k1
-        self.bm25_b = bm25_b
+        self.config = config or HybridRetrievalConfig.from_config()
+
+        self.dense_weight = self.config.dense_weight
+        self.sparse_weight = self.config.sparse_weight
+        self.bm25_k1 = self.config.bm25_k1
+        self.bm25_b = self.config.bm25_b
 
         self.documents = []
         self.metadatas = []

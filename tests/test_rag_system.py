@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.pipeline.config import OllamaConfig, ProcessingConfig, RAGConfig
-from src.pipeline.rag_system import CroatianRAGSystem, RAGQuery, RAGResponse, create_rag_system
+from src.pipeline.rag_system import RAGQuery, RAGResponse, RAGSystem, create_rag_system
 
 
 class TestRAGQuery:
@@ -93,7 +93,7 @@ class TestRAGResponse:
         assert low_response.has_high_confidence is False
 
 
-class TestCroatianRAGSystem:
+class TestRAGSystem:
     """Test complete Croatian RAG system."""
 
     @pytest.fixture
@@ -107,7 +107,7 @@ class TestCroatianRAGSystem:
     @pytest.fixture
     def rag_system(self, config):
         """Create test RAG system."""
-        return CroatianRAGSystem(config)
+        return RAGSystem(config)
 
     def test_system_creation(self, rag_system, config):
         """Test RAG system creation."""
@@ -433,7 +433,7 @@ class TestRAGSystemIntegration:
         config = RAGConfig()
         config.ollama.timeout = 10.0  # Shorter timeout for tests
 
-        system = CroatianRAGSystem(config)
+        system = RAGSystem(config)
 
         # Mock initialization to avoid external dependencies
         with patch.multiple(
@@ -474,9 +474,9 @@ class TestRAGSystemIntegration:
         """Test RAG system factory function."""
         # Test with default config
         with patch.multiple(
-            "src.pipeline.rag_system.CroatianRAGSystem", initialize=AsyncMock()
+            "src.pipeline.rag_system.RAGSystem", initialize=AsyncMock()
         ) as mock_methods:
-            with patch("src.pipeline.rag_system.CroatianRAGSystem") as mock_class:
+            with patch("src.pipeline.rag_system.RAGSystem") as mock_class:
                 mock_instance = Mock()
                 mock_instance.initialize = AsyncMock()
                 mock_class.return_value = mock_instance
@@ -502,7 +502,7 @@ class TestRAGSystemIntegration:
             config_path = f.name
 
         try:
-            with patch("src.pipeline.rag_system.CroatianRAGSystem") as mock_class:
+            with patch("src.pipeline.rag_system.RAGSystem") as mock_class:
                 mock_instance = Mock()
                 mock_instance.initialize = AsyncMock()
                 mock_class.return_value = mock_instance
@@ -519,7 +519,7 @@ class TestRAGSystemIntegration:
     def test_croatian_specific_features(self):
         """Test Croatian-specific features in the system."""
         config = RAGConfig()
-        system = CroatianRAGSystem(config)
+        system = RAGSystem(config)
 
         # Test Croatian config defaults
         assert config.croatian.enable_morphological_expansion is True

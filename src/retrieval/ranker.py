@@ -37,6 +37,38 @@ class RankingConfig:
     keyword_density_factor: bool = True
     croatian_specific_boost: bool = True
 
+    @classmethod
+    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "RankingConfig":
+        """Create config from dictionary with DRY error handling."""
+        from ..utils.config_loader import get_ranking_config
+        from ..utils.error_handler import handle_config_error
+
+        # Load config with fallback
+        ranking_config = config_dict or handle_config_error(
+            operation=get_ranking_config,
+            fallback_value={},
+            config_file="config/config.toml",
+            section="ranking",
+        )
+
+        # Handle method enum conversion
+        method_str = ranking_config.get("method", "croatian")
+        try:
+            method = RankingMethod(method_str)
+        except ValueError:
+            method = RankingMethod.CROATIAN_ENHANCED
+
+        return cls(
+            method=method,
+            enable_diversity=ranking_config.get("enable_diversity", True),
+            diversity_threshold=ranking_config.get("diversity_threshold", 0.8),
+            boost_recent=ranking_config.get("boost_recent", False),
+            boost_authoritative=ranking_config.get("boost_authoritative", True),
+            content_length_factor=ranking_config.get("content_length_factor", True),
+            keyword_density_factor=ranking_config.get("keyword_density_factor", True),
+            croatian_specific_boost=ranking_config.get("croatian_specific_boost", True),
+        )
+
 
 @dataclass
 class RankingSignal:
@@ -72,11 +104,23 @@ class CroatianResultRanker:
         Args:
             config: Ranking configuration
         """
-        self.config = config or RankingConfig()
+        from ..utils.config_loader import get_croatian_retrieval
+        from ..utils.error_handler import handle_config_error
+
+        self.config = config or RankingConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
-        # Croatian language-specific features
-        self.croatian_importance_words = {
+        # Load Croatian-specific settings
+        croatian_config = handle_config_error(
+            operation=get_croatian_retrieval,
+            fallback_value={"morphology": {}},
+            config_file="config/croatian.toml",
+            section="croatian retrieval",
+        )
+
+        # Croatian language-specific features from config
+        morphology = croatian_config.get("morphology", {})
+        default_words = [
             "zagreb",
             "hrvatska",
             "dubrovnik",
@@ -92,7 +136,13 @@ class CroatianResultRanker:
             "kulturni",
             "turistički",
             "nacionalni",
-        }
+        ]
+
+        # Combine configured morphological variations
+        self.croatian_importance_words = set(default_words)
+        for word_group in morphology.values():
+            if isinstance(word_group, list):
+                self.croatian_importance_words.update(word_group)
 
         # Content quality indicators
         self.quality_indicators = {

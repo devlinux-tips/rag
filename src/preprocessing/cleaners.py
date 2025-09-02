@@ -1,5 +1,5 @@
 """
-Croatian text cleaning and normalization utilities.
+Croatianfrom ..utils.error_handler import handle_config_errort cleaning and normalization utilities.
 Handles Croatian-specific text processing challenges including diacritics,
 morphology, and document formatting artifacts.
 """
@@ -9,6 +9,14 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ..utils.config_loader import (
+    get_cleaning_config,
+    get_croatian_chunking,
+    get_croatian_document_cleaning,
+    get_croatian_text_processing,
+)
+from ..utils.error_handler import handle_config_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,111 +25,47 @@ class CroatianTextCleaner:
 
     def __init__(self):
         """Initialize the Croatian text cleaner."""
+        self._croatian_config = handle_config_error(
+            operation=lambda: get_croatian_text_processing(),
+            fallback_value={
+                "diacritic_map": {"ć": "c", "č": "c", "š": "s", "ž": "z", "đ": "d"},
+                "preserve_diacritics": True,
+            },
+            config_file="config/croatian.toml",
+            section="[text_processing]",
+        )
+        self._cleaning_config = handle_config_error(
+            operation=lambda: get_cleaning_config(),
+            fallback_value={"remove_extra_whitespace": True, "normalize_unicode": True},
+            config_file="config/config.toml",
+            section="[cleaning]",
+        )
+        self._document_cleaning_config = handle_config_error(
+            operation=lambda: get_croatian_document_cleaning(),
+            fallback_value={"remove_headers": True, "remove_footers": True},
+            config_file="config/croatian.toml",
+            section="[document_cleaning]",
+        )
+        self._chunking_config = handle_config_error(
+            operation=lambda: get_croatian_chunking(),
+            fallback_value={"sentence_endings": [".", "!", "?"], "preserve_paragraphs": True},
+            config_file="config/croatian.toml",
+            section="[chunking]",
+        )
+
         # Croatian diacritic mappings for normalization (optional)
-        self.diacritic_map = {
-            "č": "c",
-            "ć": "c",
-            "đ": "d",
-            "š": "s",
-            "ž": "z",
-            "Č": "C",
-            "Ć": "C",
-            "Đ": "D",
-            "Š": "S",
-            "Ž": "Z",
-        }
+        self.diacritic_map = self._croatian_config["diacritic_map"]
 
         # Common Croatian stopwords (basic set)
-        self.stopwords = {
-            "a",
-            "ali",
-            "am",
-            "as",
-            "at",
-            "ba",
-            "be",
-            "bi",
-            "bo",
-            "bu",
-            "by",
-            "da",
-            "do",
-            "eh",
-            "el",
-            "en",
-            "es",
-            "et",
-            "ga",
-            "go",
-            "ha",
-            "hi",
-            "ho",
-            "i",
-            "ic",
-            "id",
-            "ie",
-            "if",
-            "il",
-            "in",
-            "ir",
-            "is",
-            "it",
-            "ja",
-            "je",
-            "ka",
-            "ko",
-            "la",
-            "li",
-            "lo",
-            "ma",
-            "me",
-            "mi",
-            "mo",
-            "mu",
-            "my",
-            "na",
-            "ne",
-            "ni",
-            "no",
-            "nu",
-            "od",
-            "oh",
-            "ok",
-            "ol",
-            "om",
-            "on",
-            "oo",
-            "op",
-            "or",
-            "os",
-            "ot",
-            "ov",
-            "pa",
-            "po",
-            "ra",
-            "re",
-            "sa",
-            "se",
-            "si",
-            "so",
-            "ta",
-            "te",
-            "ti",
-            "to",
-            "tu",
-            "u",
-            "up",
-            "uz",
-            "ve",
-            "za",
-            "ze",
-        }
+        self.stopwords = set(self._croatian_config["stopwords"])
 
         # Document formatting artifacts to remove
         self.formatting_patterns = [
-            r"\s+",  # Multiple whitespaces
-            r"\n\s*\n",  # Multiple line breaks
-            r"[^\w\sčćžšđČĆŽŠĐ.,!?:;()-]",  # Non-standard chars (preserve Croatian)
+            self._cleaning_config.get("multiple_whitespace", r"\s+"),  # Multiple whitespaces
+            self._cleaning_config.get("multiple_linebreaks", r"\n\s*\n"),  # Multiple line breaks
+            self._croatian_config[
+                "croatian_chars_pattern"
+            ],  # Non-standard chars (preserve Croatian)
             r"^\s*\d+\s*$",  # Standalone page numbers
             r"^\s*[IVX]+\s*$",  # Roman numerals
             r"^\s*[a-z]\)\s*$",  # List markers like a), b)
@@ -167,13 +111,7 @@ class CroatianTextCleaner:
     def _remove_headers_footers(self, text: str) -> str:
         """Remove common document headers and footers."""
         # Remove page headers with page numbers and dates
-        patterns = [
-            r"^\s*\d+\s*$",  # Standalone page numbers
-            r"^\s*STRANICA\s*\d+.*$",  # Croatian "PAGE X"
-            r"^\s*BROJ\s*\d+.*ZAGREB.*$",  # Document headers
-            r"^\s*NARODNE\s*NOVINE.*$",  # Croatian Official Gazette header
-            r"^\s*SLUŽBENI\s*LIST.*$",  # Official list header
-        ]
+        patterns = self._document_cleaning_config["header_footer_patterns"]
 
         lines = text.split("\n")
         cleaned_lines = []
@@ -222,13 +160,7 @@ class CroatianTextCleaner:
     def _fix_ocr_errors(self, text: str) -> str:
         """Fix common OCR errors in Croatian text."""
         # Common OCR mistakes in Croatian
-        ocr_fixes = {
-            r"\bHR\s+V\s+A\s+TSKE\b": "HRVATSKE",  # Split "HRVATSKE"
-            r"\bHR\s+VATSKE\b": "HRVATSKE",
-            r"\bZAGR\s+EB\b": "ZAGREB",
-            r"\bHR\s+V\s+A\s+T\s+S\s+K\s+E\b": "HRVATSKE",
-            r"\s+([čćžšđČĆŽŠĐ])\s+": r"\1",  # Fix spaced diacritics
-        }
+        ocr_fixes = self._document_cleaning_config["ocr_corrections"]
 
         for pattern, replacement in ocr_fixes.items():
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
@@ -245,16 +177,17 @@ class CroatianTextCleaner:
         Returns:
             List of sentences
         """
-        # Croatian sentence ending patterns
-        sentence_endings = r"[.!?]+(?=\s+[A-ZČĆŽŠĐ]|\s*$)"
+        # Croatian sentence ending patterns from config
+        sentence_endings = self._chunking_config["sentence_ending_pattern"]
 
         sentences = re.split(sentence_endings, text)
 
         # Clean and filter sentences
         clean_sentences = []
+        min_length = self._chunking_config["min_sentence_length"]
         for sentence in sentences:
             sentence = sentence.strip()
-            if sentence and len(sentence) > 10:  # Minimum sentence length
+            if sentence and len(sentence) > min_length:
                 clean_sentences.append(sentence)
 
         return clean_sentences
@@ -274,19 +207,22 @@ class CroatianTextCleaner:
 
         return text
 
-    def is_meaningful_text(self, text: str, min_words: int = 3) -> bool:
+    def is_meaningful_text(self, text: str, min_words: int = None) -> bool:
         """
         Check if text contains meaningful content.
 
         Args:
             text: Text to check
-            min_words: Minimum number of words required
+            min_words: Minimum number of words required (uses config if None)
 
         Returns:
             True if text is meaningful
         """
         if not text or not text.strip():
             return False
+
+        if min_words is None:
+            min_words = self._cleaning_config["min_meaningful_words"]
 
         words = text.split()
 
@@ -298,7 +234,8 @@ class CroatianTextCleaner:
         word_chars = sum(len(re.findall(r"[a-zA-ZčćžšđČĆŽŠĐ]", word)) for word in words)
         total_chars = len(re.sub(r"\s", "", text))
 
-        if total_chars == 0 or word_chars / total_chars < 0.5:
+        min_ratio = self._cleaning_config["min_word_char_ratio"]
+        if total_chars == 0 or word_chars / total_chars < min_ratio:
             return False
 
         return True

@@ -9,6 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
+from ..utils.config_loader import get_croatian_retrieval, get_query_processing_config
+from ..utils.error_handler import create_config_loader, handle_config_error
+
+# Create specialized config loader for Croatian config only (since query processing is now in main config)
+load_croatian_config = create_config_loader("config/croatian.toml", __name__)
+
 
 class QueryType(Enum):
     """Types of queries the system can handle."""
@@ -27,10 +33,29 @@ class QueryProcessingConfig:
     language: str = "hr"
     expand_synonyms: bool = True
     normalize_case: bool = True
-    remove_stop_words: bool = True
+    remove_stopwords: bool = True
     min_query_length: int = 3
     max_expanded_terms: int = 10
     enable_spell_check: bool = False  # Could add later
+
+    @classmethod
+    def from_config(cls) -> "QueryProcessingConfig":
+        """Load configuration from TOML files."""
+        return handle_config_error(
+            operation=lambda: cls(
+                language=get_query_processing_config()["language"],
+                expand_synonyms=get_query_processing_config()["expand_synonyms"],
+                normalize_case=get_query_processing_config()["normalize_case"],
+                remove_stopwords=get_query_processing_config()["remove_stopwords"],
+                min_query_length=get_query_processing_config()["min_query_length"],
+                max_expanded_terms=get_query_processing_config()["max_expanded_terms"],
+                enable_spell_check=get_query_processing_config()["enable_spell_check"],
+            ),
+            fallback_value=cls(),  # Default constructor
+            config_file="config/config.toml",
+            section="[query_processing]",
+            error_level="error",
+        )
 
 
 @dataclass
@@ -57,56 +82,95 @@ class CroatianQueryProcessor:
         Args:
             config: Query processing configuration
         """
-        self.config = config or QueryProcessingConfig()
+        self.config = config or QueryProcessingConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
-        # Croatian stop words
-        self.croatian_stop_words = {
-            "i",
-            "u",
-            "na",
-            "za",
-            "se",
-            "je",
-            "da",
-            "su",
-            "od",
-            "do",
-            "po",
-            "sa",
-            "te",
-            "ta",
-            "to",
-            "ti",
-            "tu",
-            "iz",
-            "ni",
-            "li",
-            "ga",
-            "mu",
-            "pa",
-            "ne",
-            "si",
-            "me",
-            "mi",
-            "ih",
-            "im",
-            "ju",
-            "jo",
-            "ja",
-            "ma",
-            "ah",
-            "oh",
-            "al",
-            "el",
-            "ol",
-            "ul",
-            "ej",
-            "oj",
-            "aj",
-            "uj",
-            "uh",
-        }
+        # Croatian stop words from config
+        self.croatian_stop_words = load_croatian_config(
+            operation=lambda: set(get_croatian_retrieval()["stop_words"]),
+            fallback_value={
+                "i",
+                "u",
+                "na",
+                "za",
+                "se",
+                "je",
+                "da",
+                "su",
+                "od",
+                "do",
+                "po",
+                "sa",
+                "te",
+                "ta",
+                "to",
+                "ti",
+                "tu",
+                "iz",
+                "ni",
+                "li",
+                "ga",
+                "mu",
+                "pa",
+                "ne",
+                "si",
+                "me",
+                "mi",
+                "ih",
+                "im",
+                "ju",
+                "jo",
+                "ja",
+                "ma",
+                "ah",
+                "oh",
+                "al",
+            },
+            section="[retrieval.stop_words]",
+        )
+
+        # Croatian question words and their types from config
+        self.question_patterns = load_croatian_config(
+            operation=lambda: {
+                QueryType.FACTUAL: get_croatian_retrieval()["question_patterns"]["factual"],
+                QueryType.EXPLANATORY: get_croatian_retrieval()["question_patterns"]["explanatory"],
+                QueryType.COMPARISON: get_croatian_retrieval()["question_patterns"]["comparison"],
+                QueryType.SUMMARIZATION: get_croatian_retrieval()["question_patterns"][
+                    "summarization"
+                ],
+            },
+            fallback_value={
+                QueryType.FACTUAL: ["tko", "što", "kada", "gdje", "koji", "koja", "koje"],
+                QueryType.EXPLANATORY: ["kako", "zašto", "objasni", "razloži"],
+                QueryType.COMPARISON: ["razlika", "usporedi", "slično", "različito"],
+                QueryType.SUMMARIZATION: ["sažmi", "pregled", "ukratko", "glavno"],
+            },
+            section="[retrieval.question_patterns]",
+        )
+
+        # Croatian synonyms for query expansion from config
+        self.synonym_groups = load_croatian_config(
+            operation=lambda: get_croatian_retrieval()["synonyms"],
+            fallback_value={
+                "velika": ["velika", "veća", "značajna", "važna"],
+                "mala": ["mala", "manja", "sitna", "nevažna"],
+                "dobra": ["dobra", "kvalitetna", "izvrsna", "odlična"],
+                "loša": ["loša", "slaba", "neispravna", "neadekvatna"],
+            },
+            section="[retrieval.synonyms]",
+        )
+
+        # Croatian morphological variations from config
+        self.morphological_variants = load_croatian_config(
+            operation=lambda: get_croatian_retrieval()["morphology"],
+            fallback_value={
+                "hrvatska": ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"],
+                "ekonomija": ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"],
+                "politika": ["politika", "politike", "političke", "političkih"],
+                "kultura": ["kultura", "kulture", "kulturne", "kulturnih"],
+            },
+            section="[retrieval.morphology]",
+        )
 
         # Croatian question words and their types
         self.question_patterns = {
@@ -280,7 +344,7 @@ class CroatianQueryProcessor:
         words = re.findall(r"\b\w+\b", query.lower())
 
         # Remove stop words if configured
-        if self.config.remove_stop_words:
+        if self.config.remove_stopwords:
             words = [word for word in words if word not in self.croatian_stop_words]
 
         # Remove very short words

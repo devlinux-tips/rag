@@ -1,0 +1,67 @@
+# Vector Database Configuration
+# Settings for embeddings, storage, and search components
+
+[embeddings]
+# Default embedding model settings
+model_name = "BAAI/bge-m3"  # BGE-M3: Best multilingual model for Croatian
+cache_dir = "./models/embeddings"
+device = "cpu"  # "auto", "cpu", "cuda"
+max_seq_length = 512
+batch_size = 32
+normalize_embeddings = true
+
+# Recommended models for multilingual support
+[embeddings.recommended_models]
+bge_m3 = "BAAI/bge-m3"  # Primary: BGE-M3 (Best for Croatian)
+labse = "sentence-transformers/LaBSE"  # Secondary: Language-Agnostic BERT
+multilingual_minilm = "paraphrase-multilingual-MiniLM-L12-v2"  # Fast option
+multilingual_mpnet = "paraphrase-multilingual-mpnet-base-v2"  # Accuracy option
+distiluse_multilingual = "distiluse-base-multilingual-cased"  # Lightweight option
+
+# Similarity calculation settings
+[embeddings.similarity]
+default_metric = "cosine"
+top_k_default = 5
+
+[storage]
+# ChromaDB storage settings
+db_path = "./data/chromadb"
+collection_name = "croatian_documents"
+distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
+persist = true
+allow_reset = true
+
+# Document metadata defaults
+[storage.metadata]
+# default_language should use Croatian language code from croatian.toml
+content_types = ["pdf", "docx", "txt"]
+
+[search]
+# Search configuration
+default_method = "semantic"  # "semantic", "keyword", "hybrid"
+top_k = 5
+similarity_threshold = 0.0
+max_context_length = 2000
+rerank = true
+include_metadata = true
+include_distances = true
+
+# Hybrid search weights
+[search.weights]
+semantic_weight = 0.7
+keyword_weight = 0.3
+
+# Scoring and ranking
+[search.scoring]
+length_score_short = 0.8  # For very short content
+length_score_medium = 0.9  # For medium content
+length_score_optimal = 1.0  # For optimal content
+metadata_title_boost = 1.1  # Boost for documents with titles
+phrase_match_boost = 1.5  # Boost for exact phrase matches
+
+# Factory function defaults
+[factory]
+default_model = "paraphrase-multilingual-MiniLM-L12-v2"
+default_device = "auto"
+default_cache_dir = "./models/embeddings"
+cache_embeddings_dir = "./cache/embeddings"

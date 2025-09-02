@@ -1,10 +1,18 @@
 """
-Prompt templates for Croatian RAG system using local LLM.
+Prompfrom ..utils.error_handler import handle_config_errormplates for Croatian RAG system using local LLM.
 Contains system prompts and templates for different query types.
 """
 
 from dataclasses import dataclass
 from typing import List, Optional
+
+from ..utils.config_loader import (
+    get_croatian_prompts,
+    get_croatian_settings,
+    get_generation_config,
+    get_generation_prompts_config,
+)
+from ..utils.error_handler import handle_config_error
 
 
 @dataclass
@@ -19,82 +27,94 @@ class PromptTemplate:
 class CroatianRAGPrompts:
     """Collection of prompt templates for Croatian RAG system."""
 
-    # Base system prompt for Croatian language support
-    BASE_SYSTEM_PROMPT = """Ti si korisni asistent koji odgovara na pitanja na hrvatskom jeziku.
-Koristi kontekst iz dokumenata da pružiš točne i korisne odgovore.
-Ako informacije nisu dostupne u kontekstu, jasno to naglasi.
-Odgovori uvijek na hrvatskom jeziku, čak i ako je pitanje postavljeno na drugom jeziku.
+    def __init__(self):
+        """Initialize prompts from configuration."""
+        croatian_config = handle_config_error(
+            operation=lambda: get_croatian_settings(),
+            fallback_value={"prompts": {}, "generation": {}},
+            config_file="config/croatian.toml",
+            section="[prompts]",
+        )
 
-VAŽNE UPUTE:
-- Koristi hrvatski standardni jezik sa dijakritičkim znakovima (č, ć, š, ž, đ)
-- Prepoznaj hrvatski kulturni kontekst (npr. "biser Jadrana" = Dubrovnik)
-- Koristi formalni stil osim ako nije drugačije navedeno
-- Struktuirana odgovore jasno i logično
-- Ne izmišljaj informacije koje nisu u kontekstu"""
+        # Extract prompts section from Croatian config
+        self._croatian_prompts = croatian_config.get("prompts", {})
+        self._generation_prompts = handle_config_error(
+            operation=lambda: get_generation_config(),
+            fallback_value={
+                "question_answering": "Answer the question: {question}",
+                "summarization": "Summarize the text: {text}",
+            },
+            config_file="config/config.toml",
+            section="[prompts]",
+        )
 
-    # Template for general question answering
-    QUESTION_ANSWERING = PromptTemplate(
-        system_prompt=BASE_SYSTEM_PROMPT,
-        user_template="Pitanje: {query}\n\nOdgovor:",
-        context_template="Kontekst iz dokumenata:\n{context}\n\n",
-    )
+    @property
+    def BASE_SYSTEM_PROMPT(self) -> str:
+        """Get base system prompt from config."""
+        return self._croatian_prompts["base_system_prompt"]
 
-    # Template for document summarization
-    SUMMARIZATION = PromptTemplate(
-        system_prompt="""Ti si korisni asistent koji stvara sažetke dokumenata na hrvatskom jeziku.
-Tvoj zadatak je da napraviš kratak, ali sveobuhvatan sažetak glavnih točaka iz danog teksta.
-Fokusiraj se na najvažnije informacije i zaključke.""",
-        user_template="Molimo napravi sažetak sljedećeg sadržaja:\n\nSažetak:",
-        context_template="Sadržaj za sažetak:\n{context}\n\n",
-    )
+    @property
+    def QUESTION_ANSWERING(self) -> "PromptTemplate":
+        """Get question answering template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["question_answering_system"],
+            user_template=self._croatian_prompts["question_answering_user"],
+            context_template=self._croatian_prompts["question_answering_context"],
+        )
 
-    # Template for factual questions
-    FACTUAL_QA = PromptTemplate(
-        system_prompt="""Ti si korisni asistent koji odgovara na činjenična pitanja na hrvatskom jeziku.
-Koristi samo informacije iz priloženog konteksta.
-Ako odgovor nije dostupan u kontekstu, reci "Ne mogu pronaći tu informaciju u dostupnim dokumentima."
-Budi precizan i navedi relevantne detalje.""",
-        user_template="Činjenično pitanje: {query}\n\nOdgovor:",
-        context_template="Relevantne informacije:\n{context}\n\n",
-    )
+    @property
+    def SUMMARIZATION(self) -> "PromptTemplate":
+        """Get summarization template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["summarization_system"],
+            user_template=self._croatian_prompts["summarization_user"],
+            context_template=self._croatian_prompts["summarization_context"],
+        )
 
-    # Template for explanatory questions
-    EXPLANATORY = PromptTemplate(
-        system_prompt="""Ti si korisni asistent koji objašnjava složene teme na hrvatskom jeziku.
-Koristi kontekst da daš detaljno objašnjenje.
-Objasni pojmove jednostavno i jasno, koristi primjere ako je to moguće.
-Struktura odgovor logički s glavnim točkama.""",
-        user_template="Molimo objasni: {query}\n\nObjašnjenje:",
-        context_template="Relevantni sadržaj:\n{context}\n\n",
-    )
+    @property
+    def FACTUAL_QA(self) -> "PromptTemplate":
+        """Get factual Q&A template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["factual_qa_system"],
+            user_template=self._croatian_prompts["factual_qa_user"],
+            context_template=self._croatian_prompts["factual_qa_context"],
+        )
 
-    # Template for comparison questions
-    COMPARISON = PromptTemplate(
-        system_prompt="""Ti si korisni asistent koji poredi koncepte i ideje na hrvatskom jeziku.
-Koristi kontekst da napraviš detaljnu usporedbu.
-Istaknuti sličnosti i razlike, te navedi specifične primjere iz konteksta.""",
-        user_template="Usporedi sljedeće: {query}\n\nUsporedba:",
-        context_template="Informacije za usporedbu:\n{context}\n\n",
-    )
+    @property
+    def EXPLANATORY(self) -> "PromptTemplate":
+        """Get explanatory template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["explanatory_system"],
+            user_template=self._croatian_prompts["explanatory_user"],
+            context_template=self._croatian_prompts["explanatory_context"],
+        )
 
-    # Template for Croatian cultural/historical queries
-    CULTURAL_CONTEXT = PromptTemplate(
-        system_prompt="""Ti si stručnjak za hrvatsku kulturu, povijest i zemljopis koji odgovara na hrvatskom jeziku.
-Koristi kontekst da daš bogat, kulturalno kontekstiran odgovor.
-Prepoznaj hrvatske toponime, povijesne osobe, kulturne reference i tradicije.
-Objasni kulturni značaj i kontekst gdje je to relevantno.""",
-        user_template="Kulturno/povijesno pitanje: {query}\n\nOdgovor s kulturnim kontekstom:",
-        context_template="Relevantne kulturne i povijesne informacije:\n{context}\n\n",
-    )
+    @property
+    def COMPARISON(self) -> "PromptTemplate":
+        """Get comparison template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["comparison_system"],
+            user_template=self._croatian_prompts["comparison_user"],
+            context_template=self._croatian_prompts["comparison_context"],
+        )
 
-    # Template for tourism/travel queries
-    TOURISM = PromptTemplate(
-        system_prompt="""Ti si turistički vodič za Hrvatsku koji odgovara na hrvatskom jeziku.
-Koristi kontekst da daš praktičan i informativan odgovor o hrvatskim odredištima.
-Fokusiraj se na korisne informacije za posjetitelje i ističi posebne značajke.""",
-        user_template="Turističko pitanje: {query}\n\nTuristički odgovor:",
-        context_template="Turističke informacije:\n{context}\n\n",
-    )
+    @property
+    def CULTURAL_CONTEXT(self) -> "PromptTemplate":
+        """Get cultural context template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["cultural_context_system"],
+            user_template=self._croatian_prompts["cultural_context_user"],
+            context_template=self._croatian_prompts["cultural_context_context"],
+        )
+
+    @property
+    def TOURISM(self) -> "PromptTemplate":
+        """Get tourism template."""
+        return PromptTemplate(
+            system_prompt=self._croatian_prompts["tourism_system"],
+            user_template=self._croatian_prompts["tourism_user"],
+            context_template=self._croatian_prompts["tourism_context"],
+        )
 
 
 class PromptBuilder:
@@ -108,6 +128,8 @@ class PromptBuilder:
             template: PromptTemplate to use for building prompts
         """
         self.template = template
+        # Use Croatian config for formatting templates
+        self._generation_config = {"prompts": get_croatian_settings()["prompts"]}
 
     def build_prompt(
         self,
@@ -157,9 +179,13 @@ class PromptBuilder:
         formatted_chunks = []
         total_length = 0
 
+        # Get formatting templates from config
+        chunk_header_template = self._generation_config["prompts"]["chunk_header_template"]
+        context_separator = self._generation_config["prompts"]["context_separator"]
+
         for i, chunk in enumerate(context, 1):
-            # Add chunk header
-            chunk_header = f"[Dokument {i}]\n"
+            # Add chunk header using config template
+            chunk_header = chunk_header_template.format(index=i) + "\n"
             chunk_text = chunk_header + chunk.strip() + "\n"
 
             # Check if adding this chunk exceeds limit
@@ -174,7 +200,7 @@ class PromptBuilder:
             formatted_chunks.append(chunk_text)
             total_length += len(chunk_text)
 
-        return "\n".join(formatted_chunks)
+        return context_separator.join(formatted_chunks)
 
 
 def get_prompt_for_query_type(query: str) -> PromptTemplate:
@@ -189,102 +215,39 @@ def get_prompt_for_query_type(query: str) -> PromptTemplate:
     """
     query_lower = query.lower()
 
-    # Keywords for different query types
-    summary_keywords = [
-        "sažetak",
-        "sažmi",
-        "ukratko",
-        "glavne točke",
-        "resume",
-        "pregled",
-    ]
-    comparison_keywords = [
-        "usporedi",
-        "razlika",
-        "sličnost",
-        "vs",
-        "nasuprot",
-        "razlikuje",
-        "bolje",
-    ]
-    explanation_keywords = ["objasni", "što je", "kako", "zašto", "definiraj", "opiši"]
-    factual_keywords = ["kada", "gdje", "tko", "koliko", "koji", "koja", "ime", "broj"]
+    # Load keywords from Croatian config
+    croatian_config = get_croatian_settings()
+    keywords = croatian_config["prompts"]["keywords"]
 
-    # Croatian cultural/historical keywords
-    cultural_keywords = [
-        "povijest",
-        "kultura",
-        "tradicija",
-        "umjetnost",
-        "književnost",
-        "zagreb",
-        "dubrovnik",
-        "split",
-        "pula",
-        "rijeka",
-        "osijek",
-        "jadran",
-        "dalmacija",
-        "slavonija",
-        "istra",
-        "hrvatsko primorje",
-        "biser jadrana",
-        "plitvi",
-        "krka",
-        "mljet",
-        "brač",
-        "hvar",
-        "franjo tuđman",
-        "ante starčević",
-        "josip jelačić",
-        "miroslav krleža",
-    ]
-
-    # Tourism keywords
-    tourism_keywords = [
-        "turizam",
-        "odmorište",
-        "plaža",
-        "hotel",
-        "restoran",
-        "znamenitost",
-        "posjetiti",
-        "vidjeti",
-        "doći",
-        "putovanje",
-        "odmor",
-        "ljetovanje",
-        "nacionalni park",
-        "unesco",
-        "baština",
-    ]
+    # Create templates instance
+    templates = CroatianRAGPrompts()
 
     # Check for cultural/historical context
-    if any(keyword in query_lower for keyword in cultural_keywords):
-        return CroatianRAGPrompts.CULTURAL_CONTEXT
+    if any(keyword in query_lower for keyword in keywords["cultural"]):
+        return templates.CULTURAL_CONTEXT
 
     # Check for tourism queries
-    if any(keyword in query_lower for keyword in tourism_keywords):
-        return CroatianRAGPrompts.TOURISM
+    if any(keyword in query_lower for keyword in keywords["tourism"]):
+        return templates.TOURISM
 
     # Check for summary request
-    if any(keyword in query_lower for keyword in summary_keywords):
-        return CroatianRAGPrompts.SUMMARIZATION
+    if any(keyword in query_lower for keyword in keywords["summary"]):
+        return templates.SUMMARIZATION
 
     # Check for comparison request
-    if any(keyword in query_lower for keyword in comparison_keywords):
-        return CroatianRAGPrompts.COMPARISON
+    if any(keyword in query_lower for keyword in keywords["comparison"]):
+        return templates.COMPARISON
 
     # Check for explanation request
-    if any(keyword in query_lower for keyword in explanation_keywords):
-        return CroatianRAGPrompts.EXPLANATORY
+    if any(keyword in query_lower for keyword in keywords["explanation"]):
+        return templates.EXPLANATORY
 
     # Check for factual questions
-    if any(keyword in query_lower for keyword in factual_keywords):
-        return CroatianRAGPrompts.FACTUAL_QA
+    if any(keyword in query_lower for keyword in keywords["factual"]):
+        return templates.FACTUAL_QA
 
     # Default to general question answering
-    return CroatianRAGPrompts.QUESTION_ANSWERING
+    return templates.QUESTION_ANSWERING
 
 
 def create_prompt_builder(query: str) -> PromptBuilder:

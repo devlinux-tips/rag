@@ -1,6 +1,10 @@
 """
-Complete Croatian RAG System - End-to-End Pipeline
+Complete Multilingual RAG System - End-to-End Pipeline
 Orchestrates all components: preprocessing, vector storage, retrieval, and generation.
+
+Currently optimized for Croatian language but designed with multilingual architecture
+for future language expansion. All Croatian-specific components are configurable
+and can be extended or replaced for other languages.
 """
 
 import asyncio
@@ -63,12 +67,27 @@ class RAGResponse:
         return self.confidence >= 0.8
 
 
-class CroatianRAGSystem:
-    """Complete Croatian RAG system orchestrating all pipeline components."""
+class RAGSystem:
+    """Complete multilingual RAG system orchestrating all pipeline components.
+
+    Currently optimized for Croatian language but designed for multilingual expansion.
+    """
 
     def __init__(self, config: Optional[RAGConfig] = None):
         """Initialize Croatian RAG system."""
-        self.config = config or RAGConfig()
+        from ..utils.error_handler import handle_config_error
+
+        # Use DRY config loading if no config provided
+        if config is None:
+            self.config = handle_config_error(
+                operation=lambda: RAGConfig(),
+                fallback_value=self._create_fallback_config(),
+                config_file="config/config.toml",
+                section="pipeline RAG system",
+            )
+        else:
+            self.config = config
+
         self.logger = logging.getLogger(__name__)
 
         # Initialize components
@@ -89,7 +108,81 @@ class CroatianRAGSystem:
         self._document_count = 0
         self._query_count = 0
 
-        self.logger.info("Croatian RAG System created")
+        self.logger.info("Multilingual RAG System created")
+
+    def _create_fallback_config(self) -> RAGConfig:
+        """Create fallback config with safe defaults."""
+        from .config import (
+            ChromaConfig,
+            CroatianConfig,
+            EmbeddingConfig,
+            OllamaConfig,
+            ProcessingConfig,
+            RetrievalConfig,
+        )
+
+        # Create basic RAGConfig with manual construction to avoid circular dependency
+        class FallbackRAGConfig:
+            def __init__(self):
+                self.processing = ProcessingConfig(
+                    max_chunk_size=512,
+                    chunk_overlap=50,
+                    min_chunk_size=100,
+                    sentence_chunk_overlap=2,
+                    preserve_paragraphs=True,
+                )
+                self.embedding = EmbeddingConfig(
+                    model_name="BAAI/bge-m3",
+                    cache_folder="./models/embeddings",
+                    batch_size=32,
+                    max_seq_length=512,
+                )
+                self.chroma = ChromaConfig(
+                    db_path="./data/chromadb",
+                    collection_name="croatian_documents",
+                    distance_metric="cosine",
+                    ef_construction=200,
+                    m=16,
+                )
+                self.retrieval = RetrievalConfig(
+                    default_k=5,
+                    max_k=10,
+                    min_similarity_score=0.3,
+                    adaptive_retrieval=True,
+                    enable_reranking=True,
+                    diversity_lambda=0.3,
+                )
+                self.ollama = OllamaConfig(
+                    base_url="http://localhost:11434",
+                    model="llama3.1:8b",
+                    temperature=0.7,
+                    max_tokens=2000,
+                    top_p=0.9,
+                    top_k=40,
+                    timeout=60.0,
+                    preserve_diacritics=True,
+                    prefer_formal_style=True,
+                    include_cultural_context=True,
+                )
+                self.croatian = CroatianConfig(
+                    enable_morphological_expansion=True,
+                    enable_synonym_expansion=True,
+                    enable_cultural_context=True,
+                    use_croatian_query_processing=True,
+                    croatian_language_priority=True,
+                )
+                self.log_level = "INFO"
+                self.enable_caching = True
+                self.cache_dir = "./data/cache"
+                self.max_concurrent_requests = 5
+                self.request_timeout = 120.0
+                self.enable_metrics = True
+                self.metrics_dir = "./data/metrics"
+                self.documents_dir = "./data/raw"
+                self.processed_dir = "./data/processed"
+                self.test_data_dir = "./data/test"
+
+        return FallbackRAGConfig()
 
     async def initialize(self) -> None:
         """Initialize all pipeline components."""
@@ -97,7 +190,7 @@ class CroatianRAGSystem:
             self.logger.info("System already initialized")
             return
 
-        self.logger.info("Initializing Croatian RAG System components...")
+        self.logger.info("Initializing Multilingual RAG System components...")
 
         try:
             # Setup Croatian environment
@@ -116,7 +209,7 @@ class CroatianRAGSystem:
             await self._initialize_generation()
 
             self._initialized = True
-            self.logger.info("✅ Croatian RAG System initialization complete")
+            self.logger.info("✅ Multilingual RAG System initialization complete")
 
         except Exception as e:
             self.logger.error(f"❌ Initialization failed: {e}")
@@ -143,8 +236,13 @@ class CroatianRAGSystem:
         embedding_config = EmbeddingConfig(
             model_name=self.config.embedding.model_name,
             cache_dir=self.config.embedding.cache_folder,
-            batch_size=self.config.embedding.batch_size,
+            device="auto",  # Auto-detect best device
             max_seq_length=self.config.embedding.max_seq_length,
+            batch_size=self.config.embedding.batch_size,
+            normalize_embeddings=True,  # Standard for RAG
+            use_safetensors=True,  # Security setting
+            trust_remote_code=False,  # Security setting
+            torch_dtype="auto",  # Auto-detect best dtype
         )
         self._embedding_model = CroatianEmbeddingModel(embedding_config)
         self._embedding_model.load_model()
@@ -156,6 +254,8 @@ class CroatianRAGSystem:
             db_path=self.config.chroma.db_path,
             collection_name=self.config.chroma.collection_name,
             distance_metric=self.config.chroma.distance_metric,
+            persist=True,  # Always persist for production
+            allow_reset=False,  # Prevent accidental data loss
         )
         self._vector_storage = ChromaDBStorage(storage_config)
         self._vector_storage.create_collection()
@@ -234,7 +334,7 @@ class CroatianRAGSystem:
         for i in range(0, len(document_paths), batch_size):
             batch = document_paths[i : i + batch_size]
             self.logger.info(
-                f"Processing batch {i//batch_size + 1}/{(len(document_paths)-1)//batch_size + 1}"
+                f"Processing batch {i // batch_size + 1}/{(len(document_paths) - 1) // batch_size + 1}"
             )
 
             for doc_path in batch:
@@ -261,9 +361,11 @@ class CroatianRAGSystem:
                     # Create embeddings and store
                     for chunk_idx, chunk in enumerate(chunks):
                         # Generate embedding
-                        embedding = await self._embedding_model.generate_embedding_async(
-                            chunk.content
-                        )
+                        embedding = self._embedding_model.encode_text(chunk.content)
+
+                        # Ensure embedding is 1D for ChromaDB (BGE-M3 returns 2D array)
+                        if embedding.ndim == 2:
+                            embedding = embedding[0]  # Take first (and only) embedding
 
                         # Prepare metadata
                         metadata = {
@@ -279,8 +381,10 @@ class CroatianRAGSystem:
                         }
 
                         # Store in vector database
-                        await self._vector_storage.store_embedding_async(
-                            embedding=embedding, text=chunk.content, metadata=metadata
+                        self._vector_storage.add_documents(
+                            documents=[chunk.content],
+                            metadatas=[metadata],
+                            embeddings=[embedding.tolist()],
                         )
 
                     processed_docs += 1
@@ -328,10 +432,9 @@ class CroatianRAGSystem:
             processed_query = self._query_processor.process_query(query.text)
 
             # Step 2: Retrieve relevant chunks
-            retrieval_results = await self._retriever.retrieve_async(
-                processed_query=processed_query,
-                k=query.max_results or self.config.retrieval.default_k,
-                filters=query.context_filters,
+            retrieval_results = self._retriever.retrieve(
+                query=processed_query.processed,
+                context=query.context_filters,
             )
             retrieval_time = time.time() - query_start
 
@@ -340,7 +443,7 @@ class CroatianRAGSystem:
 
             # Build prompt
             prompt_builder = create_prompt_builder(query.text)
-            context_chunks = [result.content for result in retrieval_results.results]
+            context_chunks = [result.get("content", "") for result in retrieval_results.documents]
             system_prompt, user_prompt = prompt_builder.build_prompt(query.text, context_chunks)
 
             # Create generation request
@@ -371,28 +474,29 @@ class CroatianRAGSystem:
                 sources = list(
                     set(
                         [
-                            result.metadata.get("source", "Unknown")
-                            for result in retrieval_results.results
+                            result.get("metadata", {}).get("source", "Unknown")
+                            for result in retrieval_results.documents
                         ]
                     )
                 )
 
             # Prepare retrieved chunks info
             retrieved_chunks = []
-            for result in retrieval_results.results:
+            for result in retrieval_results.documents:
                 chunk_info = {
-                    "content": result.content,
-                    "similarity_score": result.similarity_score,
-                    "final_score": result.final_score,
-                    "source": result.metadata.get("source", "Unknown"),
-                    "chunk_index": result.metadata.get("chunk_index", 0),
+                    "content": result.get("content", ""),
+                    "similarity_score": result.get("similarity_score", 0.0),
+                    "final_score": result.get("final_score", 0.0),
+                    "source": result.get("metadata", {}).get("source", "Unknown"),
+                    "chunk_index": result.get("metadata", {}).get("chunk_index", 0),
                 }
 
                 if return_debug_info:
+                    result_metadata = result.get("metadata", {})
                     chunk_info.update(
                         {
-                            "metadata": result.metadata,
-                            "signals": result.metadata.get("ranking_signals", {}),
+                            "metadata": result_metadata,
+                            "signals": result_metadata.get("ranking_signals", {}),
                         }
                     )
 
@@ -410,7 +514,7 @@ class CroatianRAGSystem:
                     "confidence": processed_query.confidence,
                 },
                 "retrieval": {
-                    "total_results": len(retrieval_results.results),
+                    "total_results": len(retrieval_results.documents),
                     "strategy_used": retrieval_results.strategy_used,
                     "filters_applied": query.context_filters or {},
                 },
@@ -510,7 +614,7 @@ class CroatianRAGSystem:
                     )
                     else "unhealthy"
                 ),
-                "details": f"Vector DB with {await self._vector_storage.get_document_count()} documents",
+                "details": f"Vector DB with {self._vector_storage.get_document_count()} documents",
             }
 
             health_status["components"]["retrieval"] = {
@@ -538,7 +642,7 @@ class CroatianRAGSystem:
                 "documents_processed": self._document_count,
                 "queries_processed": self._query_count,
                 "total_chunks": (
-                    await self._vector_storage.get_document_count() if self._vector_storage else 0
+                    self._vector_storage.get_document_count() if self._vector_storage else 0
                 ),
             }
 
@@ -565,9 +669,7 @@ class CroatianRAGSystem:
         stats = {
             "documents": self._document_count,
             "queries": self._query_count,
-            "chunks": (
-                await self._vector_storage.get_document_count() if self._vector_storage else 0
-            ),
+            "chunks": (self._vector_storage.get_document_count() if self._vector_storage else 0),
             "config": self.config.to_dict(),
         }
 
@@ -575,7 +677,7 @@ class CroatianRAGSystem:
 
     async def close(self):
         """Clean shutdown of all components."""
-        self.logger.info("🔄 Shutting down Croatian RAG System...")
+        self.logger.info("🔄 Shutting down Multilingual RAG System...")
 
         if self._ollama_client:
             await self._ollama_client.close()
@@ -583,10 +685,10 @@ class CroatianRAGSystem:
         if self._vector_storage:
             await self._vector_storage.close()
 
-        self.logger.info("✅ Croatian RAG System shutdown complete")
+        self.logger.info("✅ Multilingual RAG System shutdown complete")
 
 
-async def create_rag_system(config_path: Optional[str] = None) -> CroatianRAGSystem:
+async def create_rag_system(config_path: Optional[str] = None) -> RAGSystem:
     """Factory function to create and initialize RAG system."""
     config = RAGConfig()
 
@@ -597,7 +699,7 @@ async def create_rag_system(config_path: Optional[str] = None) -> CroatianRAGSys
         yaml_config = load_yaml_config(config_path)
         config = RAGConfig.from_dict(yaml_config)
 
-    system = CroatianRAGSystem(config)
+    system = RAGSystem(config)
     await system.initialize()
 
     return system
@@ -608,7 +710,7 @@ async def main():
     """Main function for CLI testing."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Croatian RAG System")
+    parser = argparse.ArgumentParser(description="Multilingual RAG System")
     parser.add_argument("--config", help="Path to YAML config file")
     parser.add_argument("--add-docs", nargs="+", help="Add documents to the system")
     parser.add_argument("--query", help="Query the system")
@@ -652,7 +754,29 @@ async def main():
             print(f"Answer: {response.answer}")
             print(f"Confidence: {response.confidence:.3f}")
             print(f"Sources: {response.sources}")
-            print(f"Time: {response.total_time:.2f}s")
+            print(f"Retrieved chunks: {len(response.retrieved_chunks)}")
+            print(f"Generation time: {response.generation_time:.2f}s")
+            print(f"Retrieval time: {response.retrieval_time:.2f}s")
+            print(f"Total time: {response.total_time:.2f}s")
+
+            print("\n📊 Detailed Metadata:")
+
+            # Convert metadata to JSON-serializable format
+            def make_json_serializable(obj):
+                """Convert objects to JSON-serializable format."""
+                if hasattr(obj, "value"):  # Enum objects
+                    return obj.value
+                elif hasattr(obj, "__dict__"):  # Custom objects
+                    return obj.__dict__
+                elif isinstance(obj, dict):
+                    return {k: make_json_serializable(v) for k, v in obj.items()}
+                elif isinstance(obj, (list, tuple)):
+                    return [make_json_serializable(item) for item in obj]
+                else:
+                    return obj
+
+            serializable_metadata = make_json_serializable(response.metadata)
+            print(json.dumps(serializable_metadata, indent=2, ensure_ascii=False))
 
     finally:
         await system.close()
