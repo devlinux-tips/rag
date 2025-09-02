@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-from ..utils.config_loader import get_croatian_retrieval, get_query_processing_config
+from ..utils.config_loader import (
+    get_croatian_retrieval,
+    get_croatian_shared,
+    get_query_processing_config,
+)
 from ..utils.error_handler import create_config_loader, handle_config_error
 
 # Create specialized config loader for Croatian config only (since query processing is now in main config)
@@ -85,9 +89,9 @@ class CroatianQueryProcessor:
         self.config = config or QueryProcessingConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
-        # Croatian stop words from config
+        # Croatian stop words from shared config
         self.croatian_stop_words = load_croatian_config(
-            operation=lambda: set(get_croatian_retrieval()["stop_words"]),
+            operation=lambda: set(get_croatian_shared()["stopwords"]["words"]),
             fallback_value={
                 "i",
                 "u",
@@ -129,24 +133,27 @@ class CroatianQueryProcessor:
             section="[retrieval.stop_words]",
         )
 
-        # Croatian question words and their types from config
-        self.question_patterns = load_croatian_config(
-            operation=lambda: {
-                QueryType.FACTUAL: get_croatian_retrieval()["question_patterns"]["factual"],
-                QueryType.EXPLANATORY: get_croatian_retrieval()["question_patterns"]["explanatory"],
-                QueryType.COMPARISON: get_croatian_retrieval()["question_patterns"]["comparison"],
-                QueryType.SUMMARIZATION: get_croatian_retrieval()["question_patterns"][
-                    "summarization"
-                ],
-            },
+        # Croatian question words and their types from shared config (convert to regex patterns)
+        question_words = load_croatian_config(
+            operation=lambda: get_croatian_shared()["question_patterns"],
             fallback_value={
-                QueryType.FACTUAL: ["tko", "što", "kada", "gdje", "koji", "koja", "koje"],
-                QueryType.EXPLANATORY: ["kako", "zašto", "objasni", "razloži"],
-                QueryType.COMPARISON: ["razlika", "usporedi", "slično", "različito"],
-                QueryType.SUMMARIZATION: ["sažmi", "pregled", "ukratko", "glavno"],
+                "factual": ["tko", "što", "kada", "gdje", "koji", "koja", "koje"],
+                "explanatory": ["kako", "zašto", "objasni", "razloži"],
+                "comparison": ["razlika", "usporedi", "slično", "različito"],
+                "summarization": ["sažmi", "pregled", "ukratko", "glavno"],
             },
-            section="[retrieval.question_patterns]",
+            section="[shared.question_patterns]",
         )
+
+        # Convert config words to regex patterns
+        self.question_patterns = {
+            QueryType.FACTUAL: [rf"\b({'|'.join(question_words.get('factual', []))})\b"],
+            QueryType.EXPLANATORY: [rf"\b({'|'.join(question_words.get('explanatory', []))})\b"],
+            QueryType.COMPARISON: [rf"\b({'|'.join(question_words.get('comparison', []))})\b"],
+            QueryType.SUMMARIZATION: [
+                rf"\b({'|'.join(question_words.get('summarization', []))})\b"
+            ],
+        }
 
         # Croatian synonyms for query expansion from config
         self.synonym_groups = load_croatian_config(
@@ -172,48 +179,29 @@ class CroatianQueryProcessor:
             section="[retrieval.morphology]",
         )
 
-        # Croatian question words and their types
-        self.question_patterns = {
-            QueryType.FACTUAL: [
-                r"\b(tko|što|kada|gdje|koji|koja|koje|koliko|čiji|čija|čije)\b",
-                r"\b(who|what|when|where|which|how many|whose)\b",  # Mixed queries
-            ],
-            QueryType.EXPLANATORY: [
-                r"\b(kako|zašto|zbog čega|objasni|opisi)\b",
-                r"\b(how|why|explain|describe)\b",
-            ],
-            QueryType.COMPARISON: [
-                r"\b(usporedi|razlika|sličnost|bolje|gore|nasuprot)\b",
-                r"\b(compare|difference|similarity|better|worse|versus)\b",
-            ],
-            QueryType.SUMMARIZATION: [
-                r"\b(sažmi|sažetak|ukratko|pregled|overview)\b",
-                r"\b(summarize|summary|briefly|overview)\b",
-            ],
-        }
+        # Croatian synonyms for query expansion from config
+        self.synonym_groups = load_croatian_config(
+            operation=lambda: get_croatian_retrieval()["synonyms"],
+            fallback_value={
+                "velika": ["velika", "veća", "značajna", "važna"],
+                "mala": ["mala", "manja", "sitna", "nevažna"],
+                "dobra": ["dobra", "kvalitetna", "izvrsna", "odlična"],
+                "loša": ["loša", "slaba", "neispravna", "neadekvatna"],
+            },
+            section="[retrieval.synonyms]",
+        )
 
-        # Croatian synonyms for query expansion
-        self.synonym_groups = {
-            "grad": ["mjesto", "grad", "gradić", "metropola", "centar"],
-            "veliki": ["velik", "ogroman", "znatan", "značajan", "važan"],
-            "glavni": ["glavni", "centralni", "primarni", "osnovni"],
-            "lijep": ["lijep", "prekrasan", "krasan", "divan", "predivan"],
-            "stari": ["star", "drevni", "antički", "povijesni", "tradicionalni"],
-            "novi": ["nov", "moderan", "suvremeni", "sadašnji", "trenutni"],
-            "poznati": ["poznat", "slavan", "čuven", "proslavljeni", "znamenit"],
-            "more": ["more", "ocean", "jadran", "obala", "morsko"],
-            "planina": ["planina", "brdo", "vrh", "planinský", "gorski"],
-            "rijeka": ["rijeka", "potok", "voda", "vodeni tok", "riječni"],
-        }
-
-        # Croatian morphological variations
-        self.morphological_patterns = {
-            "zagreb": ["zagreb", "zagreba", "zagrebu", "zagrebom", "zagrebe"],
-            "hrvatska": ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"],
-            "dubrovnik": ["dubrovnik", "dubrovnika", "dubrovniku", "dubrovnikom"],
-            "grad": ["grad", "grada", "gradu", "gradom", "gradovi", "gradova"],
-            "more": ["more", "mora", "moru", "morem", "morski", "morska", "morsko"],
-        }
+        # Croatian morphological variations from config
+        self.morphological_patterns = load_croatian_config(
+            operation=lambda: get_croatian_retrieval()["morphology"],
+            fallback_value={
+                "hrvatska": ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"],
+                "ekonomija": ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"],
+                "politika": ["politika", "politike", "političke", "političkih"],
+                "kultura": ["kultura", "kulture", "kulturne", "kulturnih"],
+            },
+            section="[retrieval.morphology]",
+        )
 
     def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """

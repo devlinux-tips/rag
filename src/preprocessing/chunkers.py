@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from ..utils.config_loader import get_chunking_config, get_croatian_text_processing
+from ..utils.config_loader import (
+    get_chunking_config,
+    get_croatian_text_processing,
+    get_shared_config,
+)
 from ..utils.error_handler import create_config_loader, handle_config_error
 
 # Create specialized config loaders
@@ -76,9 +80,25 @@ class DocumentChunker:
             section="[text_processing]",
         )
 
-        self.chunk_size = chunk_size or self._chunking_config["chunk_size"]
-        self.overlap = overlap or self._chunking_config["overlap_size"]
-        self.min_chunk_size = min_chunk_size or self._chunking_config["min_chunk_size"]
+        # Load shared config for chunk size defaults
+        shared_config = handle_config_error(
+            operation=lambda: get_shared_config(),
+            fallback_value={
+                "default_chunk_size": 512,
+                "default_chunk_overlap": 50,
+                "min_chunk_size": 100,
+            },
+            config_file="config/config.toml",
+            section="[shared]",
+        )
+
+        self.chunk_size = chunk_size or self._chunking_config.get(
+            "chunk_size", shared_config["default_chunk_size"]
+        )
+        self.overlap = overlap or self._chunking_config.get(
+            "overlap_size", shared_config["default_chunk_overlap"]
+        )
+        self.min_chunk_size = min_chunk_size or shared_config["min_chunk_size"]
         self.respect_sentences = (
             respect_sentences
             if respect_sentences is not None

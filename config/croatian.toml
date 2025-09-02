@@ -6,30 +6,57 @@ code = "hr"
 name = "Croatian"
 family = "slavic"
 
-[text_processing]
-# Croatian-specific text preprocessing settings
-remove_diacritics = false  # Keep Croatian diacritics (š, ć, č, ž, đ)
-normalize_case = true
-preserve_special_chars = ["š", "ć", "č", "ž", "đ", "Š", "Ć", "Č", "Ž", "Đ"]
-
-# Croatian stopwords (basic set)
-stopwords = [
-    "a", "ali", "am", "as", "at", "ba", "be", "bi", "bo", "bu", "by",
-    "da", "do", "eh", "el", "en", "es", "et", "ga", "go", "ha", "hi",
-    "ho", "i", "ic", "id", "ie", "if", "il", "in", "ir", "is", "it",
-    "ja", "je", "ka", "ko", "la", "li", "lo", "ma", "me", "mi", "mo",
-    "mu", "my", "na", "ne", "ni", "no", "nu", "od", "oh", "ok", "ol",
-    "om", "on", "oo", "op", "or", "os", "ot", "ov", "pa", "po", "ra",
-    "re", "sa", "se", "si", "so", "ta", "te", "ti", "to", "tu", "u",
-    "up", "uz", "ve", "za", "ze"
-]
-
-# Croatian character preservation pattern
+# ============================================================================
+# SHARED CROATIAN CONSTANTS
+# ============================================================================
+[shared]
+# Croatian character patterns (used across multiple components)
 croatian_chars_pattern = "[^\\w\\sčćžšđČĆŽŠĐ.,!?:;()-]"
 croatian_uppercase_chars = "ČĆŽŠĐ"
 
+# Common Croatian settings
+response_language = "croatian"
+cultural_context = "balkans"
+preserve_diacritics = true
+
+# Croatian question patterns (shared across retrieval and prompts)
+[shared.question_patterns]
+factual = ["tko", "što", "kada", "gdje", "koji", "koja", "koje", "koliko", "koliki"]
+explanatory = ["kako", "zašto", "objasni", "razloži"]
+comparison = ["razlika", "usporedi", "slično", "različito"]
+summarization = ["sažmi", "pregled", "ukratko", "glavno"]
+
+# Croatian stopwords (unified for all processing)
+[shared.stopwords]
+# Complete Croatian stopword list (used by both text processing and retrieval)
+words = [
+    # Basic function words
+    "i", "u", "na", "za", "se", "je", "da", "su", "od", "do", "po", "sa",
+    "te", "ta", "to", "ti", "tu", "iz", "ni", "li", "ga", "mu", "pa", "ne",
+    "si", "me", "mi", "ih", "im", "ju", "jo", "ja", "ma", "ah", "oh", "al",
+    # Extended stopwords
+    "a", "ali", "am", "as", "at", "ba", "be", "bi", "bo", "bu", "by",
+    "da", "do", "eh", "el", "en", "es", "et", "ga", "go", "ha", "hi",
+    "ho", "ic", "id", "ie", "if", "il", "in", "ir", "is", "it",
+    "ka", "ko", "la", "li", "lo", "me", "mi", "mo", "mu", "my",
+    "na", "ne", "ni", "no", "nu", "oh", "ok", "ol", "om", "on",
+    "oo", "op", "or", "os", "ot", "ov", "pa", "po", "ra", "re",
+    "sa", "se", "si", "so", "ta", "te", "ti", "to", "tu", "up",
+    "uz", "ve", "za", "ze"
+]
+
+# Croatian character patterns and diacritics (unified)
+[shared.croatian_chars]
+# All Croatian special characters (includes both cases)
+all_diacritics = ["š", "ć", "č", "ž", "đ", "Š", "Ć", "Č", "Ž", "Đ"]
+# Lowercase only (for language detection)
+lowercase_diacritics = ["ć", "č", "š", "ž", "đ"]
+# Pattern for matching Croatian text
+pattern = "[^\\w\\sčćžšđČĆŽŠĐ.,!?:;()-]"
+uppercase_chars = "ČĆŽŠĐ"
+
 # Croatian diacritic mappings for normalization (optional)
-[text_processing.diacritic_map]
+[shared.diacritic_map]
 "č" = "c"
 "ć" = "c"
 "đ" = "d"
@@ -41,10 +68,17 @@ croatian_uppercase_chars = "ČĆŽŠĐ"
 "Š" = "S"
 "Ž" = "Z"
 
-# Croatian character preservation pattern
-croatian_chars_pattern = "[^\\w\\sčćžšđČĆŽŠĐ.,!?:;()-]"
-croatian_uppercase_chars = "ČĆŽŠĐ"
+# ============================================================================
+# TEXT PROCESSING
+# ============================================================================
+[text_processing]
+# Croatian-specific text preprocessing settings
+remove_diacritics = false  # Keep Croatian diacritics (š, ć, č, ž, đ)
+normalize_case = true
 
+# ============================================================================
+# DOCUMENT PROCESSING
+# ============================================================================
 [chunking]
 # Croatian sentence and paragraph detection
 sentence_endings = [".", "!", "?", "…"]
@@ -55,17 +89,79 @@ paragraph_separators = ["\n\n", "\r\n\r\n"]
 sentence_ending_pattern = "[.!?]+(?=\\s+[A-ZČĆŽŠĐ]|\\s*$)"
 min_sentence_length = 10
 
+[document_cleaning]
+# Croatian document cleaning patterns
+header_footer_patterns = [
+    "^\\s*\\d+\\s*$",                    # Standalone page numbers
+    "^\\s*STRANICA\\s*\\d+.*$",          # Croatian "PAGE X"
+    "^\\s*BROJ\\s*\\d+.*ZAGREB.*$",      # Document headers
+    "^\\s*NARODNE\\s*NOVINE.*$",         # Croatian Official Gazette header
+    "^\\s*SLUŽBENI\\s*LIST.*$"           # Official list header
+]
+
+# OCR error corrections for Croatian text
+[document_cleaning.ocr_corrections]
+"HR\\s+V\\s+A\\s+TSKE" = "HRVATSKE"      # Split "HRVATSKE"
+"HR\\s+VATSKE" = "HRVATSKE"
+"ZAGR\\s+EB" = "ZAGREB"
+"HR\\s+V\\s+A\\s+T\\s+S\\s+K\\s+E" = "HRVATSKE"
+"\\s+([čćžšđČĆŽŠĐ])\\s+" = "\\1"          # Fix spaced diacritics
+
+# ============================================================================
+# EMBEDDINGS & VECTOR DATABASE
+# ============================================================================
 [embeddings]
 # Croatian language embeddings configuration
 model_name = "BAAI/bge-m3"  # BGE-M3: Best multilingual model for Croatian
 supports_multilingual = true
 croatian_optimized = true  # BGE-M3 has excellent Croatian support
 
+[vectordb]
+# Croatian-specific vector database settings
+collection_name = "croatian_documents"
+
+# Croatian text processing for embeddings
+[vectordb.embeddings]
+croatian_aware_models = [
+    "sentence-transformers/LaBSE",
+    "paraphrase-multilingual-MiniLM-L12-v2",
+    "paraphrase-multilingual-mpnet-base-v2"
+]
+
+# Croatian document metadata
+[vectordb.metadata]
+croatian_content_indicators = ["čćžšđ", "ČĆŽŠĐ", "Croatian", "Hrvatski"]
+
+# Search optimization for Croatian
+[vectordb.search]
+croatian_query_expansion = true
+preserve_case_sensitivity = false  # Croatian is case-insensitive for search
+boost_title_matches = true
+
+# ============================================================================
+# RETRIEVAL & QUERY PROCESSING
+# ============================================================================
+[retrieval]
+# Croatian synonyms for query expansion
+[retrieval.synonyms]
+velika = ["velika", "veca", "znacajna", "vazna"]
+mala = ["mala", "manja", "sitna", "nevazna"]
+dobra = ["dobra", "kvalitetna", "izvrsna", "odlicna", "vrhunska"]
+losa = ["losa", "slaba", "neispravna", "neadekvatna"]
+
+# Croatian morphological variations for search
+[retrieval.morphology]
+hrvatska = ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"]
+ekonomija = ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim", "gospodarstvo"]
+politika = ["politika", "politike", "političke", "političkih"]
+kultura = ["kultura", "kulture", "kulturne", "kulturnih", "kulturnim"]
+
+# ============================================================================
+# GENERATION & PROMPTS
+# ============================================================================
 [generation]
 # Croatian text generation settings
 system_prompt_language = "croatian"
-response_language = "croatian"
-cultural_context = "balkans"
 formality_level = "polite"  # Croatian cultural norm
 
 [prompts]
@@ -127,15 +223,19 @@ Fokusiraj se na korisne informacije za posjetitelje i ističi posebne značajke.
 tourism_user = "Turističko pitanje: {query}\n\nTuristički odgovor:"
 tourism_context = "Turističke informacije:\n{context}\n\n"
 
-# Croatian keywords for prompt template selection
+# Croatian keywords for prompt template selection (unique patterns only)
 [prompts.keywords]
 cultural = ["kultura", "povijest", "tradicija", "narod", "običaj", "blagdan", "hrvatski", "croatia"]
 tourism = ["turizam", "putovanje", "odmor", "destinacija", "atrakcija", "smještaj", "hoteli"]
-summary = ["sažetak", "ukratko", "pregled", "glavno", "sažmi", "rezime"]
-comparison = ["usporedi", "razlika", "slično", "različito", "protiv", "kontra"]
-explanation = ["objasni", "kako", "zašto", "razlog", "uzrok", "mehanizam"]
-factual = ["tko", "što", "kada", "gdje", "koji", "koja", "koje", "koliko"]
 
+[formal_prompts]
+# Croatian formal style prompts
+formal_instruction = "Odgovaraj uvijek u formalnom stilu."
+cultural_context_instruction = "Ako je prikladno, uključi kulturni kontekst u odgovoru."
+
+# ============================================================================
+# RESPONSE PROCESSING & CONFIDENCE
+# ============================================================================
 [confidence]
 # Croatian-specific confidence calculation settings
 error_phrases = ["greška", "error", "ne znam", "ne mogu", "sorry", "žao mi je", "nažalost"]
@@ -168,88 +268,12 @@ prefixes_to_remove = ["^(odgovor|answer):", "^(rezultat|result):", "^(tekst|text
 
 # Language detection patterns
 [response_parsing.language_detection]
-croatian_chars = ["ć", "č", "š", "ž", "đ"]
 croatian_words = ["je", "su", "biti", "imati", "moći", "htjeti", "reći", "znati"]
 english_words = ["the", "and", "or", "but", "in", "on", "at", "to", "for"]
 
-[formal_prompts]
-# Croatian formal style prompts
-formal_instruction = "Odgovaraj uvijek u formalnom stilu."
-cultural_context_instruction = "Ako je prikladno, uključi kulturni kontekst u odgovoru."
-
-[document_cleaning]
-# Croatian document cleaning patterns
-header_footer_patterns = [
-    "^\\s*\\d+\\s*$",                    # Standalone page numbers
-    "^\\s*STRANICA\\s*\\d+.*$",          # Croatian "PAGE X"
-    "^\\s*BROJ\\s*\\d+.*ZAGREB.*$",      # Document headers
-    "^\\s*NARODNE\\s*NOVINE.*$",         # Croatian Official Gazette header
-    "^\\s*SLUŽBENI\\s*LIST.*$"           # Official list header
-]
-
-# OCR error corrections for Croatian text
-[document_cleaning.ocr_corrections]
-"HR\\s+V\\s+A\\s+TSKE" = "HRVATSKE"      # Split "HRVATSKE"
-"HR\\s+VATSKE" = "HRVATSKE"
-"ZAGR\\s+EB" = "ZAGREB"
-"HR\\s+V\\s+A\\s+T\\s+S\\s+K\\s+E" = "HRVATSKE"
-"\\s+([čćžšđČĆŽŠĐ])\\s+" = "\\1"          # Fix spaced diacritics
-
-[vectordb]
-# Croatian-specific vector database settings
-collection_name = "croatian_documents"
-# default_language uses language.code from top of file
-
-# Croatian text processing for embeddings
-[vectordb.embeddings]
-preserve_diacritics = true
-croatian_aware_models = [
-    "sentence-transformers/LaBSE",
-    "paraphrase-multilingual-MiniLM-L12-v2",
-    "paraphrase-multilingual-mpnet-base-v2"
-]
-
-# Croatian document metadata
-[vectordb.metadata]
-# language_field uses language.code from top of file
-croatian_content_indicators = ["čćžšđ", "ČĆŽŠĐ", "Croatian", "Hrvatski"]
-
-# Search optimization for Croatian
-[vectordb.search]
-croatian_query_expansion = true
-preserve_case_sensitivity = false  # Croatian is case-insensitive for search
-boost_title_matches = true
-
-# Croatian-specific retrieval settings
-[retrieval]
-# Croatian stop words for query processing
-stop_words = [
-    "i", "u", "na", "za", "se", "je", "da", "su", "od", "do", "po", "sa",
-    "te", "ta", "to", "ti", "tu", "iz", "ni", "li", "ga", "mu", "pa", "ne",
-    "si", "me", "mi", "ih", "im", "ju", "jo", "ja", "ma", "ah", "oh", "al"
-]
-
-# Croatian question words and their query types
-[retrieval.question_patterns]
-factual = ["tko", "što", "kada", "gdje", "koji", "koja", "koje"]
-explanatory = ["kako", "zašto", "objasni", "razloži"]
-comparison = ["razlika", "usporedi", "slično", "različito"]
-summarization = ["sažmi", "pregled", "ukratko", "glavno"]
-
-# Croatian synonyms for query expansion
-[retrieval.synonyms]
-velika = ["velika", "veca", "znacajna", "vazna"]
-mala = ["mala", "manja", "sitna", "nevazna"]
-dobra = ["dobra", "kvalitetna", "izvrsna", "odlicna", "vrhunska"]
-losa = ["losa", "slaba", "neispravna", "neadekvatna"]
-
-# Croatian morphological variations for search
-[retrieval.morphology]
-hrvatska = ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"]
-ekonomija = ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim", "gospodarstvo"]
-politika = ["politika", "politike", "političke", "političkih"]
-kultura = ["kultura", "kulture", "kulturne", "kulturnih", "kulturnim"]
-
+# ============================================================================
+# PIPELINE CONFIGURATION
+# ============================================================================
 [pipeline]
 # Croatian-specific pipeline settings
 enable_morphological_expansion = true
@@ -267,11 +291,8 @@ croatian_specific_chunking = true
 
 # Croatian generation settings - OPTIMIZED FOR SPEED
 [pipeline.generation]
-preserve_diacritics = true
 prefer_formal_style = false          # Disabled for speed
 include_cultural_context = false     # Disabled for speed
-response_language = "croatian"
-cultural_context = "balkans"
 formality_level = "casual"           # Changed from "polite" for speed
 
 # Croatian retrieval settings

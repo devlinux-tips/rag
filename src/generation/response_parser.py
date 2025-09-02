@@ -8,7 +8,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from ..utils.config_loader import get_croatian_response_parsing_config, get_response_parsing_config
+from ..utils.config_loader import (
+    get_croatian_response_parsing_config,
+    get_croatian_shared,
+    get_response_parsing_config,
+)
 from ..utils.error_handler import handle_config_error
 
 
@@ -241,7 +245,14 @@ class CroatianResponseParser:
             Language code ('hr' for Croatian, 'en' for English, etc.)
         """
         # Simple heuristic based on Croatian-specific characters and words
-        croatian_chars = self._config["language_detection"]["croatian_chars"]
+        shared_config = handle_config_error(
+            operation=lambda: get_croatian_shared(),
+            fallback_value={"croatian_chars": {"lowercase_diacritics": ["ć", "č", "š", "ž", "đ"]}},
+            config_file="config/croatian.toml",
+            section="[shared]",
+        )
+
+        croatian_chars = shared_config["croatian_chars"]["lowercase_diacritics"]
         croatian_words = self._config["language_detection"]["croatian_words"]
 
         # Count Croatian indicators

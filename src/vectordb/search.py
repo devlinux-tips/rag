@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..utils.config_loader import get_croatian_vectordb, get_search_config
+from ..utils.config_loader import get_croatian_vectordb, get_search_config, get_shared_config
 from ..utils.error_handler import create_config_loader, handle_config_error
 from .embeddings import CroatianEmbeddingModel
 from .storage import ChromaDBStorage
@@ -49,6 +49,7 @@ class SearchConfig:
 
         def load_config():
             search_config = get_search_config()
+            shared_config = get_shared_config()
 
             # Convert string to enum
             method_str = search_config["default_method"]
@@ -60,8 +61,10 @@ class SearchConfig:
 
             return cls(
                 method=method,
-                top_k=search_config["top_k"],
-                similarity_threshold=search_config["similarity_threshold"],
+                top_k=search_config.get("top_k", shared_config.get("default_top_k", 5)),
+                similarity_threshold=search_config.get(
+                    "similarity_threshold", shared_config.get("similarity_threshold", 0.0)
+                ),
                 max_context_length=search_config["max_context_length"],
                 rerank=search_config["rerank"],
                 include_metadata=search_config["include_metadata"],

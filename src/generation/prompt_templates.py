@@ -1,5 +1,5 @@
 """
-Prompfrom ..utils.error_handler import handle_config_errormplates for Croatian RAG system using local LLM.
+Prompt templates for Croatian RAG system using local LLM.
 Contains system prompts and templates for different query types.
 """
 
@@ -9,6 +9,7 @@ from typing import List, Optional
 from ..utils.config_loader import (
     get_croatian_prompts,
     get_croatian_settings,
+    get_croatian_shared,
     get_generation_config,
     get_generation_prompts_config,
 )
@@ -217,10 +218,12 @@ def get_prompt_for_query_type(query: str) -> PromptTemplate:
 
     # Load keywords from Croatian config
     croatian_config = get_croatian_settings()
-    keywords = croatian_config["prompts"]["keywords"]
-
-    # Create templates instance
+    keywords = croatian_config["prompts"]["keywords"]  # Create templates instance
     templates = CroatianRAGPrompts()
+
+    # Get shared question patterns for consistent matching
+    shared_config = get_croatian_shared()
+    question_patterns = shared_config.get("question_patterns", {})
 
     # Check for cultural/historical context
     if any(keyword in query_lower for keyword in keywords["cultural"]):
@@ -230,20 +233,20 @@ def get_prompt_for_query_type(query: str) -> PromptTemplate:
     if any(keyword in query_lower for keyword in keywords["tourism"]):
         return templates.TOURISM
 
-    # Check for summary request
-    if any(keyword in query_lower for keyword in keywords["summary"]):
+    # Check for summary request (using shared patterns)
+    if any(keyword in query_lower for keyword in question_patterns.get("summarization", [])):
         return templates.SUMMARIZATION
 
-    # Check for comparison request
-    if any(keyword in query_lower for keyword in keywords["comparison"]):
+    # Check for comparison request (using shared patterns)
+    if any(keyword in query_lower for keyword in question_patterns.get("comparison", [])):
         return templates.COMPARISON
 
-    # Check for explanation request
-    if any(keyword in query_lower for keyword in keywords["explanation"]):
+    # Check for explanation request (using shared patterns)
+    if any(keyword in query_lower for keyword in question_patterns.get("explanatory", [])):
         return templates.EXPLANATORY
 
-    # Check for factual questions
-    if any(keyword in query_lower for keyword in keywords["factual"]):
+    # Check for factual questions (using shared config)
+    if any(keyword in query_lower for keyword in question_patterns.get("factual", [])):
         return templates.FACTUAL_QA
 
     # Default to general question answering

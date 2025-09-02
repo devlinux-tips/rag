@@ -13,6 +13,7 @@ from ..utils.config_loader import (
     get_cleaning_config,
     get_croatian_chunking,
     get_croatian_document_cleaning,
+    get_croatian_shared,
     get_croatian_text_processing,
 )
 from ..utils.error_handler import handle_config_error
@@ -56,8 +57,14 @@ class CroatianTextCleaner:
         # Croatian diacritic mappings for normalization (optional)
         self.diacritic_map = self._croatian_config["diacritic_map"]
 
-        # Common Croatian stopwords (basic set)
-        self.stopwords = set(self._croatian_config["stopwords"])
+        # Common Croatian stopwords (from shared config)
+        shared_config = handle_config_error(
+            operation=lambda: get_croatian_shared(),
+            fallback_value={"stopwords": {"words": ["i", "u", "na", "za", "se", "je"]}},
+            config_file="config/croatian.toml",
+            section="[shared]",
+        )
+        self.stopwords = set(shared_config["stopwords"]["words"])
 
         # Document formatting artifacts to remove
         self.formatting_patterns = [

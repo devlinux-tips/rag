@@ -225,6 +225,18 @@ def get_croatian_settings() -> Dict[str, Any]:
     return load_config("croatian")
 
 
+def get_shared_config() -> Dict[str, Any]:
+    """Get shared configuration from main config (constants and common settings)."""
+    main_config = load_config("config")
+    return main_config.get("shared", {})
+
+
+def get_croatian_shared() -> Dict[str, Any]:
+    """Get Croatian shared configuration."""
+    croatian_config = get_croatian_settings()
+    return croatian_config.get("shared", {})
+
+
 def get_croatian_prompts() -> Dict[str, str]:
     """
     Get Croatian prompt templates.
@@ -317,7 +329,18 @@ def get_cleaning_config() -> Dict[str, Any]:
 def get_croatian_text_processing() -> Dict[str, Any]:
     """Get Croatian text processing configuration."""
     croatian_config = get_croatian_settings()
-    return croatian_config["text_processing"]
+    # Merge shared config with text_processing specific config
+    shared_config = croatian_config.get("shared", {})
+    text_processing = croatian_config.get("text_processing", {})
+
+    # Merge configs, with text_processing taking precedence
+    merged_config = {**shared_config, **text_processing}
+
+    # Ensure diacritic_map is properly merged from shared.diacritic_map
+    if "diacritic_map" in shared_config:
+        merged_config["diacritic_map"] = shared_config["diacritic_map"]
+
+    return merged_config
 
 
 def get_croatian_document_cleaning() -> Dict[str, Any]:

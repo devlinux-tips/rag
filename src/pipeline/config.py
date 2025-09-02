@@ -204,7 +204,11 @@ class OllamaConfig:
     @classmethod
     def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "OllamaConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_croatian_pipeline, get_ollama_config
+        from ..utils.config_loader import (
+            get_croatian_pipeline,
+            get_ollama_config,
+            get_shared_config,
+        )
         from ..utils.error_handler import handle_config_error
 
         # Load main ollama config
@@ -223,6 +227,8 @@ class OllamaConfig:
             section="croatian pipeline",
         )
         croatian_generation = croatian_config.get("generation", {})
+        croatian_shared = croatian_config.get("shared", {})
+        pipeline_generation = croatian_config.get("pipeline", {}).get("generation", {})
 
         return cls(
             base_url=ollama_config.get("base_url", "http://localhost:11434"),
@@ -232,9 +238,19 @@ class OllamaConfig:
             top_p=ollama_config.get("top_p", 0.9),
             top_k=ollama_config.get("top_k", 40),
             timeout=ollama_config.get("timeout", 60.0),
-            preserve_diacritics=croatian_generation.get("preserve_diacritics", True),
-            prefer_formal_style=croatian_generation.get("prefer_formal_style", True),
-            include_cultural_context=croatian_generation.get("include_cultural_context", True),
+            preserve_diacritics=pipeline_generation.get(
+                "preserve_diacritics",
+                croatian_shared.get(
+                    "preserve_diacritics", croatian_generation.get("preserve_diacritics", True)
+                ),
+            ),
+            prefer_formal_style=pipeline_generation.get(
+                "prefer_formal_style", croatian_generation.get("prefer_formal_style", True)
+            ),
+            include_cultural_context=pipeline_generation.get(
+                "include_cultural_context",
+                croatian_generation.get("include_cultural_context", True),
+            ),
             stream=ollama_config.get("stream", True),
             keep_alive=ollama_config.get("keep_alive", "5m"),
         )
@@ -327,9 +343,18 @@ class RAGConfig(BaseSettings):
             from ..utils.config_loader import (
                 get_paths_config,
                 get_performance_config,
+                get_shared_config,
                 get_system_config,
             )
             from ..utils.error_handler import handle_config_error
+
+            # Load shared config for common settings
+            shared_config = handle_config_error(
+                operation=get_shared_config,
+                fallback_value={},
+                config_file="config/config.toml",
+                section="shared",
+            )
 
             # Load system config
             system_config = handle_config_error(
@@ -365,11 +390,11 @@ class RAGConfig(BaseSettings):
                 "croatian": CroatianConfig.from_config(),
                 "log_level": system_config.get("log_level", "INFO"),
                 "enable_caching": system_config.get("enable_caching", True),
-                "cache_dir": system_config.get("cache_dir", "./data/cache"),
+                "cache_dir": shared_config.get("cache_dir", "./data/cache"),
                 "max_concurrent_requests": system_config.get("max_concurrent_requests", 5),
-                "request_timeout": system_config.get("request_timeout", 120.0),
+                "request_timeout": shared_config.get("request_timeout", 120.0),
                 "enable_metrics": system_config.get("enable_metrics", True),
-                "metrics_dir": system_config.get("metrics_dir", "./data/metrics"),
+                "metrics_dir": shared_config.get("metrics_dir", "./data/metrics"),
                 "documents_dir": paths_config.get("documents_dir", "./data/raw"),
                 "processed_dir": paths_config.get("processed_dir", "./data/processed"),
                 "test_data_dir": paths_config.get("test_data_dir", "./data/test"),

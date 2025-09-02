@@ -105,7 +105,7 @@ def test_croatian_integration():
         print(f"✅ Croatian text processing config loaded")
         print(f"   • Remove diacritics: {text_config['remove_diacritics']}")
         print(f"   • Normalize case: {text_config['normalize_case']}")
-        print(f"   • Special chars: {', '.join(text_config['preserve_special_chars'][:5])}...")
+        # Note: special chars moved to shared.croatian_chars
 
         # Test language code
         lang_code = get_croatian_language_code()
