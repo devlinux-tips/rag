@@ -4,6 +4,8 @@ sentence-transformers
 requests
 numpy
 pandas
+httpx
+transformers
 
 # PyTorch (2.6+ required for security - CPU version for embeddings)
 torch>=2.6.0
@@ -28,6 +30,7 @@ python-dotenv
 pyyaml
 tomli
 pydantic
+pydantic-settings
 click
 tqdm
 
