@@ -2,14 +2,123 @@
 
 A hands-on learning project to build a complete Retrieval-Augmented Generation (RAG) system for multilingual documents LLM processing. This system handles multiple languages with specialized support for Croatian, English, and extensible architecture for additional languages including German, French, Spanish, and more.
 
-## 🌍 Multilingual Capabilities
+## 🌍 Multilingual RAG System - Learn Croatian & English Document Processing
 
-- **🇭🇷 Croatian**: Full morphology support, diacritics handling, cultural context
-- **🇬🇧 English**: Comprehensive processing with cross-language search
-- **🌐 Cross-Language**: Unified search across multiple languages
-- **📁 Language Organization**: Automatic document organization by language
-- **🔄 Translation Ready**: Framework for query/response translation
-- **📊 Analytics**: Language-specific usage patterns and performance metrics
+A comprehensive Retrieval-Augmented Generation (RAG) system designed for multilingual document processing, with specialized support for Croatian and English languages. This project demonstrates advanced document understanding, cross-language search capabilities, and intelligent content generation.
+
+## 🎯 Key Features
+
+- **🇭🇷 Croatian Language Support**: Advanced morphological processing, diacritics handling, cultural context awareness
+- **🇬🇧 English Document Processing**: Business documents, financial reports, technical specifications
+- **🌐 Cross-Language Search**: Query in one language, find relevant content in any language
+- **🚀 Local LLM Integration**: Powered by Qwen2.5 via Ollama for privacy-first generation
+- **📊 Intelligent Chunking**: Context-aware text segmentation preserving document structure
+- **🔍 Hybrid Retrieval**: Combines semantic similarity with keyword matching and reranking
+
+## 🚀 Quick Start
+
+```bash
+# Clone and setup
+git clone <repository-url>
+cd learn-rag
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Setup Ollama LLM
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull qwen2.5:7b-instruct
+
+# Test the system
+python simple_test.py
+```
+
+## �️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MULTILINGUAL RAG ARCHITECTURE                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📄 Documents                🔍 Processing                      │
+│  ┌─────────────┐            ┌──────────────┐                   │
+│  │ Croatian 🇭🇷 │ ──────────→ │ BGE-M3       │                   │
+│  │ - PDF/DOCX  │            │ Embeddings   │                   │
+│  │ - Diacritics│            │ (Multilingual│                   │
+│  │ - Morphology│            │  Sentence-T) │                   │
+│  └─────────────┘            └──────────────┘                   │
+│                                     │                          │
+│  ┌─────────────┐                   ▼                          │
+│  │ English 🇬🇧  │            ┌──────────────┐                   │
+│  │ - Business  │ ──────────→ │ ChromaDB     │                   │
+│  │ - Financial │            │ Vector Store │                   │
+│  │ - Technical │            │ (Language-   │                   │
+│  └─────────────┘            │  Specific)   │                   │
+│                              └──────────────┘                   │
+│                                     │                          │
+│                              ┌──────▼──────┐                   │
+│  💬 User Query               │ Retrieval   │                   │
+│  ┌─────────────┐            │ & Ranking   │                   │
+│  │"Koliki je   │ ──────────→ │ System      │                   │
+│  │ ukupni      │            └─────────────┘                   │
+│  │ iznos?"     │                    │                          │
+│  └─────────────┘                   ▼                          │
+│                              ┌──────────────┐                   │
+│                              │ Qwen2.5      │                   │
+│                              │ LLM          │                   │
+│                              │ (Ollama)     │                   │
+│                              └──────────────┘                   │
+│                                     │                          │
+│                                    ▼                          │
+│                              📋 Generated Response             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 📁 Project Structure
+
+```
+learn-rag/
+├── config/                  # Configuration Files
+│   ├── croatian.toml       # Croatian language settings
+│   ├── english.toml        # English language settings
+│   └── api_config.yaml     # API and model configurations
+├── data/                    # Document Storage
+│   ├── raw/                # Source documents
+│   │   ├── hr/            # Croatian documents
+│   │   └── en/            # English documents
+│   ├── chromadb/          # Vector database storage
+│   └── test/              # Sample test documents
+├── src/                     # Core System
+│   ├── preprocessing/      # Document processing
+│   │   ├── extractors.py  # Text extraction (PDF, DOCX)
+│   │   ├── cleaners.py    # Language-aware cleaning
+│   │   └── chunkers.py    # Intelligent text segmentation
+│   ├── vectordb/          # Vector Operations
+│   │   ├── embeddings.py  # BGE-M3 multilingual embeddings
+│   │   ├── storage.py     # ChromaDB management
+│   │   └── search.py      # Similarity search
+│   ├── retrieval/         # Search & Ranking
+│   │   ├── retriever.py   # Document retrieval
+│   │   ├── reranker.py    # Result reranking
+│   │   └── query_processor.py # Query understanding
+│   ├── generation/        # LLM Integration
+│   │   ├── ollama_client.py   # Qwen2.5 interface
+│   │   ├── prompt_templates.py # Language-specific prompts
+│   │   └── response_parser.py  # Output processing
+│   └── pipeline/          # System Orchestration
+│       ├── rag_system.py  # Main RAG pipeline
+│       └── config.py      # Configuration management
+├── notebooks/               # Learning Materials
+│   ├── 01_document_processing_learning.ipynb
+│   ├── 02_vector_database_learning.ipynb
+│   ├── 03_retrieval_system_learning.ipynb
+│   ├── 04_generation_system_learning.ipynb
+│   └── 05_complete_pipeline_learning.ipynb
+└── tests/                    # Comprehensive Testing
+    ├── test_*.py            # Unit tests for each component
+    └── integration/         # Multilingual end-to-end tests
+```
 
 ## 🚀 Quick Start
 
@@ -156,34 +265,171 @@ tests/                    # Comprehensive Testing
 ## 🚀 Example Usage
 
 ```bash
-# Process documents by language
-python scripts/batch_process.py --language hr --input data/raw/hr/  # Croatian
-python scripts/batch_process.py --language en --input data/raw/en/  # English
+# Clear existing data (optional)
+python clear_data.py all --dry-run    # Preview what will be cleared
+python clear_data.py hr               # Clear only Croatian data
+python clear_data.py en               # Clear only English data
 
-# Query in different languages
-python -m src.pipeline.rag_system --query "Koliki je ukupni iznos u EUR-ima?" --lang hr
-python -m src.pipeline.rag_system --query "What is the total amount in EUR?" --lang en
+# Add documents to the system
+python -c "
+from src.pipeline.rag_system import MultilingualRAGSystem
+rag = MultilingualRAGSystem('config/croatian.toml')
+rag.add_document('data/raw/hr/document.pdf')
+"
 
-# Cross-language search (Croatian query, search all languages)
-python -m src.pipeline.rag_system --query "Koliki je ukupni iznos?" --lang hr --search-all
+# Query in Croatian
+python -c "
+from src.pipeline.rag_system import MultilingualRAGSystem
+rag = MultilingualRAGSystem('config/croatian.toml')
+result = rag.query('Koliki je ukupni iznos u EUR-ima?')
+print(result['answer'])
+"
 
-# Auto-detect language and route appropriately
-python -m src.pipeline.rag_system --query "Total investment value?" --auto-detect
+# Query in English
+python -c "
+from src.pipeline.rag_system import MultilingualRAGSystem
+rag = MultilingualRAGSystem('config/english.toml')
+result = rag.query('What is the total amount in EUR?')
+print(result['answer'])
+"
+
+# Quick testing
+python simple_test.py                 # Test both languages
+python test_complete_system.py        # Full system test
 ```
 
 ## 🧪 Testing
 
 ```bash
 # Run all tests
-pytest tests/
+pytest tests/ -v
 
 # Test specific components
 pytest tests/test_preprocessing.py -v
 pytest tests/test_retrieval.py -v
+pytest tests/test_generation.py -v
 
-# Run with Croatian test documents
-python -m pytest tests/ -k "croatian" -v
+# Test with actual documents
+python test_specific_query.py
+python interactive_test.py
 ```
+
+## 🔧 Configuration
+
+### Language-Specific Settings
+
+The system uses TOML configuration files for each language:
+
+**Croatian (`config/croatian.toml`)**:
+```toml
+[language]
+code = "hr"
+name = "Croatian"
+language_uppercase_chars = ["Č", "Ć", "Š", "Ž", "Đ"]
+
+[chunking]
+strategy = "semantic_with_morphology"
+chunk_size = 500
+overlap = 50
+
+[embeddings]
+model = "BAAI/bge-m3"
+cache_dir = "./models/embeddings/hr"
+```
+
+**English (`config/english.toml`)**:
+```toml
+[language]
+code = "en"
+name = "English"
+language_uppercase_chars = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+
+[chunking]
+strategy = "semantic"
+chunk_size = 500
+overlap = 50
+
+[embeddings]
+model = "BAAI/bge-m3"
+cache_dir = "./models/embeddings/en"
+```
+
+### Key Features per Language
+
+**Croatian Language Processing**:
+- **Morphology**: Handles complex word inflections (Zagreb → Zagreba, Zagrebu, etc.)
+- **Diacritics**: Preserves and processes Č, Ć, Š, Ž, Đ correctly
+- **Cultural Context**: Recognizes "biser Jadrana" = Dubrovnik, historical references
+- **Query Types**: Classifies Croatian questions (Koji? Kako? Zašto? etc.)
+
+**English Language Processing**:
+- **Business Documents**: Handles financial reports, legal documents, technical specs
+- **Semantic Understanding**: Captures meaning beyond keyword matching
+- **Query Processing**: Advanced question classification and expansion
+
+**Cross-Language Capabilities**:
+- **Unified Search**: Find relevant content regardless of document/query language
+- **Language Detection**: Automatic language identification for documents and queries
+- **Separate Collections**: Croatian documents stored in `croatian_documents`, English in `english_documents`
+
+## 📚 Learning Path
+
+This project is designed for hands-on multilingual RAG learning through Jupyter notebooks:
+
+1. **[System Overview](notebooks/00_system_overview_and_architecture.ipynb)** - Architecture and component interaction
+2. **[Document Processing](notebooks/01_document_processing_learning.ipynb)** - Text extraction and language-aware chunking
+3. **[Vector Database](notebooks/02_vector_database_learning.ipynb)** - Cross-language embeddings and similarity search
+4. **[Retrieval System](notebooks/03_retrieval_system_learning.ipynb)** - Intelligent multilingual document retrieval
+5. **[Generation System](notebooks/04_generation_system_learning.ipynb)** - LLM integration with language-specific processing
+6. **[Complete Pipeline](notebooks/05_complete_pipeline_learning.ipynb)** - Full system orchestration and testing
+
+Each notebook includes comprehensive explanations, code examples, and language-specific implementation details.
+
+## 🛠️ System Requirements
+
+- **Python**: 3.8+
+- **RAM**: 8GB+ recommended (for BGE-M3 embeddings)
+- **Storage**: 5GB+ for models and data
+- **Ollama**: For local LLM inference
+- **Operating System**: Linux, macOS, Windows
+
+## 📚 Dependencies
+
+Key libraries and their purposes:
+
+```
+chromadb>=0.4.0           # Vector database
+sentence-transformers     # BGE-M3 multilingual embeddings
+ollama                   # Local LLM client
+PyPDF2                   # PDF document processing
+python-docx              # DOCX document processing
+toml                     # Configuration file parsing
+pytest                  # Testing framework
+```
+
+## 🔍 Troubleshooting
+
+**Common Issues**:
+
+1. **Ollama not responding**: Ensure Ollama service is running (`ollama serve`)
+2. **Memory issues**: Reduce batch size in embeddings configuration
+3. **Croatian text garbled**: Check file encoding (should be UTF-8)
+4. **Empty search results**: Verify documents are properly indexed with `rag.get_stats()`
+
+**Debug Tools**:
+```bash
+python debug_ollama.py           # Test LLM connection
+python debug_rag_context.py      # Check retrieval system
+python test_setup.py             # Verify system components
+```
+
+## 📄 License
+
+MIT License - Feel free to use for learning and development.
+
+---
+
+**Built with ❤️ for multilingual AI learning**
 
 ## 📚 Documentation
 
