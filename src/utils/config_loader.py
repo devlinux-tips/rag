@@ -1,17 +1,22 @@
 """
-Centralized Configuration Loader for Croatian RAG Project
+Centralized Configuration Loader for Multilingual RAG Project
 
 This module provides a unified interface for loading TOML configuration files
-with Croatian language settings integration and environment-specific overrides.
+with multilingual language settings (Croatian and English) and environment-specific overrides.
 
 Usage:
-    from src.utils.config_loader import load_config, get_croatian_settings
+    from src.utils.config_loader import load_config, get_language_config
 
     # Load specific config
     ollama_config = load_config('ollama')
 
-    # Get Croatian settings
-    croatian = get_croatian_settings()
+    # Get language-specific settings
+    croatian = get_language_config('hr')
+    english = get_language_config('en')
+
+    # Get shared language configuration
+    croatian_shared = get_language_shared('hr')
+    english_shared = get_language_shared('en')
 
     # Load with environment override
     config = load_config('main', environment='production')
@@ -50,6 +55,21 @@ class ConfigLoader:
         if not self.config_dir.exists():
             raise ConfigError(f"Configuration directory not found: {self.config_dir}")
 
+    def _get_language_config_files(self) -> Dict[str, str]:
+        """Get available language config files dynamically."""
+        try:
+            # Load main config to get language mappings
+            main_config_path = self.config_dir / "config.toml"
+            if main_config_path.exists():
+                with open(main_config_path, "rb") as f:
+                    main_config = tomllib.load(f)
+                    return main_config.get("languages", {}).get("config_files", {})
+        except Exception:
+            pass
+
+        # Fallback: return known language files
+        return {"croatian": "croatian.toml", "english": "english.toml"}
+
     def load(self, config_name: str, use_cache: bool = True) -> Dict[str, Any]:
         """
         Load a TOML configuration file.
@@ -68,10 +88,15 @@ class ConfigLoader:
             logger.debug(f"Using cached config: {config_name}")
             return self._cache[config_name]
 
-        # Use consolidated config.toml for most configurations, croatian.toml for Croatian-specific
-        if config_name == "croatian":
-            config_path = self.config_dir / "croatian.toml"
+        # Use dynamic language config file mapping
+        language_config_files = self._get_language_config_files()
+        language_file_names = [f.replace(".toml", "") for f in language_config_files.values()]
+
+        if config_name in language_file_names:
+            # This is a language-specific config (croatian, english, etc.)
+            config_path = self.config_dir / f"{config_name}.toml"
         else:
+            # This is a main system config (config, main, etc.)
             config_path = self.config_dir / "config.toml"
 
         if not config_path.exists():
@@ -123,7 +148,15 @@ class ConfigLoader:
                     },
                     "main": None,  # Return full config for main
                     "config": None,  # Return full config for config
+                    "croatian": None,  # Return full config for language files
+                    "english": None,  # Return full config for language files
                 }
+
+                # Check if this is a language config file
+                language_configs = self._get_language_config_files()
+                for lang_config in language_configs.values():
+                    lang_name = lang_config.replace(".toml", "")
+                    section_mapping[lang_name] = None  # Return full config for language files
 
                 if config_name in section_mapping and section_mapping[config_name] is not None:
                     config_data = section_mapping[config_name]
@@ -215,66 +248,179 @@ def get_config_section(config_name: str, section: str) -> Dict[str, Any]:
     return _config_loader.get_section(config_name, section)
 
 
-def get_croatian_settings() -> Dict[str, Any]:
-    """
-    Get Croatian language settings.
-
-    Returns:
-        Dictionary containing Croatian configuration
-    """
-    return load_config("croatian")
-
-
 def get_shared_config() -> Dict[str, Any]:
     """Get shared configuration from main config (constants and common settings)."""
     main_config = load_config("config")
     return main_config.get("shared", {})
 
 
-def get_croatian_shared() -> Dict[str, Any]:
-    """Get Croatian shared configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config.get("shared", {})
+# ============================================================================
+# MULTILINGUAL CONFIGURATION FUNCTIONS
+# ============================================================================
 
 
-def get_croatian_prompts() -> Dict[str, str]:
+def get_language_config(language: str) -> Dict[str, Any]:
     """
-    Get Croatian prompt templates.
+    Get configuration for specified language.
+
+    Args:
+        language: Language code ('hr' for Croatian, 'en' for English)
 
     Returns:
-        Dictionary containing Croatian prompts
+        Dictionary containing language-specific configuration
+
+    Raises:
+        ConfigError: If language is not supported
     """
-    return get_config_section("croatian", "prompts")
+    if not is_language_supported(language):
+        supported = get_supported_languages()
+        raise ConfigError(
+            f"Unsupported language: {language}. Supported languages: {', '.join(supported)}"
+        )
+
+    # Get config file name for language
+    config_file = get_language_config_file(language)
+    config_name = config_file.replace(".toml", "")
+
+    return load_config(config_name)
 
 
-def get_croatian_language_code() -> str:
+def get_language_shared(language: str) -> Dict[str, Any]:
     """
-    Get Croatian language code.
+    Get shared configuration for specified language.
+
+    Args:
+        language: Language code ('hr' for Croatian, 'en' for English)
 
     Returns:
-        Language code string (e.g., 'hr')
+        Dictionary containing language-specific shared configuration
     """
-    return get_config_section("croatian", "language")["code"]
+    config = get_language_config(language)
+    return config.get("shared", {})
 
 
-def get_croatian_confidence_settings() -> Dict[str, Any]:
+def get_language_specific_config(section: str, language: str) -> Dict[str, Any]:
     """
-    Get Croatian confidence calculation settings.
+    Get specific configuration section for specified language.
+
+    Args:
+        section: Configuration section name (e.g., 'prompts', 'retrieval')
+        language: Language code ('hr' for Croatian, 'en' for English)
 
     Returns:
-        Dictionary containing confidence settings
+        Dictionary containing language-specific section configuration
     """
-    return get_config_section("croatian", "confidence")
+    config = get_language_config(language)
+    return config.get(section, {})
 
 
-def get_croatian_formal_prompts() -> Dict[str, str]:
+def get_supported_languages() -> list[str]:
     """
-    Get Croatian formal prompt templates.
+    Get list of supported languages from configuration.
 
     Returns:
-        Dictionary containing formal prompts
+        List of supported language codes
     """
-    return get_config_section("croatian", "formal_prompts")
+    try:
+        main_config = load_config("config")
+        return main_config.get("languages", {}).get("supported", ["hr"])
+    except Exception:
+        # Fallback to Croatian only
+        return ["hr"]
+
+
+def get_language_config_file(language: str) -> str:
+    """
+    Get config file name for language.
+
+    Args:
+        language: Language code
+
+    Returns:
+        Config file name (e.g., 'croatian.toml')
+    """
+    try:
+        main_config = load_config("config")
+        config_files = main_config.get("languages", {}).get("config_files", {})
+
+        if language in config_files:
+            return config_files[language]
+
+        # Try common mappings
+        language_mapping = {
+            "hr": "croatian.toml",
+            "croatian": "croatian.toml",
+            "en": "english.toml",
+            "english": "english.toml",
+        }
+
+        if language.lower() in language_mapping:
+            return language_mapping[language.lower()]
+
+    except Exception:
+        pass
+
+    # Fallback
+    return f"{language}.toml"
+
+
+def is_language_supported(language: str) -> bool:
+    """
+    Check if language is supported.
+
+    Args:
+        language: Language code to check
+
+    Returns:
+        True if language is supported, False otherwise
+    """
+    supported = get_supported_languages()
+    return language.lower() in [lang.lower() for lang in supported]
+
+
+def discover_available_languages() -> list[str]:
+    """
+    Scan config directory for available language files.
+
+    Returns:
+        List of available language config file names (without .toml)
+    """
+    language_files = []
+    for file in CONFIG_DIR.glob("*.toml"):
+        if file.name not in ["config.toml"]:
+            language_files.append(file.stem)
+    return language_files
+
+
+def validate_language_configuration() -> Dict[str, str]:
+    """
+    Validate that all supported languages have config files.
+
+    Returns:
+        Dictionary mapping languages to their config files
+
+    Raises:
+        ConfigError: If any supported language is missing its config file
+    """
+    supported = get_supported_languages()
+    available = discover_available_languages()
+
+    missing = []
+    valid_mapping = {}
+
+    for lang in supported:
+        config_file = get_language_config_file(lang)
+        config_name = config_file.replace(".toml", "")
+
+        if config_name not in available:
+            missing.append(f"{lang} -> {config_file}")
+        else:
+            valid_mapping[lang] = config_file
+
+    if missing:
+        raise ConfigError(f"Missing config files for languages: {missing}")
+
+    return valid_mapping
 
 
 def get_generation_config() -> Dict[str, Any]:
@@ -324,35 +470,6 @@ def get_cleaning_config() -> Dict[str, Any]:
     """Get cleaning configuration."""
     preprocessing_config = get_preprocessing_config()
     return preprocessing_config["cleaning"]
-
-
-def get_croatian_text_processing() -> Dict[str, Any]:
-    """Get Croatian text processing configuration."""
-    croatian_config = get_croatian_settings()
-    # Merge shared config with text_processing specific config
-    shared_config = croatian_config.get("shared", {})
-    text_processing = croatian_config.get("text_processing", {})
-
-    # Merge configs, with text_processing taking precedence
-    merged_config = {**shared_config, **text_processing}
-
-    # Ensure diacritic_map is properly merged from shared.diacritic_map
-    if "diacritic_map" in shared_config:
-        merged_config["diacritic_map"] = shared_config["diacritic_map"]
-
-    return merged_config
-
-
-def get_croatian_document_cleaning() -> Dict[str, Any]:
-    """Get Croatian document cleaning configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config["document_cleaning"]
-
-
-def get_croatian_chunking() -> Dict[str, Any]:
-    """Get Croatian chunking configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config["chunking"]
 
 
 def get_generation_prompts_config() -> Dict[str, Any]:
@@ -435,12 +552,6 @@ def get_search_config() -> Dict[str, Any]:
     return vectordb_config["search"]
 
 
-def get_croatian_vectordb() -> Dict[str, Any]:
-    """Get Croatian vectordb configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config["vectordb"]
-
-
 # Retrieval Configuration Functions
 def get_retrieval_config() -> Dict[str, Any]:
     """Get main retrieval configuration."""
@@ -471,12 +582,6 @@ def get_hybrid_retrieval_config() -> Dict[str, Any]:
     return retrieval_config["hybrid_retrieval"]
 
 
-def get_croatian_retrieval() -> Dict[str, Any]:
-    """Get Croatian retrieval configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config.get("retrieval", {})
-
-
 # Pipeline configuration functions
 def get_pipeline_config() -> Dict[str, Any]:
     """Get complete pipeline configuration."""
@@ -495,12 +600,6 @@ def get_chroma_config() -> Dict[str, Any]:
     return pipeline_config.get("chroma", {})
 
 
-def get_croatian_response_parsing_config() -> Dict[str, Any]:
-    """Get Croatian response parsing configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config.get("response_parsing", {})
-
-
 def get_performance_config() -> Dict[str, Any]:
     """Get performance configuration."""
     pipeline_config = get_pipeline_config()
@@ -511,9 +610,3 @@ def get_system_config() -> Dict[str, Any]:
     """Get system configuration."""
     main_config = load_config("config")
     return main_config.get("system", {})
-
-
-def get_croatian_pipeline() -> Dict[str, Any]:
-    """Get Croatian pipeline configuration."""
-    croatian_config = get_croatian_settings()
-    return croatian_config.get("pipeline", {})

@@ -2,9 +2,8 @@
 Complete Multilingual RAG System - End-to-End Pipeline
 Orchestrates all components: preprocessing, vector storage, retrieval, and generation.
 
-Currently optimized for Croatian language but designed with multilingual architecture
-for future language expansion. All Croatian-specific components are configurable
-and can be extended or replaced for other languages.
+Supports multiple languages through configurable components and language-specific
+settings. All components are language-agnostic and configured through TOML files.
 """
 
 import asyncio
@@ -19,13 +18,13 @@ from ..generation.ollama_client import GenerationRequest, OllamaClient
 from ..generation.prompt_templates import create_prompt_builder
 from ..generation.response_parser import create_response_parser
 from ..preprocessing.chunkers import DocumentChunker
-from ..preprocessing.cleaners import CroatianTextCleaner
+from ..preprocessing.cleaners import MultilingualTextCleaner
 from ..preprocessing.extractors import DocumentExtractor
-from ..retrieval.query_processor import CroatianQueryProcessor
-from ..retrieval.ranker import CroatianResultRanker
+from ..retrieval.query_processor import MultilingualQueryProcessor
+from ..retrieval.ranker import ResultRanker
 from ..retrieval.retriever import IntelligentRetriever
-from ..utils.croatian_utils import setup_croatian_environment
-from ..vectordb.embeddings import CroatianEmbeddingModel, EmbeddingConfig
+from ..vectordb.embeddings import EmbeddingConfig
+from ..vectordb.embeddings import MultilingualEmbeddingModel as EmbeddingModel
 from ..vectordb.search import SemanticSearchEngine
 from ..vectordb.storage import ChromaDBStorage
 
@@ -36,10 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+@dataclass
 class RAGQuery:
     """RAG query with metadata."""
 
     text: str
+    language: str = "hr"  # Language code (hr, en, etc.)
     query_id: Optional[str] = None
     user_id: Optional[str] = None
     context_filters: Optional[Dict[str, Any]] = None
@@ -70,12 +71,15 @@ class RAGResponse:
 class RAGSystem:
     """Complete multilingual RAG system orchestrating all pipeline components.
 
-    Currently optimized for Croatian language but designed for multilingual expansion.
+    Supports multiple languages through configurable components.
     """
 
-    def __init__(self, config: Optional[RAGConfig] = None):
-        """Initialize Croatian RAG system."""
+    def __init__(self, config: Optional[RAGConfig] = None, language: str = "hr"):
+        """Initialize RAG system with language support."""
         from ..utils.error_handler import handle_config_error
+
+        # Store language preference
+        self.language = language
 
         # Use DRY config loading if no config provided
         if config is None:
@@ -114,8 +118,8 @@ class RAGSystem:
         """Create fallback config with safe defaults."""
         from .config import (
             ChromaConfig,
-            CroatianConfig,
             EmbeddingConfig,
+            LanguageConfig,
             OllamaConfig,
             ProcessingConfig,
             RetrievalConfig,
@@ -139,7 +143,7 @@ class RAGSystem:
                 )
                 self.chroma = ChromaConfig(
                     db_path="./data/chromadb",
-                    collection_name="croatian_documents",
+                    collection_name="multilingual_documents",  # Fallback collection
                     distance_metric="cosine",
                     ef_construction=200,
                     m=16,
@@ -164,12 +168,12 @@ class RAGSystem:
                     prefer_formal_style=True,
                     include_cultural_context=True,
                 )
-                self.croatian = CroatianConfig(
+                self.language_config = LanguageConfig(
                     enable_morphological_expansion=True,
                     enable_synonym_expansion=True,
                     enable_cultural_context=True,
-                    use_croatian_query_processing=True,
-                    croatian_language_priority=True,
+                    use_language_query_processing=True,
+                    language_priority=True,
                 )
                 self.log_level = "INFO"
                 self.enable_caching = True
@@ -193,8 +197,9 @@ class RAGSystem:
         self.logger.info("Initializing Multilingual RAG System components...")
 
         try:
-            # Setup Croatian environment
-            setup_croatian_environment()
+            # Setup language environment
+            self._text_cleaner = MultilingualTextCleaner(language=self.language)
+            self._text_cleaner.setup_language_environment()
 
             # Initialize preprocessing components
             await self._initialize_preprocessing()
@@ -220,7 +225,7 @@ class RAGSystem:
         self.logger.info("🔧 Initializing preprocessing components...")
 
         self._document_extractor = DocumentExtractor()
-        self._text_cleaner = CroatianTextCleaner()
+        self._text_cleaner = MultilingualTextCleaner(language=self.language)
         self._chunker = DocumentChunker(
             chunk_size=self.config.processing.max_chunk_size,
             overlap=self.config.processing.chunk_overlap,
@@ -232,10 +237,12 @@ class RAGSystem:
         """Initialize vector database components."""
         self.logger.info("🔧 Initializing vector database components...")
 
-        # Initialize embedding model
+        # Initialize embedding model with language-specific cache
+        language_cache_dir = f"{self.config.embedding.cache_folder}/{self.language}"
+
         embedding_config = EmbeddingConfig(
             model_name=self.config.embedding.model_name,
-            cache_dir=self.config.embedding.cache_folder,
+            cache_dir=language_cache_dir,
             device="auto",  # Auto-detect best device
             max_seq_length=self.config.embedding.max_seq_length,
             batch_size=self.config.embedding.batch_size,
@@ -244,15 +251,23 @@ class RAGSystem:
             trust_remote_code=False,  # Security setting
             torch_dtype="auto",  # Auto-detect best dtype
         )
-        self._embedding_model = CroatianEmbeddingModel(embedding_config)
+        self._embedding_model = EmbeddingModel(embedding_config)
         self._embedding_model.load_model()
 
-        # Initialize ChromaDB storage
+        # Initialize ChromaDB storage with language-specific collection
         from ..vectordb.storage import StorageConfig
+
+        # Create language-specific collection name
+        language_collection_map = {
+            "hr": "croatian_documents",
+            "en": "english_documents",
+            "multilingual": "multilingual_documents",
+        }
+        collection_name = language_collection_map.get(self.language, f"{self.language}_documents")
 
         storage_config = StorageConfig(
             db_path=self.config.chroma.db_path,
-            collection_name=self.config.chroma.collection_name,
+            collection_name=collection_name,
             distance_metric=self.config.chroma.distance_metric,
             persist=True,  # Always persist for production
             allow_reset=False,  # Prevent accidental data loss
@@ -271,9 +286,9 @@ class RAGSystem:
         """Initialize retrieval components."""
         self.logger.info("🔧 Initializing retrieval components...")
 
-        self._query_processor = CroatianQueryProcessor()
+        self._query_processor = MultilingualQueryProcessor(language=self.language)
 
-        self._ranker = CroatianResultRanker()
+        self._ranker = ResultRanker(language=self.language)
 
         self._retriever = IntelligentRetriever(
             query_processor=self._query_processor, search_engine=self._search_engine
@@ -285,7 +300,7 @@ class RAGSystem:
         """Initialize generation components."""
         self.logger.info("🔧 Initializing generation components...")
 
-        # Initialize Ollama client with Croatian config
+        # Initialize Ollama client with language config
         from ..generation.ollama_client import OllamaConfig as OllamaClientConfig
 
         ollama_config = OllamaClientConfig(
@@ -348,7 +363,7 @@ class RAGSystem:
                         failed_docs += 1
                         continue
 
-                    # Clean Croatian text
+                    # Clean text with language-specific processing
                     cleaned_text = self._text_cleaner.clean_text(extracted_text)
 
                     # Create chunks
@@ -371,7 +386,7 @@ class RAGSystem:
                         metadata = {
                             "source": doc_path,
                             "chunk_index": chunk_idx,
-                            "language": "hr",
+                            "language": self.language,
                             "chunk_id": chunk.chunk_id,
                             "start_char": chunk.start_char,
                             "end_char": chunk.end_char,
@@ -442,7 +457,7 @@ class RAGSystem:
             generation_start = time.time()
 
             # Build prompt
-            prompt_builder = create_prompt_builder(query.text)
+            prompt_builder = create_prompt_builder(query.text, language=query.language)
             context_chunks = [result.get("content", "") for result in retrieval_results.documents]
             system_prompt, user_prompt = prompt_builder.build_prompt(query.text, context_chunks)
 
@@ -452,7 +467,7 @@ class RAGSystem:
                 context=context_chunks,
                 query=query.text,
                 query_type=processed_query.query_type.value,
-                language="hr",
+                language=query.language,
                 metadata=query.metadata,
             )
 
@@ -562,9 +577,14 @@ class RAGSystem:
         except Exception as e:
             self.logger.error(f"❌ Query processing failed: {e}")
 
-            # Return error response
+            # Return error response in the query language
+            error_msg = (
+                "I apologize, an error occurred while processing your question"
+                if query.language == "en"
+                else "Žao mi je, dogodila se greška pri obradi pitanja"
+            )
             return RAGResponse(
-                answer=f"Žao mi je, dogodila se greška pri obradi pitanja: {str(e)}",
+                answer=f"{error_msg}: {str(e)}",
                 query=query.text,
                 retrieved_chunks=[],
                 confidence=0.0,
@@ -666,11 +686,44 @@ class RAGSystem:
         if not self._initialized:
             return {"error": "System not initialized"}
 
+        # Get config and update with actual runtime values
+        config_dict = self.config.to_dict()
+
+        # Update with actual runtime collection name
+        if self._vector_storage and hasattr(self._vector_storage, "config"):
+            config_dict["chroma"]["collection_name"] = self._vector_storage.config.collection_name
+            config_dict["chroma"]["actual_language"] = self.language
+
         stats = {
-            "documents": self._document_count,
-            "queries": self._query_count,
-            "chunks": (self._vector_storage.get_document_count() if self._vector_storage else 0),
-            "config": self.config.to_dict(),
+            "system": {
+                "language": self.language,
+                "initialized": self._initialized,
+                "documents_processed": self._document_count,
+                "queries_processed": self._query_count,
+                "total_chunks": (
+                    self._vector_storage.get_document_count() if self._vector_storage else 0
+                ),
+            },
+            "collections": {
+                "active_collection": (
+                    self._vector_storage.config.collection_name if self._vector_storage else "none"
+                ),
+                "collection_type": f"{self.language}_documents"
+                if self.language != "multilingual"
+                else "multilingual_documents",
+            },
+            "models": {
+                "embedding_model": self.config.embedding.model_name,
+                "embedding_cache": f"{self.config.embedding.cache_folder}/{self.language}",
+                "llm_model": self.config.ollama.model,
+                "device": "cpu",  # TODO: get actual device from embedding model
+            },
+            "performance": {
+                "chunk_size": self.config.processing.max_chunk_size,
+                "max_retrieval": self.config.retrieval.max_k,
+                "similarity_threshold": self.config.retrieval.min_similarity_score,
+                "timeout": self.config.ollama.timeout,
+            },
         }
 
         return stats
@@ -688,7 +741,7 @@ class RAGSystem:
         self.logger.info("✅ Multilingual RAG System shutdown complete")
 
 
-async def create_rag_system(config_path: Optional[str] = None) -> RAGSystem:
+async def create_rag_system(config_path: Optional[str] = None, language: str = "hr") -> RAGSystem:
     """Factory function to create and initialize RAG system."""
     config = RAGConfig()
 
@@ -699,7 +752,7 @@ async def create_rag_system(config_path: Optional[str] = None) -> RAGSystem:
         yaml_config = load_yaml_config(config_path)
         config = RAGConfig.from_dict(yaml_config)
 
-    system = RAGSystem(config)
+    system = RAGSystem(config, language=language)
     await system.initialize()
 
     return system
@@ -714,6 +767,7 @@ async def main():
     parser.add_argument("--config", help="Path to YAML config file")
     parser.add_argument("--add-docs", nargs="+", help="Add documents to the system")
     parser.add_argument("--query", help="Query the system")
+    parser.add_argument("--lang", default="hr", help="Language code (hr, en, etc.)")
     parser.add_argument("--health", action="store_true", help="Run health check")
     parser.add_argument("--stats", action="store_true", help="Show system stats")
 
@@ -726,7 +780,7 @@ async def main():
     )
 
     # Create system
-    system = await create_rag_system(args.config)
+    system = await create_rag_system(args.config, language=args.lang)
 
     try:
         if args.health:
@@ -747,7 +801,7 @@ async def main():
 
         if args.query:
             print(f"🔍 Querying: {args.query}")
-            query = RAGQuery(text=args.query, query_id="cli-test")
+            query = RAGQuery(text=args.query, language=args.lang, query_id="cli-test")
             response = await system.query(query, return_debug_info=True)
 
             print("💬 Response:")

@@ -57,41 +57,46 @@ class HybridResult:
     chunk_id: str = ""
 
 
-class CroatianBM25:
-    """BM25 with Croatian text preprocessing."""
+class MultilingualBM25:
+    """BM25 with multilingual text preprocessing."""
 
-    def __init__(self, documents: List[str], k1: float = 1.5, b: float = 0.75):
+    def __init__(
+        self, documents: List[str], language: str = "hr", k1: float = 1.5, b: float = 0.75
+    ):
         """
-        Initialize BM25 with Croatian preprocessing.
+        Initialize BM25 with multilingual preprocessing.
 
         Args:
             documents: List of document texts
+            language: Language code (hr, en, etc.)
             k1: BM25 parameter controlling term frequency saturation
             b: BM25 parameter controlling length normalization
         """
-        from ..utils.config_loader import get_croatian_retrieval
+        from ..utils.config_loader import get_language_config
         from ..utils.error_handler import handle_config_error
 
         self.documents = documents
+        self.language = language
         self.k1 = k1
         self.b = b
 
-        # Load Croatian stop words from config
-        croatian_config = handle_config_error(
-            operation=get_croatian_retrieval,
-            fallback_value={"stop_words": []},
-            config_file="config/croatian.toml",
-            section="croatian retrieval",
+        # Load language-specific stop words from config
+        language_config = handle_config_error(
+            operation=lambda: get_language_config(language),
+            fallback_value={"retrieval": {"stop_words": []}},
+            config_file=f"config/{language}.toml",
+            section=f"{language} retrieval",
         )
-        self.stop_words = set(croatian_config.get("stop_words", []))
+        retrieval_config = language_config.get("retrieval", {})
+        self.stop_words = set(retrieval_config.get("stop_words", []))
 
         # Preprocess documents for BM25
-        self.processed_docs = [self._preprocess_croatian(doc) for doc in documents]
+        self.processed_docs = [self._preprocess_text(doc) for doc in documents]
         self.bm25 = BM25Okapi(self.processed_docs, k1=k1, b=b)
 
-    def _preprocess_croatian(self, text: str) -> List[str]:
+    def _preprocess_text(self, text: str) -> List[str]:
         """
-        Preprocess Croatian text for BM25.
+        Preprocess text for BM25 based on language.
 
         Args:
             text: Input text
@@ -102,8 +107,13 @@ class CroatianBM25:
         # Convert to lowercase
         text = text.lower()
 
-        # Remove punctuation but keep Croatian characters
-        text = re.sub(r"[^\w\sčćžšđ]", " ", text)
+        # Language-specific character handling
+        if self.language == "hr":
+            # Remove punctuation but keep Croatian characters
+            text = re.sub(r"[^\w\sčćžšđ]", " ", text)
+        else:
+            # Default to basic alphanumeric for other languages
+            text = re.sub(r"[^\w\s]", " ", text)
 
         # Split into tokens
         tokens = text.split()
@@ -119,7 +129,7 @@ class CroatianBM25:
 
     def get_scores(self, query: str) -> np.ndarray:
         """Get BM25 scores for query."""
-        processed_query = self._preprocess_croatian(query)
+        processed_query = self._preprocess_text(query)
         return self.bm25.get_scores(processed_query)
 
     def get_top_n(self, query: str, n: int = 5) -> List[Tuple[int, float]]:
@@ -132,14 +142,16 @@ class CroatianBM25:
 class HybridRetriever:
     """Hybrid retrieval combining dense embeddings and BM25."""
 
-    def __init__(self, config: HybridRetrievalConfig = None):
+    def __init__(self, config: HybridRetrievalConfig = None, language: str = "hr"):
         """
         Initialize hybrid retriever.
 
         Args:
             config: Hybrid retrieval configuration
+            language: Language code (hr, en, etc.)
         """
         self.config = config or HybridRetrievalConfig.from_config()
+        self.language = language
 
         self.dense_weight = self.config.dense_weight
         self.sparse_weight = self.config.sparse_weight
@@ -163,7 +175,9 @@ class HybridRetriever:
         self.metadatas = metadatas
 
         # Initialize BM25
-        self.bm25 = CroatianBM25(documents, k1=self.bm25_k1, b=self.bm25_b)
+        self.bm25 = MultilingualBM25(
+            documents, language=self.language, k1=self.bm25_k1, b=self.bm25_b
+        )
         self.is_indexed = True
 
     def search(

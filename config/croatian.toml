@@ -75,6 +75,7 @@ uppercase_chars = "ČĆŽŠĐ"
 # Croatian-specific text preprocessing settings
 remove_diacritics = false  # Keep Croatian diacritics (š, ć, č, ž, đ)
 normalize_case = true
+language_uppercase_chars = ["Č", "Ć", "Ž", "Š", "Đ"]  # Croatian uppercase chars for chunking
 
 # ============================================================================
 # DOCUMENT PROCESSING

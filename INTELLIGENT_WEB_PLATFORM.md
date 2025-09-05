@@ -561,6 +561,52 @@ SENTRY_DSN=<your_sentry_dsn>
 - Cost allocation across different model tiers
 - Detailed usage reporting and analytics
 
+## Minimum Requirements (Development/Small Scale)
+
+**CPU:** 4-6 cores (8+ threads)
+- Local LLM inference is CPU-intensive
+- Multiple services (Elixir, Python/FastAPI, Chroma/Weaviate, PostgreSQL, Redis)
+
+**RAM:** 16-24GB
+- Local LLM: 4-8GB (depending on model size - 7B models ~4GB, 13B+ models 8GB+)
+- Chroma/Weaviate: 2-4GB for vector storage and indexing
+- PostgreSQL: 2-4GB
+- Elixir/OTP: 1-2GB
+- Python/FastAPI: 1-2GB
+- Redis: 512MB-1GB
+- OS overhead: 2-4GB
+
+**Storage:** 100GB+ SSD
+- Vector embeddings can be storage-heavy
+- Local LLM models: 4-20GB depending on model
+- Database storage growth
+- Docker images and logs
+
+## Production-Ready Requirements
+
+**CPU:** 8-12 cores
+**RAM:** 32-64GB
+**Storage:** 500GB+ NVMe SSD
+
+## Hosting Options by Budget:
+
+**Local Development:**
+- High-spec workstation or gaming PC
+- Mac Studio/MacBook Pro M2+ (excellent for LLM inference)
+
+**VPS Options:**
+- **Hetzner dedicated servers:** €39-89/month for decent specs
+- **DigitalOcean:** $80-160/month for CPU-optimized droplets
+- **AWS/GCP:** $100-300/month (more expensive but better managed services)
+- **OVH/Scaleway:** Often cheaper in EU
+
+**Hybrid Approach:**
+- Host lightweight services (Elixir, FastAPI, PostgreSQL, Redis) on cheaper VPS ($20-40/month)
+- Keep local LLM and vector DB on powerful local machine
+- Connect via secure tunnel (Tailscale, WireGuard)
+
+The local LLM is your biggest resource constraint. Consider starting with smaller models (7B parameters) and scaling up based on performance needs. Would you be open to using cloud LLM APIs initially to reduce hardware requirements?
+
 ---
 
 **Next Steps**: Choose your starting phase and begin with the multi-tenant scheduler foundation, then incrementally add crawler, RAG integration, and advanced workflow capabilities.

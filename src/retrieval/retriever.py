@@ -1,5 +1,5 @@
 """
-Main retrieval logic for Croatian RAG system.
+Main retrieval logic for multilingual RAG system.
 Orchestrates query processing, search, and result ranking.
 """
 
@@ -11,10 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from ..utils.config_loader import get_retrieval_config
 from ..utils.error_handler import handle_config_error
-from ..vectordb.embeddings import CroatianEmbeddingModel
+from ..vectordb.embeddings import MultilingualEmbeddingModel
 from ..vectordb.search import SearchMethod, SearchResponse, SemanticSearchEngine
 from ..vectordb.storage import ChromaDBStorage
-from .query_processor import CroatianQueryProcessor, ProcessedQuery, QueryType
+from .query_processor import MultilingualQueryProcessor, ProcessedQuery, QueryType
 
 
 class RetrievalStrategy(Enum):
@@ -86,11 +86,11 @@ class RetrievalResult:
 
 
 class IntelligentRetriever:
-    """Intelligent document retriever for Croatian RAG system."""
+    """Intelligent document retriever for multilingual RAG system."""
 
     def __init__(
         self,
-        query_processor: CroatianQueryProcessor,
+        query_processor: MultilingualQueryProcessor,
         search_engine: SemanticSearchEngine,
         config: RetrievalConfig = None,
     ):
@@ -98,7 +98,7 @@ class IntelligentRetriever:
         Initialize intelligent retriever.
 
         Args:
-            query_processor: Croatian query processor
+            query_processor: Multilingual query processor
             search_engine: Semantic search engine
             config: Retrieval configuration
         """
@@ -122,7 +122,7 @@ class IntelligentRetriever:
         strategy: Optional[RetrievalStrategy] = None,
     ) -> RetrievalResult:
         """
-        Retrieve relevant documents for Croatian query.
+        Retrieve relevant documents for multilingual query.
 
         Args:
             query: User query string
@@ -644,17 +644,19 @@ class IntelligentRetriever:
 
 
 def create_intelligent_retriever(
-    embedding_model: CroatianEmbeddingModel,
+    embedding_model: MultilingualEmbeddingModel,
     storage: ChromaDBStorage,
     strategy: RetrievalStrategy = RetrievalStrategy.ADAPTIVE,
+    language: str = "hr",
 ) -> IntelligentRetriever:
     """
     Factory function to create intelligent retriever.
 
     Args:
-        embedding_model: Croatian embedding model
+        embedding_model: Multilingual embedding model
         storage: ChromaDB storage
         strategy: Default retrieval strategy
+        language: Language code ('hr' for Croatian, 'en' for English)
 
     Returns:
         Configured IntelligentRetriever
@@ -663,10 +665,5 @@ def create_intelligent_retriever(
     from .query_processor import create_query_processor
 
     # Create components
-    query_processor = create_query_processor(language="hr")
+    query_processor = create_query_processor(language=language)
     search_engine = create_search_engine(embedding_model, storage)
-
-    # Create config
-    config = RetrievalConfig(strategy=strategy)
-
-    return IntelligentRetriever(query_processor, search_engine, config)

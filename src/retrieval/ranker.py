@@ -1,5 +1,5 @@
 """
-Result ranking and filtering for Croatian RAG system.
+Result ranking and filtering for multilingual RAG system.
 Advanced ranking algorithms to improve retrieval quality.
 """
 
@@ -21,21 +21,21 @@ class RankingMethod(Enum):
     TF_IDF = "tf_idf"  # Term Frequency - Inverse Document Frequency
     SEMANTIC = "semantic"  # Pure semantic similarity
     HYBRID = "hybrid"  # Combine multiple signals
-    CROATIAN_ENHANCED = "croatian"  # Croatian-specific enhancements
+    LANGUAGE_ENHANCED = "language_enhanced"  # Language-specific enhancements
 
 
 @dataclass
 class RankingConfig:
     """Configuration for result ranking."""
 
-    method: RankingMethod = RankingMethod.CROATIAN_ENHANCED
+    method: RankingMethod = RankingMethod.LANGUAGE_ENHANCED
     enable_diversity: bool = True
     diversity_threshold: float = 0.8
     boost_recent: bool = False
     boost_authoritative: bool = True
     content_length_factor: bool = True
     keyword_density_factor: bool = True
-    croatian_specific_boost: bool = True
+    language_specific_boost: bool = True
 
     @classmethod
     def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "RankingConfig":
@@ -52,11 +52,11 @@ class RankingConfig:
         )
 
         # Handle method enum conversion
-        method_str = ranking_config.get("method", "croatian")
+        method_str = ranking_config.get("method", "language_enhanced")
         try:
             method = RankingMethod(method_str)
         except ValueError:
-            method = RankingMethod.CROATIAN_ENHANCED
+            method = RankingMethod.LANGUAGE_ENHANCED
 
         return cls(
             method=method,
@@ -66,7 +66,7 @@ class RankingConfig:
             boost_authoritative=ranking_config.get("boost_authoritative", True),
             content_length_factor=ranking_config.get("content_length_factor", True),
             keyword_density_factor=ranking_config.get("keyword_density_factor", True),
-            croatian_specific_boost=ranking_config.get("croatian_specific_boost", True),
+            language_specific_boost=ranking_config.get("language_specific_boost", True),
         )
 
 
@@ -94,69 +94,112 @@ class RankedDocument:
     ranking_metadata: Dict[str, Any]
 
 
-class CroatianResultRanker:
-    """Advanced result ranker optimized for Croatian content."""
+class ResultRanker:
+    """Advanced result ranker for multilingual content."""
 
-    def __init__(self, config: RankingConfig = None):
+    def __init__(self, config: RankingConfig = None, language: str = "hr"):
         """
-        Initialize Croatian result ranker.
+        Initialize result ranker.
 
         Args:
             config: Ranking configuration
+            language: Language code for ranking
         """
-        from ..utils.config_loader import get_croatian_retrieval
+        from ..utils.config_loader import get_language_specific_config
         from ..utils.error_handler import handle_config_error
 
+        self.language = language
         self.config = config or RankingConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
-        # Load Croatian-specific settings
-        croatian_config = handle_config_error(
-            operation=get_croatian_retrieval,
+        # Load language-specific settings
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("retrieval", self.language),
             fallback_value={"morphology": {}},
-            config_file="config/croatian.toml",
-            section="croatian retrieval",
+            config_file=f"config/{self.language}.toml",
+            section=f"{self.language} retrieval",
         )
 
-        # Croatian language-specific features from config
-        morphology = croatian_config.get("morphology", {})
-        default_words = [
-            "zagreb",
-            "hrvatska",
-            "dubrovnik",
-            "split",
-            "rijeka",
-            "osijek",
-            "glavni",
-            "važan",
-            "značajan",
-            "poznati",
-            "tradicionalni",
-            "historijski",
-            "kulturni",
-            "turistički",
-            "nacionalni",
-        ]
+        # Language-specific features from config
+        morphology = language_config.get("morphology", {})
+        # Language-specific importance words from config or defaults
+        if self.language == "hr":
+            default_words = [
+                "zagreb",
+                "hrvatska",
+                "dubrovnik",
+                "split",
+                "rijeka",
+                "osijek",
+                "glavni",
+                "važan",
+                "značajan",
+                "poznati",
+                "tradicionalni",
+                "historijski",
+                "kulturni",
+                "turistički",
+                "nacionalni",
+            ]
+        elif self.language == "en":
+            default_words = [
+                "important",
+                "significant",
+                "major",
+                "primary",
+                "essential",
+                "key",
+                "main",
+                "crucial",
+                "critical",
+                "fundamental",
+                "notable",
+                "prominent",
+                "leading",
+                "advanced",
+                "innovative",
+            ]
+        else:
+            default_words = []
 
         # Combine configured morphological variations
-        self.croatian_importance_words = set(default_words)
+        self.language_importance_words = set(default_words)
         for word_group in morphology.values():
             if isinstance(word_group, list):
-                self.croatian_importance_words.update(word_group)
+                self.language_importance_words.update(word_group)
 
-        # Content quality indicators
-        self.quality_indicators = {
-            "positive": [
-                r"\b(detaljno|sveobuhvatno|temeljito|precizno)\b",
-                r"\b(službeno|autoritetno|provjereno|pouzdano)\b",
-                r"\b(suvremeno|aktualno|novo|nedavno)\b",
-            ],
-            "negative": [
-                r"\b(možda|vjerojatno|nejasno|približno)\b",
-                r"\b(staro|zastarjelo|neprovjereno|sumnjivo)\b",
-                r"\b(kratko|površno|nepotpuno|fragmentarno)\b",
-            ],
-        }
+        # Content quality indicators (language-specific)
+        if self.language == "hr":
+            self.quality_indicators = {
+                "positive": [
+                    r"\b(detaljno|sveobuhvatno|temeljito|precizno)\b",
+                    r"\b(službeno|autoritetno|provjereno|pouzdano)\b",
+                    r"\b(suvremeno|aktualno|novo|nedavno)\b",
+                ],
+                "negative": [
+                    r"\b(možda|vjerojatno|nejasno|približno)\b",
+                    r"\b(staro|zastarjelo|neprovjereno|sumnjivo)\b",
+                    r"\b(kratko|površno|nepotpuno|fragmentarno)\b",
+                ],
+            }
+        elif self.language == "en":
+            self.quality_indicators = {
+                "positive": [
+                    r"\b(detailed|comprehensive|thorough|precise)\b",
+                    r"\b(official|authoritative|verified|reliable)\b",
+                    r"\b(current|recent|new|updated)\b",
+                ],
+                "negative": [
+                    r"\b(maybe|probably|unclear|approximately)\b",
+                    r"\b(old|outdated|unverified|questionable)\b",
+                    r"\b(brief|superficial|incomplete|fragmentary)\b",
+                ],
+            }
+        else:
+            self.quality_indicators = {
+                "positive": [],
+                "negative": [],
+            }
 
         # Document type preferences
         self.type_weights = {
@@ -261,10 +304,10 @@ class CroatianResultRanker:
         quality_signal = self._calculate_content_quality(content, metadata)
         ranking_signals.append(quality_signal)
 
-        # Signal 4: Croatian-specific features
-        if self.config.croatian_specific_boost:
-            croatian_signal = self._calculate_croatian_relevance(content, query)
-            ranking_signals.append(croatian_signal)
+        # Signal 4: Language-specific features
+        if self.config.language_specific_boost:
+            language_signal = self._calculate_language_relevance(content, query)
+            ranking_signals.append(language_signal)
 
         # Signal 5: Document authority
         if self.config.boost_authoritative:
@@ -417,68 +460,105 @@ class CroatianResultRanker:
             },
         )
 
-    def _calculate_croatian_relevance(self, content: str, query: ProcessedQuery) -> RankingSignal:
+    def _calculate_language_relevance(self, content: str, query: ProcessedQuery) -> RankingSignal:
         """
-        Calculate Croatian-specific relevance boost.
+        Calculate language-specific relevance boost.
 
         Args:
             content: Document content
             query: Processed query
 
         Returns:
-            Croatian relevance ranking signal
+            Language relevance ranking signal
         """
         score = 0.0
         content_lower = content.lower()
 
-        # Boost for Croatian diacritics (indicates proper Croatian content)
-        croatian_chars = "čćšžđ"
-        diacritic_count = sum(content_lower.count(char) for char in croatian_chars)
-        if diacritic_count > 0:
-            score += min(0.3, diacritic_count / len(content) * 1000)
+        if self.language == "hr":
+            # Croatian-specific features
+            # Boost for Croatian diacritics (indicates proper Croatian content)
+            croatian_chars = "čćšžđ"
+            diacritic_count = sum(content_lower.count(char) for char in croatian_chars)
+            if diacritic_count > 0:
+                score += min(0.3, diacritic_count / len(content) * 1000)
 
-        # Boost for Croatian importance words
-        importance_matches = sum(
-            1 for word in self.croatian_importance_words if word in content_lower
-        )
-        score += min(0.4, importance_matches * 0.1)
+            # Boost for Croatian importance words
+            importance_matches = sum(
+                1 for word in self.language_importance_words if word in content_lower
+            )
+            score += min(0.4, importance_matches * 0.1)
 
-        # Boost for Croatian cultural references
-        cultural_patterns = [
-            r"\b(biser jadrana|perla jadrana)\b",
-            r"\b(hrvatski?\w* kralj|hrvatska povijest)\b",
-            r"\b(adriatic|jadransko more)\b",
-            r"\b(unesco|svjetska baština)\b",
-        ]
+            # Boost for Croatian cultural references
+            cultural_patterns = [
+                r"\b(biser jadrana|perla jadrana)\b",
+                r"\b(hrvatski?\w* kralj|hrvatska povijest)\b",
+                r"\b(adriatic|jadransko more)\b",
+                r"\b(unesco|svjetska baština)\b",
+            ]
 
-        cultural_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in cultural_patterns
-        )
-        score += min(0.2, cultural_matches * 0.1)
+            cultural_matches = sum(
+                len(re.findall(pattern, content_lower, re.IGNORECASE))
+                for pattern in cultural_patterns
+            )
+            score += min(0.2, cultural_matches * 0.1)
 
-        # Boost for proper Croatian grammar indicators
-        grammar_patterns = [
-            r"\b\w+ić\b",  # Common Croatian surname ending
-            r"\b\w+ović\b",  # Common Croatian surname ending
-            r"\b\w+ski\b",  # Croatian adjective ending
-            r"\b\w+nja\b",  # Croatian place name ending
-        ]
+            # Boost for proper Croatian grammar indicators
+            grammar_patterns = [
+                r"\b\w+ić\b",  # Common Croatian surname ending
+                r"\b\w+ović\b",  # Common Croatian surname ending
+                r"\b\w+ski\b",  # Croatian adjective ending
+                r"\b\w+nja\b",  # Croatian place name ending
+            ]
 
-        grammar_matches = sum(
-            len(re.findall(pattern, content_lower)) for pattern in grammar_patterns
-        )
-        score += min(0.1, grammar_matches / len(content.split()) * 10)
+            grammar_matches = sum(
+                len(re.findall(pattern, content_lower)) for pattern in grammar_patterns
+            )
+            score += min(0.1, grammar_matches / len(content.split()) * 10)
+
+        elif self.language == "en":
+            # English-specific features
+            # Boost for proper English capitalization patterns
+            sentence_count = len(re.findall(r"[.!?]+", content))
+            capital_starts = len(re.findall(r"(?:^|[.!?]\s+)([A-Z][a-z])", content, re.MULTILINE))
+            if sentence_count > 0:
+                capitalization_ratio = capital_starts / sentence_count
+                score += min(0.2, capitalization_ratio * 0.5)
+
+            # Boost for English-specific vocabulary indicators
+            english_indicators = [
+                r"\b(the|and|that|have|for|not|with|you|this|but|his|from|they)\b",
+                r"\b(United States|UK|Britain|England|American|British)\b",
+                r"\b(technology|science|research|development|innovation)\b",
+            ]
+
+            indicator_matches = sum(
+                len(re.findall(pattern, content_lower, re.IGNORECASE))
+                for pattern in english_indicators
+            )
+            score += min(0.4, indicator_matches / len(content.split()) * 5)
+
+            # Boost for proper English grammar patterns
+            grammar_patterns = [
+                r"\b(ing\b)",  # Common English gerund ending
+                r"\b\w+ly\b",  # Common English adverb ending
+                r"\b\w+tion\b",  # Common English noun ending
+                r"\b\w+ness\b",  # Common English noun ending
+            ]
+
+            grammar_matches = sum(
+                len(re.findall(pattern, content_lower)) for pattern in grammar_patterns
+            )
+            score += min(0.3, grammar_matches / len(content.split()) * 10)
 
         score = max(0.0, min(1.0, score))
 
         return RankingSignal(
-            name="croatian_relevance",
+            name=f"{self.language}_relevance",
             score=score,
             weight=0.2,
             metadata={
-                "diacritic_density": diacritic_count / len(content) if content else 0,
-                "importance_words": importance_matches,
-                "cultural_references": cultural_matches,
+                "language": self.language,
+                "language_features_detected": score > 0.1,
             },
         )
 
@@ -785,18 +865,20 @@ class CroatianResultRanker:
 
 
 def create_result_ranker(
-    method: RankingMethod = RankingMethod.CROATIAN_ENHANCED,
+    method: RankingMethod = RankingMethod.LANGUAGE_ENHANCED,
     enable_diversity: bool = True,
-) -> CroatianResultRanker:
+    language: str = "hr",
+) -> ResultRanker:
     """
     Factory function to create result ranker.
 
     Args:
         method: Ranking method to use
         enable_diversity: Whether to enable diversity filtering
+        language: Language code for ranking
 
     Returns:
-        Configured CroatianResultRanker
+        Configured ResultRanker
     """
     config = RankingConfig(method=method, enable_diversity=enable_diversity)
-    return CroatianResultRanker(config)
+    return ResultRanker(config, language=language)

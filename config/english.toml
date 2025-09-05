@@ -1,0 +1,320 @@
+# English Language Settings
+# Specific configurations for English text processing and generation
+
+[language]
+code = "en"
+name = "English"
+family = "germanic"
+
+# ============================================================================
+# SHARED ENGLISH CONSTANTS
+# ============================================================================
+[shared]
+# English character patterns (used across multiple components)
+english_chars_pattern = "[^\\w\\s.,!?:;()-]"
+english_uppercase_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# Common English settings
+response_language = "english"
+cultural_context = "international"
+preserve_diacritics = false
+
+# English question patterns (shared across retrieval and prompts)
+[shared.question_patterns]
+factual = ["who", "what", "when", "where", "which", "whose", "whom", "how many", "how much"]
+explanatory = ["how", "why", "explain", "describe", "clarify"]
+comparison = ["difference", "compare", "versus", "similar", "different", "contrast"]
+summarization = ["summary", "summarize", "overview", "briefly", "main points"]
+
+# English stopwords (unified for all processing)
+[shared.stopwords]
+# Complete English stopword list (used by both text processing and retrieval)
+words = [
+    # Basic function words
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he",
+    "in", "is", "it", "its", "of", "on", "that", "the", "to", "was", "will", "with",
+    # Extended stopwords
+    "about", "after", "all", "also", "am", "any", "been", "but", "can", "could",
+    "did", "do", "does", "don", "each", "even", "get", "had", "have", "her", "here",
+    "him", "his", "how", "i", "if", "into", "just", "like", "may", "me", "my", "no",
+    "not", "now", "only", "or", "other", "our", "out", "over", "own", "said", "same",
+    "she", "should", "so", "some", "such", "than", "them", "these", "they", "this",
+    "through", "time", "up", "very", "we", "were", "what", "when", "where", "who",
+    "why", "would", "you", "your",
+    # Additional common words
+    "above", "again", "against", "before", "below", "between", "both", "down", "during",
+    "few", "further", "here", "hers", "herself", "him", "himself", "how", "i", "if",
+    "in", "into", "is", "it", "its", "itself", "let", "me", "more", "most", "myself",
+    "nor", "off", "once", "only", "or", "other", "ought", "our", "ours", "ourselves",
+    "out", "over", "own", "same", "shan", "she", "should", "so", "some", "such",
+    "than", "that", "the", "their", "theirs", "them", "themselves", "then", "there",
+    "these", "they", "this", "those", "through", "to", "too", "under", "until", "up",
+    "very", "was", "way", "we", "well", "were", "what", "where", "which", "while",
+    "who", "with", "would", "you", "your", "yours", "yourself", "yourselves"
+]
+
+# English character patterns (unified)
+[shared.english_chars]
+# Standard English characters (ASCII-based)
+all_letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+# Lowercase only (for language detection)
+lowercase_letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
+# Pattern for matching English text
+pattern = "[^\\w\\s.,!?:;()-]"
+uppercase_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# English normalization (no diacritic mapping needed)
+[shared.normalization_map]
+# English typically doesn't need diacritic normalization
+# but we keep this for consistency and potential foreign words
+"é" = "e"
+"è" = "e"
+"ê" = "e"
+"ë" = "e"
+"à" = "a"
+"á" = "a"
+"â" = "a"
+"ä" = "a"
+"ù" = "u"
+"ú" = "u"
+"û" = "u"
+"ü" = "u"
+
+# ============================================================================
+# TEXT PROCESSING
+# ============================================================================
+[text_processing]
+# English-specific text preprocessing settings
+remove_diacritics = false  # Keep foreign diacritics in English text
+normalize_case = true
+language_uppercase_chars = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]  # English uppercase chars for chunking
+
+# Text file encoding support for English documents
+text_encodings = ["utf-8", "cp1252", "iso-8859-1"]
+
+# ============================================================================
+# DOCUMENT PROCESSING
+# ============================================================================
+[chunking]
+# English sentence and paragraph detection
+sentence_endings = [".", "!", "?", "...", "…"]
+abbreviations = ["Mr.", "Mrs.", "Dr.", "Prof.", "Inc.", "Ltd.", "Corp.", "Co.", "vs.", "etc.", "i.e.", "e.g.", "Ph.D.", "M.D.", "B.A.", "M.A.", "CEO", "CFO", "CTO", "USA", "UK", "EU", "NATO"]
+paragraph_separators = ["\n\n", "\r\n\r\n"]
+
+# Sentence extraction settings
+sentence_ending_pattern = "[.!?]+(?=\\s+[A-Z]|\\s*$)"
+min_sentence_length = 10
+
+[document_cleaning]
+# English document cleaning patterns
+header_footer_patterns = [
+    "^\\s*\\d+\\s*$",                    # Standalone page numbers
+    "^\\s*PAGE\\s*\\d+.*$",              # English "PAGE X"
+    "^\\s*DOCUMENT\\s*\\d+.*$",          # Document headers
+    "^\\s*CONFIDENTIAL.*$",              # Confidential headers
+    "^\\s*DRAFT.*$",                     # Draft headers
+    "^\\s*FINAL.*$"                      # Final version headers
+]
+
+# OCR error corrections for English text
+[document_cleaning.ocr_corrections]
+"\\s+([A-Z])\\s+" = "\\1"               # Fix spaced capitals
+"rn" = "m"                              # Common OCR error
+"vv" = "w"                              # Common OCR error
+"\\s+([.,!?])\\s+" = "\\1 "             # Fix spaced punctuation
+
+# ============================================================================
+# EMBEDDINGS & VECTOR DATABASE
+# ============================================================================
+[embeddings]
+# English language embeddings configuration
+model_name = "BAAI/bge-m3"  # BGE-M3: Best multilingual model (also excellent for English)
+supports_multilingual = true
+english_optimized = true  # BGE-M3 has excellent English support
+
+[vectordb]
+# English-specific vector database settings
+collection_name = "english_documents"
+
+# English text processing for embeddings
+[vectordb.embeddings]
+english_aware_models = [
+    "sentence-transformers/all-MiniLM-L6-v2",
+    "sentence-transformers/all-mpnet-base-v2",
+    "BAAI/bge-small-en-v1.5",
+    "BAAI/bge-base-en-v1.5"
+]
+
+# English document metadata
+[vectordb.metadata]
+english_content_indicators = ["English", "EN", "en", "english", "United States", "United Kingdom"]
+
+# Search optimization for English
+[vectordb.search]
+english_query_expansion = true
+preserve_case_sensitivity = false  # English is generally case-insensitive for search
+boost_title_matches = true
+
+# ============================================================================
+# RETRIEVAL & QUERY PROCESSING
+# ============================================================================
+[retrieval]
+# English synonyms for query expansion
+[retrieval.synonyms]
+big = ["big", "large", "huge", "enormous", "massive", "significant"]
+small = ["small", "little", "tiny", "minor", "minimal"]
+good = ["good", "excellent", "great", "outstanding", "superb", "quality"]
+bad = ["bad", "poor", "terrible", "awful", "inadequate", "deficient"]
+
+# English morphological variations for search
+[retrieval.morphology]
+america = ["america", "american", "americas", "usa", "united states"]
+economy = ["economy", "economic", "economics", "economical", "financial"]
+politics = ["politics", "political", "politician", "policy", "policies"]
+culture = ["culture", "cultural", "cultures", "culturally"]
+
+# ============================================================================
+# GENERATION & PROMPTS
+# ============================================================================
+[generation]
+# English text generation settings
+system_prompt_language = "english"
+formality_level = "professional"  # English business communication norm
+
+[prompts]
+# English system prompts and templates
+system_base = "You are an AI assistant that helps with document analysis in English."
+context_intro = "Based on the following context:"
+answer_intro = "Answer:"
+no_context_response = "I don't have enough information in the context to answer that question."
+error_message_template = "Error generating response: {error}"
+
+# Prompt formatting templates
+chunk_header_template = "Document {index}:"
+context_separator = "\n\n"
+
+# Base system prompt for all generation
+base_system_prompt = """You are a precise and professional assistant who responds in English using only the provided data.
+Your role is to give accurate, relevant, and complete answers based on the context.
+If information is not available in the context, clearly state that you don't know."""
+
+question_answering_system = """You are a helpful assistant who responds in English.
+Use the given contextual information to provide a precise and clear answer.
+If the information is insufficient, state that you cannot provide a complete answer."""
+question_answering_user = "Question: {query}\n\nPlease provide a detailed answer:"
+question_answering_context = "Contextual information:\n{context}\n\n"
+
+summarization_system = """You are an expert at summarizing texts in English.
+Create a concise but informative summary that retains key information.
+Use only information from the given context."""
+summarization_user = "Summarization request: {query}\n\nSummary:"
+summarization_context = "Text to summarize:\n{context}\n\n"
+
+factual_qa_system = """You are a fact-checker who responds in English using only facts from the given context.
+Provide precise, factual answers. If exact information is not available, clearly indicate this."""
+factual_qa_user = "Factual question: {query}\n\nFactual answer:"
+factual_qa_context = "Relevant facts:\n{context}\n\n"
+
+explanatory_system = """You are an educator who explains concepts in English.
+Use the context to provide clear, structured explanations adapted to the query.
+Break down complex concepts into understandable parts."""
+explanatory_user = "Explanation needed for: {query}\n\nDetailed explanation:"
+explanatory_context = "Information for explanation:\n{context}\n\n"
+
+comparison_system = """You are an analyst who compares different aspects in English.
+Use the context to highlight similarities, differences, and key characteristics.
+Be objective and rely only on the given information."""
+comparison_user = "Comparison needed for: {query}\n\nAnalytical comparison:"
+comparison_context = "Data for comparison:\n{context}\n\n"
+
+cultural_context_system = """You are an expert in international business and culture who responds in English.
+Use the context to provide rich, culturally aware answers.
+Recognize international references, business practices, and global contexts.
+Explain cultural significance and context where relevant."""
+cultural_context_user = "Cultural/business question: {query}\n\nAnswer with cultural context:"
+cultural_context_context = "Relevant cultural and business information:\n{context}\n\n"
+
+business_system = """You are a business consultant who responds in English.
+Use the context to provide practical and informative answers about business matters.
+Focus on useful information for professionals and highlight key business insights."""
+business_user = "Business question: {query}\n\nBusiness response:"
+business_context = "Business information:\n{context}\n\n"
+
+# English keywords for prompt template selection (unique patterns only)
+[prompts.keywords]
+cultural = ["culture", "international", "global", "business practices", "customs", "traditions"]
+business = ["business", "financial", "economic", "corporate", "commercial", "investment", "revenue"]
+
+[formal_prompts]
+# English formal style prompts
+formal_instruction = "Always respond in a professional and formal style."
+cultural_context_instruction = "Include relevant cultural or business context in your response when appropriate."
+
+# ============================================================================
+# RESPONSE PROCESSING & CONFIDENCE
+# ============================================================================
+[confidence]
+# English-specific confidence calculation settings
+error_phrases = ["error", "don't know", "cannot", "unable", "sorry", "unfortunately", "unclear"]
+positive_indicators = ["known", "certain", "clear", "definite", "confirmed", "established"]
+confidence_threshold = 0.5
+
+# English response parsing patterns
+[response_parsing]
+# English language patterns for response analysis
+no_answer_patterns = ["don't know", "cannot", "no data", "not sure", "unclear"]
+source_patterns = ["source:", "according to:", "document:", "based on document"]
+
+# Confidence indicators
+[response_parsing.confidence_indicators]
+high = ["clearly", "certainly", "definitely", "undoubtedly", "confirmed"]
+medium = ["likely", "probably", "appears", "seems", "indicates"]
+low = ["maybe", "possibly", "unclear", "hard to say", "cannot be certain"]
+
+# Display configuration
+[response_parsing.display]
+no_answer_message = "I'm sorry, I cannot find an answer to your question in the available documents."
+high_confidence_label = "High confidence"
+medium_confidence_label = "Medium confidence"
+low_confidence_label = "Low confidence"
+sources_prefix = "Sources"
+
+# Text cleaning configuration
+[response_parsing.cleaning]
+prefixes_to_remove = ["^(answer|response):", "^(result|output):", "^(text|content):"]
+
+# Language detection patterns
+[response_parsing.language_detection]
+english_words = ["the", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by"]
+foreign_words = ["je", "su", "biti", "imati", "moći", "htjeti", "reći", "znati"]
+
+# ============================================================================
+# PIPELINE CONFIGURATION
+# ============================================================================
+[pipeline]
+# English-specific pipeline settings
+enable_morphological_expansion = true
+enable_synonym_expansion = true
+enable_cultural_context = true
+use_english_query_processing = true
+english_language_priority = true
+
+# English preprocessing settings
+[pipeline.processing]
+preserve_english_formatting = true
+respect_english_grammar = true
+enable_sentence_boundary_detection = true
+english_specific_chunking = true
+
+# English generation settings - OPTIMIZED FOR SPEED
+[pipeline.generation]
+prefer_formal_style = false          # Disabled for speed
+include_cultural_context = false     # Disabled for speed
+formality_level = "casual"           # Changed from "professional" for speed
+
+# English retrieval settings
+[pipeline.retrieval]
+use_english_stop_words = true
+enable_morphological_matching = true
+cultural_relevance_boost = 1.2
+regional_content_preference = "international"

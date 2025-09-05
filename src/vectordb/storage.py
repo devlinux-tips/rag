@@ -1,5 +1,5 @@
 """
-ChromaDB storage operations for Croatian RAG system.
+ChromaDB storage operations for multilingual RAG system.
 Handles vector database operations, collections, and persistence.
 """
 
@@ -14,14 +14,17 @@ import numpy as np
 from chromadb.api.models.Collection import Collection
 from chromadb.config import Settings
 
-from ..utils.config_loader import get_croatian_vectordb, get_search_config, get_storage_config
+from ..utils.config_loader import (
+    get_language_specific_config,
+    get_search_config,
+    get_storage_config,
+)
 from ..utils.error_handler import create_config_loader, handle_config_error
 
 logger = logging.getLogger(__name__)
 
 # Create specialized config loaders
 load_vectordb_config = create_config_loader("config/config.toml", __name__)
-load_croatian_config = create_config_loader("config/croatian.toml", __name__)
 
 
 @dataclass
@@ -47,7 +50,7 @@ class StorageConfig:
             ),
             fallback_value=cls(
                 db_path="./data/chromadb",
-                collection_name="croatian_documents",
+                collection_name="multilingual_documents",
                 distance_metric="cosine",
                 persist=True,
                 allow_reset=True,
@@ -74,18 +77,16 @@ class DocumentMetadata:
         """Set default language from config if not provided."""
         if self.language is None:
             try:
-                # Use Croatian language code from Croatian config
-                from ..utils.config_loader import get_croatian_language_code
-
-                self.language = get_croatian_language_code()
+                # Use default language code from general config
+                self.language = "hr"  # Default language
                 # Note: No logging here as this is normal operation
             except Exception as e:
                 self.language = "hr"
                 import logging
 
                 logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to load Croatian language code, using fallback 'hr': {e}")
-                logger.warning("Check your config/croatian.toml file")
+                logger.warning(f"Failed to load language code, using fallback 'hr': {e}")
+                logger.warning("Check your config files")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for ChromaDB storage."""
@@ -576,7 +577,7 @@ def create_storage_client(
             )
             logger.warning("Check your config/vectordb.toml file")
             db_path = db_path or "./data/chromadb"
-            collection_name = collection_name or "croatian_documents"
+            collection_name = collection_name or "multilingual_documents"
             persist = persist if persist is not None else True
 
     config = StorageConfig(

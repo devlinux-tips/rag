@@ -1,5 +1,5 @@
 """
-Multilingual reranker using BAAI/bge-reranker-v2-m3 for Croatian RAG
+Multilingual reranker using BAAI/bge-reranker-v2-m3 for multilingual RAG
 """
 
 from dataclasses import dataclass

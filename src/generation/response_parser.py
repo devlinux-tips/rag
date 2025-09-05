@@ -1,5 +1,5 @@
 """
-Response parser for processing LLM outputs in Croatian RAG system.
+Response parser for processing LLM outputs in multilingual RAG system.
 Handles post-processing, validation, and formatting of generated responses.
 """
 
@@ -8,11 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from ..utils.config_loader import (
-    get_croatian_response_parsing_config,
-    get_croatian_shared,
-    get_response_parsing_config,
-)
+from ..utils.config_loader import get_language_specific_config, get_response_parsing_config
 from ..utils.error_handler import handle_config_error
 
 
@@ -34,17 +30,18 @@ class ParsedResponse:
             self.metadata = {}
 
 
-class CroatianResponseParser:
-    """Parser for Croatian language LLM responses."""
+class MultilingualResponseParser:
+    """Parser for multilingual LLM responses with language-specific behavior."""
 
-    def __init__(self):
+    def __init__(self, language: str = "hr"):
+        self.language = language
         self.logger = logging.getLogger(__name__)
 
-        # Load Croatian-specific configuration first, fall back to general config
-        croatian_config = handle_config_error(
-            operation=lambda: get_croatian_response_parsing_config(),
+        # Load language-specific configuration first, fall back to general config
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("response_parsing", self.language),
             fallback_value={},
-            config_file="config/croatian.toml",
+            config_file=f"config/{self.language}.toml",
             section="[response_parsing]",
         )
 
@@ -64,8 +61,8 @@ class CroatianResponseParser:
             section="[response_parsing]",
         )
 
-        # Merge Croatian config with general config (Croatian takes priority)
-        self._config = {**general_config, **croatian_config}
+        # Merge language config with general config (language-specific takes priority)
+        self._config = {**general_config, **language_config}
 
         # Load patterns from merged config
         self.no_answer_patterns = self._config.get(
@@ -244,28 +241,31 @@ class CroatianResponseParser:
         Returns:
             Language code ('hr' for Croatian, 'en' for English, etc.)
         """
-        # Simple heuristic based on Croatian-specific characters and words
+        # Use language-agnostic detection based on configured patterns
         shared_config = handle_config_error(
-            operation=lambda: get_croatian_shared(),
-            fallback_value={"croatian_chars": {"lowercase_diacritics": ["ć", "č", "š", "ž", "đ"]}},
-            config_file="config/croatian.toml",
+            operation=lambda: get_language_specific_config("shared", self.language),
+            fallback_value={"language_chars": {"lowercase_diacritics": ["ć", "č", "š", "ž", "đ"]}},
+            config_file=f"config/{self.language}.toml",
             section="[shared]",
         )
 
-        croatian_chars = shared_config["croatian_chars"]["lowercase_diacritics"]
-        croatian_words = self._config["language_detection"]["croatian_words"]
+        language_chars = shared_config.get("language_chars", {}).get("lowercase_diacritics", [])
+        language_words = self._config.get("language_detection", {}).get(
+            f"{self.language}_words", []
+        )
 
-        # Count Croatian indicators
-        char_score = sum(1 for char in response if char in croatian_chars)
-        word_score = sum(1 for word in croatian_words if word in response.lower())
+        # Count language-specific indicators
+        char_score = sum(1 for char in response if char in language_chars)
+        word_score = sum(1 for word in language_words if word in response.lower())
 
         total_score = char_score + word_score
 
-        # Simple threshold-based detection
+        # Return configured language if indicators are found, otherwise try to detect
         if total_score > 2:
-            return "hr"
+            return self.language
         elif any(
-            word in response.lower() for word in self._config["language_detection"]["english_words"]
+            word in response.lower()
+            for word in self._config.get("language_detection", {}).get("english_words", [])
         ):
             return "en"
         else:
@@ -303,11 +303,14 @@ class CroatianResponseParser:
         return formatted
 
 
-def create_response_parser() -> CroatianResponseParser:
+def create_response_parser(language: str = "hr") -> MultilingualResponseParser:
     """
-    Factory function to create Croatian response parser.
+    Factory function to create multilingual response parser.
+
+    Args:
+        language: Language code for language-specific behavior
 
     Returns:
-        Configured CroatianResponseParser instance
+        Configured MultilingualResponseParser instance
     """
-    return CroatianResponseParser()
+    return MultilingualResponseParser(language=language)

@@ -1,5 +1,5 @@
 """
-Configuration management for Croatian RAG system.
+Configuration management for RAG system.
 """
 
 import os
@@ -10,10 +10,12 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 try:
-    from pydantic import Field
+    from pydantic import ConfigDict, Field
     from pydantic_settings import BaseSettings
 except ImportError:
     from pydantic import BaseSettings, Field
+
+    ConfigDict = None
 
 
 @dataclass
@@ -29,9 +31,11 @@ class ProcessingConfig:
     respect_document_structure: bool = True
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "ProcessingConfig":
+    def from_config(
+        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+    ) -> "ProcessingConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_croatian_pipeline, get_processing_config
+        from ..utils.config_loader import get_language_specific_config, get_processing_config
         from ..utils.error_handler import handle_config_error
 
         # Load main processing config
@@ -42,14 +46,14 @@ class ProcessingConfig:
             section="processing",
         )
 
-        # Load Croatian-specific settings
-        croatian_config = handle_config_error(
-            operation=get_croatian_pipeline,
+        # Load language-specific settings
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("pipeline", language),
             fallback_value={"processing": {}},
-            config_file="config/croatian.toml",
-            section="croatian pipeline",
+            config_file=f"config/{language}.toml",
+            section="pipeline",
         )
-        croatian_processing = croatian_config.get("processing", {})
+        language_processing = language_config.get("processing", {})
 
         return cls(
             max_chunk_size=processing_config.get("max_chunk_size", 512),
@@ -126,7 +130,7 @@ class ChromaConfig:
 
         return cls(
             db_path=chroma_config.get("db_path", "./data/chromadb"),
-            collection_name=chroma_config.get("collection_name", "croatian_documents"),
+            collection_name=chroma_config.get("collection_name", "multilingual_documents"),
             distance_metric=chroma_config.get("distance_metric", "cosine"),
             ef_construction=chroma_config.get("ef_construction", 200),
             m=chroma_config.get("m", 16),
@@ -149,9 +153,11 @@ class RetrievalConfig:
     enable_query_expansion: bool = True
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "RetrievalConfig":
+    def from_config(
+        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+    ) -> "RetrievalConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_croatian_pipeline, get_pipeline_config
+        from ..utils.config_loader import get_language_specific_config, get_pipeline_config
         from ..utils.error_handler import handle_config_error
 
         # Load main retrieval config
@@ -163,14 +169,14 @@ class RetrievalConfig:
         )
         retrieval_config = pipeline_config.get("retrieval", {})
 
-        # Load Croatian-specific settings
-        croatian_config = handle_config_error(
-            operation=get_croatian_pipeline,
+        # Load language-specific settings
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("pipeline", language),
             fallback_value={"retrieval": {}},
-            config_file="config/croatian.toml",
-            section="croatian pipeline",
+            config_file=f"config/{language}.toml",
+            section="pipeline",
         )
-        croatian_retrieval = croatian_config.get("retrieval", {})
+        language_retrieval = language_config.get("retrieval", {})
 
         return cls(
             default_k=retrieval_config.get("default_k", 5),
@@ -202,10 +208,12 @@ class OllamaConfig:
     keep_alive: str = "5m"
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "OllamaConfig":
+    def from_config(
+        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+    ) -> "OllamaConfig":
         """Create config from dictionary with DRY error handling."""
         from ..utils.config_loader import (
-            get_croatian_pipeline,
+            get_language_specific_config,
             get_ollama_config,
             get_shared_config,
         )
@@ -219,16 +227,16 @@ class OllamaConfig:
             section="ollama",
         )
 
-        # Load Croatian-specific generation settings
-        croatian_config = handle_config_error(
-            operation=get_croatian_pipeline,
+        # Load language-specific generation settings
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("pipeline", language),
             fallback_value={"generation": {}},
-            config_file="config/croatian.toml",
-            section="croatian pipeline",
+            config_file=f"config/{language}.toml",
+            section="pipeline",
         )
-        croatian_generation = croatian_config.get("generation", {})
-        croatian_shared = croatian_config.get("shared", {})
-        pipeline_generation = croatian_config.get("pipeline", {}).get("generation", {})
+        language_generation = language_config.get("generation", {})
+        language_shared = language_config.get("shared", {})
+        pipeline_generation = language_config.get("pipeline", {}).get("generation", {})
 
         return cls(
             base_url=ollama_config.get("base_url", "http://localhost:11434"),
@@ -240,16 +248,16 @@ class OllamaConfig:
             timeout=ollama_config.get("timeout", 60.0),
             preserve_diacritics=pipeline_generation.get(
                 "preserve_diacritics",
-                croatian_shared.get(
-                    "preserve_diacritics", croatian_generation.get("preserve_diacritics", True)
+                language_shared.get(
+                    "preserve_diacritics", language_generation.get("preserve_diacritics", True)
                 ),
             ),
             prefer_formal_style=pipeline_generation.get(
-                "prefer_formal_style", croatian_generation.get("prefer_formal_style", True)
+                "prefer_formal_style", language_generation.get("prefer_formal_style", True)
             ),
             include_cultural_context=pipeline_generation.get(
                 "include_cultural_context",
-                croatian_generation.get("include_cultural_context", True),
+                language_generation.get("include_cultural_context", True),
             ),
             stream=ollama_config.get("stream", True),
             keep_alive=ollama_config.get("keep_alive", "5m"),
@@ -257,56 +265,60 @@ class OllamaConfig:
 
 
 @dataclass
-class CroatianConfig:
-    """Croatian language specific configuration."""
+class LanguageConfig:
+    """Language-specific configuration for multilingual support."""
 
     enable_morphological_expansion: bool
     enable_synonym_expansion: bool
     enable_cultural_context: bool
-    use_croatian_query_processing: bool
-    croatian_language_priority: bool
-    stop_words_file: str = "config/croatian_stop_words.txt"
-    morphology_patterns_file: str = "config/croatian_morphology.json"
-    cultural_context_file: str = "config/croatian_cultural_context.json"
+    use_language_query_processing: bool
+    language_priority: bool
+    language_code: str = "hr"
+    stop_words_file: str = "config/hr_stop_words.txt"
+    morphology_patterns_file: str = "config/hr_morphology.json"
+    cultural_context_file: str = "config/hr_cultural_context.json"
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "CroatianConfig":
-        """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_croatian_pipeline
+    def from_config(
+        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+    ) -> "LanguageConfig":
+        """Create config from dictionary with language support."""
+        from ..utils.config_loader import get_language_specific_config
         from ..utils.error_handler import handle_config_error
 
-        # Load Croatian pipeline config
-        croatian_config = config_dict or handle_config_error(
-            operation=get_croatian_pipeline,
+        # Load language-specific pipeline config
+        language_config = config_dict or handle_config_error(
+            operation=lambda: get_language_specific_config("pipeline", language),
             fallback_value={},
-            config_file="config/croatian.toml",
-            section="croatian pipeline",
+            config_file=f"config/{language}.toml",
+            section="pipeline",
         )
 
         return cls(
-            enable_morphological_expansion=croatian_config.get(
+            language_code=language,
+            enable_morphological_expansion=language_config.get(
                 "enable_morphological_expansion", True
             ),
-            enable_synonym_expansion=croatian_config.get("enable_synonym_expansion", True),
-            enable_cultural_context=croatian_config.get("enable_cultural_context", True),
-            use_croatian_query_processing=croatian_config.get(
-                "use_croatian_query_processing", True
+            enable_synonym_expansion=language_config.get("enable_synonym_expansion", True),
+            enable_cultural_context=language_config.get("enable_cultural_context", True),
+            use_language_query_processing=language_config.get(
+                "use_language_query_processing", True
             ),
-            croatian_language_priority=croatian_config.get("croatian_language_priority", True),
-            stop_words_file=croatian_config.get(
-                "stop_words_file", "config/croatian_stop_words.txt"
+            language_priority=language_config.get("language_priority", True),
+            stop_words_file=language_config.get(
+                "stop_words_file", f"config/{language}_stop_words.txt"
             ),
-            morphology_patterns_file=croatian_config.get(
-                "morphology_patterns_file", "config/croatian_morphology.json"
+            morphology_patterns_file=language_config.get(
+                "morphology_patterns_file", f"config/{language}_morphology.json"
             ),
-            cultural_context_file=croatian_config.get(
-                "cultural_context_file", "config/croatian_cultural_context.json"
+            cultural_context_file=language_config.get(
+                "cultural_context_file", f"config/{language}_cultural_context.json"
             ),
         )
 
 
 class RAGConfig(BaseSettings):
-    """Main configuration for Croatian RAG system."""
+    """Main configuration for multilingual RAG system."""
 
     # Component configurations
     processing: ProcessingConfig
@@ -314,7 +326,7 @@ class RAGConfig(BaseSettings):
     chroma: ChromaConfig
     retrieval: RetrievalConfig
     ollama: OllamaConfig
-    croatian: CroatianConfig
+    language: LanguageConfig
 
     # System settings
     log_level: str
@@ -332,11 +344,16 @@ class RAGConfig(BaseSettings):
     processed_dir: str
     test_data_dir: str
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    # Use ConfigDict for Pydantic v2 compatibility
+    if ConfigDict:
+        model_config = ConfigDict(env_file=".env", extra="allow")
+    else:
 
-    def __init__(self, **data):
+        class Config:
+            env_file = ".env"
+            extra = "allow"
+
+    def __init__(self, language: str = "hr", **data):
         """Initialize with DRY config loading."""
         # If no data provided, load from config files
         if not data:
@@ -382,12 +399,12 @@ class RAGConfig(BaseSettings):
 
             # Create component configs
             data = {
-                "processing": ProcessingConfig.from_config(),
+                "processing": ProcessingConfig.from_config(language=language),
                 "embedding": EmbeddingConfig.from_config(),
                 "chroma": ChromaConfig.from_config(),
-                "retrieval": RetrievalConfig.from_config(),
-                "ollama": OllamaConfig.from_config(),
-                "croatian": CroatianConfig.from_config(),
+                "retrieval": RetrievalConfig.from_config(language=language),
+                "ollama": OllamaConfig.from_config(language=language),
+                "language": LanguageConfig.from_config(language=language),
                 "log_level": system_config.get("log_level", "INFO"),
                 "enable_caching": system_config.get("enable_caching", True),
                 "cache_dir": shared_config.get("cache_dir", "./data/cache"),
@@ -429,8 +446,8 @@ class RAGConfig(BaseSettings):
             config.retrieval = RetrievalConfig(**data["retrieval"])
         if "ollama" in data:
             config.ollama = OllamaConfig(**data["ollama"])
-        if "croatian" in data:
-            config.croatian = CroatianConfig(**data["croatian"])
+        if "language" in data:
+            config.language = LanguageConfig(**data["language"])
 
         # Update other fields
         for key, value in data.items():
@@ -440,7 +457,7 @@ class RAGConfig(BaseSettings):
                 "chroma",
                 "retrieval",
                 "ollama",
-                "croatian",
+                "language",
             ]:
                 setattr(config, key, value)
 

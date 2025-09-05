@@ -1,5 +1,5 @@
 """
-Prompt templates for Croatian RAG system using local LLM.
+Prompt templates for RAG system using local LLM.
 Contains system prompts and templates for different query types.
 """
 
@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from ..utils.config_loader import (
-    get_croatian_prompts,
-    get_croatian_settings,
-    get_croatian_shared,
     get_generation_config,
     get_generation_prompts_config,
+    get_language_shared,
+    get_language_specific_config,
 )
 from ..utils.error_handler import handle_config_error
 
@@ -25,20 +24,25 @@ class PromptTemplate:
     context_template: str = "Context:\n{context}\n\n"
 
 
-class CroatianRAGPrompts:
-    """Collection of prompt templates for Croatian RAG system."""
+class MultilingualRAGPrompts:
+    """Collection of prompt templates for multilingual RAG system."""
 
-    def __init__(self):
-        """Initialize prompts from configuration."""
-        croatian_config = handle_config_error(
-            operation=lambda: get_croatian_settings(),
-            fallback_value={"prompts": {}, "generation": {}},
-            config_file="config/croatian.toml",
+    def __init__(self, language: str = "hr"):
+        """Initialize prompts from language-specific configuration."""
+        self.language = language
+
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("prompts", self.language),
+            fallback_value={
+                "base_system_prompt": "You are a helpful assistant.",
+                "question_answering": "Answer: {question}",
+            },
+            config_file=f"config/{self.language}.toml",
             section="[prompts]",
         )
 
-        # Extract prompts section from Croatian config
-        self._croatian_prompts = croatian_config.get("prompts", {})
+        # Extract prompts section from language config
+        self._language_prompts = language_config
         self._generation_prompts = handle_config_error(
             operation=lambda: get_generation_config(),
             fallback_value={
@@ -52,85 +56,125 @@ class CroatianRAGPrompts:
     @property
     def BASE_SYSTEM_PROMPT(self) -> str:
         """Get base system prompt from config."""
-        return self._croatian_prompts["base_system_prompt"]
+        return self._language_prompts.get("base_system_prompt", "You are a helpful assistant.")
 
     @property
     def QUESTION_ANSWERING(self) -> "PromptTemplate":
         """Get question answering template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["question_answering_system"],
-            user_template=self._croatian_prompts["question_answering_user"],
-            context_template=self._croatian_prompts["question_answering_context"],
+            system_prompt=self._language_prompts.get(
+                "question_answering_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get(
+                "question_answering_user", "Question: {query}\n\nAnswer:"
+            ),
+            context_template=self._language_prompts.get(
+                "question_answering_context", "Context:\n{context}\n\n"
+            ),
         )
 
     @property
     def SUMMARIZATION(self) -> "PromptTemplate":
         """Get summarization template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["summarization_system"],
-            user_template=self._croatian_prompts["summarization_user"],
-            context_template=self._croatian_prompts["summarization_context"],
+            system_prompt=self._language_prompts.get(
+                "summarization_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get("summarization_user", "Summarize: {query}"),
+            context_template=self._language_prompts.get(
+                "summarization_context", "Text to summarize:\n{context}\n\n"
+            ),
         )
 
     @property
     def FACTUAL_QA(self) -> "PromptTemplate":
         """Get factual Q&A template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["factual_qa_system"],
-            user_template=self._croatian_prompts["factual_qa_user"],
-            context_template=self._croatian_prompts["factual_qa_context"],
+            system_prompt=self._language_prompts.get(
+                "factual_qa_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get(
+                "factual_qa_user", "Question: {query}\n\nAnswer:"
+            ),
+            context_template=self._language_prompts.get(
+                "factual_qa_context", "Facts:\n{context}\n\n"
+            ),
         )
 
     @property
     def EXPLANATORY(self) -> "PromptTemplate":
         """Get explanatory template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["explanatory_system"],
-            user_template=self._croatian_prompts["explanatory_user"],
-            context_template=self._croatian_prompts["explanatory_context"],
+            system_prompt=self._language_prompts.get(
+                "explanatory_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get("explanatory_user", "Explain: {query}"),
+            context_template=self._language_prompts.get(
+                "explanatory_context", "Information:\n{context}\n\n"
+            ),
         )
 
     @property
     def COMPARISON(self) -> "PromptTemplate":
         """Get comparison template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["comparison_system"],
-            user_template=self._croatian_prompts["comparison_user"],
-            context_template=self._croatian_prompts["comparison_context"],
+            system_prompt=self._language_prompts.get(
+                "comparison_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get("comparison_user", "Compare: {query}"),
+            context_template=self._language_prompts.get(
+                "comparison_context", "Information to compare:\n{context}\n\n"
+            ),
         )
 
     @property
     def CULTURAL_CONTEXT(self) -> "PromptTemplate":
         """Get cultural context template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["cultural_context_system"],
-            user_template=self._croatian_prompts["cultural_context_user"],
-            context_template=self._croatian_prompts["cultural_context_context"],
+            system_prompt=self._language_prompts.get(
+                "cultural_context_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get("cultural_context_user", "Question: {query}"),
+            context_template=self._language_prompts.get(
+                "cultural_context_context", "Cultural context:\n{context}\n\n"
+            ),
         )
 
     @property
     def TOURISM(self) -> "PromptTemplate":
         """Get tourism template."""
         return PromptTemplate(
-            system_prompt=self._croatian_prompts["tourism_system"],
-            user_template=self._croatian_prompts["tourism_user"],
-            context_template=self._croatian_prompts["tourism_context"],
+            system_prompt=self._language_prompts.get(
+                "tourism_system", "You are a helpful assistant."
+            ),
+            user_template=self._language_prompts.get("tourism_user", "Tourism question: {query}"),
+            context_template=self._language_prompts.get(
+                "tourism_context", "Tourism information:\n{context}\n\n"
+            ),
         )
 
 
 class PromptBuilder:
     """Builder class for constructing prompts from templates and context."""
 
-    def __init__(self, template: PromptTemplate):
+    def __init__(self, template: PromptTemplate, language: str = "hr"):
         """
         Initialize prompt builder with template.
 
         Args:
             template: PromptTemplate to use for building prompts
+            language: Language code for the prompts
         """
         self.template = template
-        # Use Croatian config for formatting templates
-        self._generation_config = {"prompts": get_croatian_settings()["prompts"]}
+        self.language = language
+        # Use language-specific config for formatting templates
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("prompts", self.language),
+            fallback_value={"base_system_prompt": "You are a helpful assistant."},
+            config_file=f"config/{self.language}.toml",
+            section="[prompts]",
+        )
+        self._generation_config = {"prompts": language_config}
 
     def build_prompt(
         self,
@@ -204,33 +248,46 @@ class PromptBuilder:
         return context_separator.join(formatted_chunks)
 
 
-def get_prompt_for_query_type(query: str) -> PromptTemplate:
+def get_prompt_for_query_type(query: str, language: str = "hr") -> PromptTemplate:
     """
     Select appropriate prompt template based on query characteristics.
 
     Args:
         query: User query text
+        language: Language code
 
     Returns:
         Most suitable PromptTemplate
     """
     query_lower = query.lower()
 
-    # Load keywords from Croatian config
-    croatian_config = get_croatian_settings()
-    keywords = croatian_config["prompts"]["keywords"]  # Create templates instance
-    templates = CroatianRAGPrompts()
+    # Load keywords from language-specific config
+    language_config = handle_config_error(
+        operation=lambda: get_language_specific_config("prompts", language),
+        fallback_value={"keywords": {"cultural": [], "tourism": []}},
+        config_file=f"config/{language}.toml",
+        section="[prompts]",
+    )
+    keywords = language_config.get("keywords", {})
+
+    # Create templates instance
+    templates = MultilingualRAGPrompts(language)
 
     # Get shared question patterns for consistent matching
-    shared_config = get_croatian_shared()
+    shared_config = handle_config_error(
+        operation=lambda: get_language_shared(language),
+        fallback_value={"question_patterns": {}},
+        config_file=f"config/{language}.toml",
+        section="[shared]",
+    )
     question_patterns = shared_config.get("question_patterns", {})
 
     # Check for cultural/historical context
-    if any(keyword in query_lower for keyword in keywords["cultural"]):
+    if any(keyword in query_lower for keyword in keywords.get("cultural", [])):
         return templates.CULTURAL_CONTEXT
 
     # Check for tourism queries
-    if any(keyword in query_lower for keyword in keywords["tourism"]):
+    if any(keyword in query_lower for keyword in keywords.get("tourism", [])):
         return templates.TOURISM
 
     # Check for summary request (using shared patterns)
@@ -253,15 +310,16 @@ def get_prompt_for_query_type(query: str) -> PromptTemplate:
     return templates.QUESTION_ANSWERING
 
 
-def create_prompt_builder(query: str) -> PromptBuilder:
+def create_prompt_builder(query: str, language: str = "hr") -> PromptBuilder:
     """
     Factory function to create prompt builder for specific query.
 
     Args:
         query: User query
+        language: Language code
 
     Returns:
         PromptBuilder with appropriate template
     """
-    template = get_prompt_for_query_type(query)
-    return PromptBuilder(template)
+    template = get_prompt_for_query_type(query, language)
+    return PromptBuilder(template, language)

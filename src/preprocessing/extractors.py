@@ -1,5 +1,5 @@
 """
-Document text extraction for Croatian documents.
+Document text extraction for multilingual documents.
 Supports PDF, DOCX, and TXT files with proper UTF-8 encoding.
 """
 
@@ -7,7 +7,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import PyPDF2
+try:
+    from pypdf import PdfReader
+except ImportError:
+    # Fallback to PyPDF2 if pypdf not available
+    from PyPDF2 import PdfReader
 from docx import Document
 
 from ..utils.config_loader import get_extraction_config
@@ -17,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentExtractor:
-    """Extract text from various document formats with Croatian language support."""
+    """Extract text from various document formats with multilingual support."""
 
     def __init__(self):
         """Initialize the document extractor."""
@@ -69,7 +73,7 @@ class DocumentExtractor:
             text_content = []
 
             with open(file_path, "rb") as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = PdfReader(file)
 
                 for page_num in range(len(pdf_reader.pages)):
                     page = pdf_reader.pages[page_num]
@@ -106,7 +110,7 @@ class DocumentExtractor:
     def _extract_from_txt(self, file_path: Path) -> str:
         """Extract text from TXT file with proper UTF-8 encoding."""
         try:
-            # Try UTF-8 first, then fallback to other encodings common for Croatian
+            # Try UTF-8 first, then fallback to other configured encodings
             encodings = self._config["text_encodings"]
 
             for encoding in encodings:

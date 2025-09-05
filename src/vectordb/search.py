@@ -1,5 +1,5 @@
 """
-Similarity search implementation for Croatian RAG system.
+Similarity search implementation for multilingual RAG system.
 Handles semantic search, ranking, and retrieval optimization.
 """
 
@@ -11,16 +11,15 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..utils.config_loader import get_croatian_vectordb, get_search_config, get_shared_config
+from ..utils.config_loader import get_language_specific_config, get_search_config, get_shared_config
 from ..utils.error_handler import create_config_loader, handle_config_error
-from .embeddings import CroatianEmbeddingModel
+from .embeddings import MultilingualEmbeddingModel
 from .storage import ChromaDBStorage
 
 logger = logging.getLogger(__name__)
 
 # Create specialized config loaders
 load_vectordb_config = create_config_loader("config/config.toml", __name__)
-load_croatian_config = create_config_loader("config/croatian.toml", __name__)
 
 
 class SearchMethod(Enum):
@@ -119,11 +118,11 @@ class SearchResponse:
 
 
 class SemanticSearchEngine:
-    """Semantic search engine for Croatian documents."""
+    """Semantic search engine for multilingual documents."""
 
     def __init__(
         self,
-        embedding_model: CroatianEmbeddingModel,
+        embedding_model: MultilingualEmbeddingModel,
         storage: ChromaDBStorage,
         config: SearchConfig = None,
     ):
@@ -601,7 +600,7 @@ class SearchResultFormatter:
 
 
 def create_search_engine(
-    embedding_model: CroatianEmbeddingModel,
+    embedding_model: MultilingualEmbeddingModel,
     storage: ChromaDBStorage,
     method: SearchMethod = None,
     top_k: int = None,

@@ -1,50 +1,60 @@
-# Multilingual RAG Notebooks - Optimized for Croatian
+# Multilingual RAG Notebooks - Complete Implementation
 
-This directory contains interactive Jupyter notebooks demonstrating the Multilingual RAG system components, optimizations, and recent performance improvements.
+This directory contains interactive Jupyter notebooks demonstrating the **fully implemented Multilingual RAG system** with Croatian and English support, extensible for additional languages.
+
+## 🌍 Multilingual Implementation Status
+
+- **🇭🇷 Croatian**: Complete - Morphology, diacritics, cultural context
+- **🇬🇧 English**: Complete - Business/technical document processing
+- **🌐 Cross-Language**: Unified search, language detection, auto-routing
+- **📁 Architecture**: Language-based folder organization implemented
+- **🔄 Scalable**: Framework ready for German, French, Spanish, etc.
 
 ## 📚 Available Notebooks
 
 ### **Learning Sequence** (Recommended Order)
 
 #### `00_system_overview_and_architecture.ipynb` 🏗️
-**System Architecture & Foundations**
-- Research foundations and academic background
-- Complete system architecture overview
-- Recent model evaluation results (YugoGPT vs qwen2.5)
-- Performance optimization journey (32% improvement)
-- Documentation structure and development roadmap
+**Multilingual System Architecture & Foundations**
+- Research foundations for cross-language IR and language-specific processing
+- Complete multilingual architecture overview with language-aware components
+- BGE-M3 embeddings and Qwen2.5 multilingual model integration
+- Language-based folder organization and processing pipeline
+- Cross-language performance optimization and scalability design
 
 #### `01_document_processing_learning.ipynb` 📄
-**Document Processing Pipeline**
-- Croatian text extraction and cleaning
-- Smart chunking strategies for legal documents
-- Preprocessing optimizations
+**Multilingual Document Processing Pipeline**
+- Language-aware text extraction (Croatian diacritics, English business docs)
+- Automatic language detection and folder routing
+- Language-specific cleaning and preprocessing optimizations
+- Multilingual chunking strategies for diverse document types
 
 #### `02_vector_database_learning.ipynb` 🗄️
-**Vector Database & Embeddings**
-- BGE-M3 multilingual embeddings (30.9 texts/second)
-- ChromaDB storage and retrieval
-- Embedding optimization for Croatian
+**Cross-Language Vector Database & Embeddings**
+- BGE-M3 multilingual embeddings for unified cross-language search
+- ChromaDB storage with language metadata and multilingual collection
+- Cross-language similarity search and performance optimization
 
 #### `03_retrieval_system_learning.ipynb` 🔍
-**Retrieval System & Ranking**
-- Croatian-aware query processing
-- Multi-signal ranking system
-- Adaptive retrieval strategies
+**Multilingual Retrieval System & Ranking**
+- Language-aware query processing (Croatian morphology, English business terms)
+- Cross-language semantic search with BGE-M3 embeddings
+- Multi-signal ranking system adapted for multilingual content
+- Adaptive retrieval strategies based on language and query type
 
 #### `04_generation_system_learning.ipynb` 🤖
-**LLM Generation System - OPTIMIZED**
-- Ollama integration with qwen2.5:7b-instruct
-- **Performance**: 83.5s generation (32% improvement)
-- Croatian prompt engineering and response parsing
-- Model comparison and optimization results
+**Multilingual LLM Generation System**
+- Qwen2.5:7b-instruct integration for multilingual responses
+- Language-specific prompt engineering (Croatian cultural context, English business format)
+- Multilingual response parsing and quality validation
+- Cross-language generation performance optimization
 
 #### `05_complete_pipeline_learning.ipynb` 🎯
-**Complete System Integration**
-- End-to-end RAG system orchestration
-- Updated RAGSystem class (renamed from CroatianRAGSystem)
-- System health checks and monitoring
-- Production-ready pipeline testing
+**Complete Multilingual System Integration**
+- End-to-end multilingual RAG system orchestration
+- Language parameter flow through all components
+- Multilingual system health checks and monitoring
+- Production-ready pipeline testing across languages
 
 ### **Advanced Demonstrations**
 

@@ -2,26 +2,27 @@
 
 ## What this project does
 
-This is a production-ready Retrieval-Augmented Generation (RAG) system for multilingual documents using state-of-the-art models and local LLM integration (Ollama). The system currently focuses on Croatian language support but is designed for multilingual expansion.
+This is a production-ready Retrieval-Augmented Generation (RAG) system for multilingual documents using state-of-the-art models and local LLM integration (Ollama). The system supports **Croatian**, **English**, and **multilingual** documents with automatic language detection and routing.
 
 **Key capabilities:**
-- Process Croatian documents (PDF, DOCX, TXT) with proper encoding and format handling
+- Process multilingual documents (PDF, DOCX, TXT) in Croatian, English, and mixed languages
+- Automatic language detection and routing with confidence scoring
 - Create semantic embeddings using **BGE-M3** (BAAI/bge-m3) - state-of-the-art multilingual model
-- Store vectors in persistent ChromaDB with optimized collection management
+- Store vectors in persistent ChromaDB with language-specific collections
 - **Hybrid retrieval** combining dense and sparse search with BGE-reranker-v2-m3
-- Generate contextual answers via Ollama with **Croatian OpenEU-LLM** (jobautomation/openeurollm-croatian:latest)
+- Generate contextual answers via Ollama with **qwen2.5:7b-instruct** (optimized for multilingual)
 - **Multi-device support**: Auto-detection for CUDA (NVIDIA), MPS (Apple Silicon M1/M2/M3/M4), and CPU
-- Handle Croatian language-specific challenges (diacritics, morphology, cultural context)
+- Handle language-specific challenges (Croatian diacritics, English technical terms, code-switching)
 
 ## Project Architecture & Design Principles
 
 ### **Core Design Principles Applied**
 
 #### **1. DRY (Don't Repeat Yourself)**
-- **Unified Configuration**: Single `config/config.toml` replacing 7 separate TOML files
+- **Unified Configuration**: TOML-based configuration system with language-specific files
 - **Centralized Error Handling**: `handle_config_error()` pattern across all modules
 - **Reusable Components**: Modular design with clear separation of concerns
-- **Shared Utilities**: Croatian language utilities, device detection, config loading
+- **Shared Utilities**: Multilingual language utilities, device detection, config loading
 
 #### **2. Clean Code Architecture**
 - **Type Safety**: Comprehensive type hints throughout the codebase
@@ -39,7 +40,7 @@ This is a production-ready Retrieval-Augmented Generation (RAG) system for multi
 - **Persistent Storage**: ChromaDB collections that survive restarts
 - **Device Flexibility**: Automatic hardware detection and optimization
 - **Security**: PyTorch 2.8.0+cu128 resolving security vulnerabilities
-- **Performance**: BGE-M3 + BGE-reranker-v2-m3 for optimal Croatian language performance
+- **Performance**: BGE-M3 + BGE-reranker-v2-m3 for optimal multilingual performance
 
 ### **Updated System Architecture**
 
@@ -47,26 +48,28 @@ This is a production-ready Retrieval-Augmented Generation (RAG) system for multi
 learn-rag/
 ├── config/
 │   ├── config.toml            # 🆕 UNIFIED configuration (replaces 7 files)
-│   └── croatian.toml          # Croatian-specific settings
+│   ├── config.toml           # Main unified configuration
+│   ├── croatian.toml         # Croatian-specific settings
+│   ├── english.toml          # English-specific settings
 ├── src/
 │   ├── preprocessing/          # Document processing pipeline
 │   │   ├── extractors.py      # PDF/DOCX/TXT extraction with proper encoding
-│   │   ├── cleaners.py        # Croatian text normalization
-│   │   └── chunkers.py        # Intelligent chunking strategies
+│   │   ├── cleaners.py        # Multilingual text normalization
+│   │   └── chunkers.py        # Language-aware chunking strategies
 │   ├── vectordb/              # Vector database operations
 │   │   ├── embeddings.py      # 🆕 BGE-M3 embedding management
 │   │   ├── storage.py         # 🆕 Persistent ChromaDB with collection management
 │   │   └── search.py          # Optimized similarity search
 │   ├── retrieval/             # 🆕 Advanced retrieval system
-│   │   ├── query_processor.py # Croatian query preprocessing
+│   │   ├── query_processor.py # Multilingual query preprocessing
 │   │   ├── retriever.py       # Main retrieval logic
 │   │   ├── hybrid_retriever.py # Dense + sparse hybrid search
 │   │   ├── reranker.py        # 🆕 BGE-reranker-v2-m3 integration
 │   │   └── ranker.py          # Result ranking & filtering
 │   ├── generation/            # Local LLM integration
 │   │   ├── ollama_client.py   # 🆕 Enhanced Ollama client
-│   │   ├── prompt_templates.py # Croatian-optimized prompts
-│   │   └── response_parser.py # Response processing
+│   │   ├── prompt_templates.py # Multilingual-optimized prompts
+│   │   └── response_parser.py # Language-aware response processing
 │   ├── pipeline/              # 🆕 Production RAG orchestration
 │   │   ├── rag_system.py      # RAGSystem - main multilingual interface
 │   │   └── config.py          # Configuration management
@@ -75,7 +78,10 @@ learn-rag/
 │       ├── config_loader.py   # 🆕 Centralized config loading
 │       └── error_handler.py   # 🆕 DRY error handling patterns
 ├── data/
-│   ├── raw/                   # Original Croatian documents
+│   ├── raw/                   # Original multilingual documents
+│   │   ├── hr/               # Croatian documents
+│   │   ├── en/               # English documents
+│   │   └── multilingual/     # Mixed-language documents
 │   ├── vectordb/             # 🆕 Persistent vector storage
 │   └── test/                  # Test documents and queries
 ├── models/
@@ -87,20 +93,20 @@ learn-rag/
 
 #### **1. Unified Configuration System**
 - **Before**: 7 separate TOML files with duplication
-- **After**: Single `config/config.toml` + `config/croatian.toml` with all settings
-- **Benefits**: No configuration drift, easier maintenance, single source of truth
-- **⚠️ Critical**: Croatian prompt templates must be in `[prompts]` section, NOT under `[prompts.keywords]`
+- **After**: TOML-based unified configuration with language-specific overrides in `croatian.toml`, `english.toml`
+- **Benefits**: Language-specific configurations, easier maintenance, environment-aware settings
+- **⚠️ Critical**: Language initialization required for all components: `RAGSystem(language="hr")`
 
 #### **2. Configuration Architecture Lessons Learned**
-- **TOML Structure**: Subsections like `[prompts.keywords]` create new scope - templates after it become inaccessible
-- **Template Organization**: All prompt templates must be at `[prompts]` root level before any subsections
-- **Config Loading**: Croatian-specific components should use `get_croatian_settings()`, not general config
-- **Error Handling**: Use consistent `handle_config_error()` pattern with proper parameters
+- **Language Initialization**: All system components require language parameter: `RAGSystem(language="hr")`
+- **TOML Configuration**: Modular design with language-specific overrides
+- **API Compatibility**: New `chunk_document()` API with `source_file` parameter replaces `chunk_text()`
+- **Error Handling**: Consistent error handling with language context
 
 #### **2. Enhanced Model Stack**
-- **Embeddings**: BAAI/bge-m3 (1024-dim, multilingual, Croatian-optimized)
-- **Reranking**: BAAI/bge-reranker-v2-m3 (Croatian multilingual support)
-- **Generation**: jobautomation/openeurollm-croatian:latest (Croatian-specific LLM)
+- **Embeddings**: BAAI/bge-m3 (1024-dim, multilingual, Croatian+English optimized)
+- **Reranking**: BAAI/bge-reranker-v2-m3 (Multilingual support)
+- **Generation**: qwen2.5:7b-instruct (Multilingual LLM with Croatian capabilities)
 - **Security**: PyTorch 2.8.0+cu128 (resolved security vulnerabilities)
 
 #### **3. Multi-Device Support**
@@ -110,10 +116,10 @@ learn-rag/
 - **Apple Silicon**: Full M1/M2/M3/M4 Pro support
 
 #### **4. Production Storage**
-- **Persistent Collections**: Data survives system restarts
-- **Collection Management**: Proper naming ("croatian_documents")
-- **Metadata Tracking**: Document counts, distance metrics
-- **Storage Optimization**: Efficient chunk storage and retrieval
+- **Persistent Collections**: Language-specific data survives system restarts
+- **Collection Management**: Language-aware naming ("croatian_documents", "english_documents")
+- **Metadata Tracking**: Document counts, distance metrics, language tags
+- **Storage Optimization**: Efficient chunk storage and retrieval per language
 
 ## Working on this project
 
@@ -121,19 +127,19 @@ learn-rag/
 This project has evolved from learning-focused to **production-ready** implementation. Components are now integrated into a cohesive system with modern development practices.
 
 **Current Implementation Status:**
-1. ✅ **Document Processing** - Complete with proper encoding and format handling
-2. ✅ **Vector Database** - BGE-M3 embeddings with persistent ChromaDB storage
-3. ✅ **Advanced Retrieval** - Hybrid search with BGE-reranker-v2-m3
-4. ✅ **Local LLM Integration** - Croatian OpenEU-LLM via Ollama
-5. ✅ **Production Pipeline** - RAGSystem with full orchestration (designed for multilingual expansion)
+1. ✅ **Document Processing** - Complete with multilingual encoding and format handling
+2. ✅ **Vector Database** - BGE-M3 embeddings with persistent language-specific ChromaDB storage
+3. ✅ **Advanced Retrieval** - Hybrid search with multilingual BGE-reranker-v2-m3
+4. ✅ **Local LLM Integration** - qwen2.5:7b-instruct with Croatian and English support via Ollama
+5. ✅ **Production Pipeline** - RAGSystem with full multilingual orchestration
 
 ### **Key Implementation Achievements**
 
 #### **Configuration Management**
-- **Unified TOML Configuration**: Single source of truth in `config/config.toml`
+- **TOML Configuration**: Modular configuration with language-specific overrides
 - **Environment Flexibility**: Auto-device detection (CUDA/MPS/CPU)
 - **Error Resilience**: Graceful fallbacks with meaningful error messages
-- **Croatian Localization**: Separate `croatian.toml` for language-specific settings
+- **Language Initialization**: All components require language parameter for proper operation
 
 #### **Modern Architecture Patterns**
 - **DRY Principle**: Eliminated code duplication across 7 config files
@@ -141,11 +147,11 @@ This project has evolved from learning-focused to **production-ready** implement
 - **Dependency Injection**: Configurable components with explicit dependencies
 - **Async Programming**: Non-blocking I/O for database and API operations
 
-#### **Croatian Language Optimization**
-- **State-of-the-Art Models**: BGE-M3 + BGE-reranker-v2-m3 for Croatian
-- **Cultural Context**: Croatian-specific prompt engineering and stop words
-- **Encoding Robustness**: Proper UTF-8 handling for diacritics (Č, Ć, Š, Ž, Đ)
-- **Morphological Awareness**: Croatian language utilities for text processing
+#### **Multilingual Language Optimization**
+- **State-of-the-Art Models**: BGE-M3 + BGE-reranker-v2-m3 for Croatian and English
+- **Cultural Context**: Language-specific prompt engineering and stop words
+- **Encoding Robustness**: Proper UTF-8 handling for diacritics (Č, Ć, Š, Ž, Đ) and special characters
+- **Language Detection**: Automatic detection and routing for Croatian, English, and mixed content
 
 #### **Production-Ready Features**
 - **Data Persistence**: ChromaDB collections survive system restarts
@@ -159,13 +165,18 @@ This project has evolved from learning-focused to **production-ready** implement
 
 **Configuration Management:**
 ```python
-# ✅ Correct: Use Croatian settings for Croatian components
-from src.utils.config_loader import get_croatian_settings
-config = get_croatian_settings()["prompts"]
+# ✅ Correct: Initialize with language parameter
+from src.pipeline.rag_system import RAGSystem
+rag = RAGSystem(language="hr")  # Croatian system
+rag_en = RAGSystem(language="en")  # English system
 
-# ❌ Wrong: Using general config for Croatian-specific templates
-from src.utils.config_loader import get_generation_config
-config = get_generation_config()["prompts"]  # Won't have Croatian templates
+# ✅ Correct: Language-aware chunking
+from src.preprocessing.chunkers import DocumentChunker
+chunker = DocumentChunker(language="hr")
+chunks = chunker.chunk_document(content=text, source_file="doc.pdf")
+
+# ❌ Wrong: Missing language parameter
+rag = RAGSystem()  # Will raise error - language required
 ```
 
 **Data Structure Access:**
@@ -180,53 +191,52 @@ chunks = [doc.content for doc in retrieval_result.results]  # AttributeError
 
 **Error Handling Pattern:**
 ```python
-# ✅ Correct: Proper handle_config_error usage
-config = handle_config_error(
-    operation=lambda: get_croatian_settings(),
-    fallback_value={"prompts": {}},
-    config_file="config/croatian.toml",
-    section="[prompts]"
-)
-
-# ❌ Wrong: Invalid parameter
-config = handle_config_error(
-    operation=lambda: get_croatian_settings(),
-    fallback_value={"prompts": {}},
-    operation_name="loading config"  # Parameter doesn't exist
-)
+# ✅ Correct: Modern error handling
+try:
+    rag = RAGSystem(language="hr")
+    await rag.initialize()
+except Exception as e:
+    logger.error(f"Failed to initialize RAG system: {e}")
+    # Graceful fallback or exit
 ```
 
 #### **Primary Interface: RAGSystem**
 ```python
 from src.pipeline.rag_system import RAGSystem, RAGQuery
 
-# Initialize production-ready RAG system (currently Croatian-optimized)
-rag = RAGSystem()
-await rag.initialize()
+# Initialize multilingual RAG system
+rag_hr = RAGSystem(language="hr")  # Croatian system
+rag_en = RAGSystem(language="en")  # English system
+await rag_hr.initialize()
+await rag_en.initialize()
 
-# Process documents (persistent storage)
-await rag.process_documents("data/raw")
+# Process documents (language-specific storage)
+await rag_hr.process_documents("data/raw/hr")  # Croatian documents
+await rag_en.process_documents("data/raw/en")  # English documents
 
 # ✅ Correct: Query with RAGQuery object
-query = RAGQuery(text="Što je RAG sustav?")
-results = await rag.query(query)
+query_hr = RAGQuery(text="Što je RAG sustav?")
+results_hr = await rag_hr.query(query_hr)
+
+query_en = RAGQuery(text="What is a RAG system?")
+results_en = await rag_en.query(query_en)
 
 # ❌ Wrong: Passing string directly (causes AttributeError)
-results = await rag.query("Što je RAG sustav?")
+results = await rag_hr.query("Što je RAG sustav?")
 ```
 
 #### **Configuration-Driven Development**
-- **Single Source**: All settings in `config/config.toml`
+- **Language-Specific**: All settings in language-aware TOML configuration
 - **Environment-Aware**: Automatic device and model selection
 - **Override Support**: Runtime parameter overrides for testing
 - **Validation**: Built-in configuration validation with meaningful errors
 
 ### **Technical Stack (Production)**
 - **Python 3.12+** with modern async/await patterns
-- **Vector DB**: ChromaDB with persistent collections
+- **Vector DB**: ChromaDB with persistent language-specific collections
 - **Embeddings**: **BAAI/bge-m3** (state-of-the-art multilingual, 1024-dim)
-- **Reranking**: **BAAI/bge-reranker-v2-m3** (Croatian multilingual support)
-- **LLM**: **jobautomation/openeurollm-croatian:latest** via Ollama
+- **Reranking**: **BAAI/bge-reranker-v2-m3** (Multilingual support)
+- **LLM**: **qwen2.5:7b-instruct** via Ollama (Croatian and English optimized)
 - **Security**: PyTorch 2.8.0+cu128 (CUDA 12.8 support)
 - **Hardware**: CUDA (NVIDIA) + MPS (Apple Silicon M1/M2/M3/M4) + CPU fallback
 
@@ -255,10 +265,10 @@ Use `/model` command in Claude Code when Claude suggests switching, or when you 
 
 ### Technical stack
 - **Python 3.9+** with sentence-transformers, chromadb, requests
-- **Vector DB**: ChromaDB (free, local storage)
-- **Embeddings**: BAAI/bge-m3 (BGE-M3: state-of-the-art multilingual embeddings with excellent Croatian support)
-- **LLM**: Ollama with qwen2.5:7b-instruct (free, local, efficient on most hardware)
-- **Documents**: PDF, DOCX, TXT support with Croatian encoding
+- **Vector DB**: ChromaDB (free, local storage with language-specific collections)
+- **Embeddings**: BAAI/bge-m3 (BGE-M3: state-of-the-art multilingual embeddings with excellent Croatian and English support)
+- **LLM**: Ollama with qwen2.5:7b-instruct (free, local, efficient multilingual model)
+- **Documents**: PDF, DOCX, TXT support with multilingual encoding
 
 ### **Development Commands (Updated)**
 ```bash
@@ -372,19 +382,19 @@ retrieval_result.documents[0]["content"]
 #### **Issue 3: Mixed Configuration Sources**
 **Problem**: Components using wrong config sources after refactoring
 ```python
-# ✅ Croatian components should use Croatian config
-croatian_config = get_croatian_settings()
-templates = croatian_config["prompts"]
+# ✅ Language-specific components should use language-specific config
+language_config = get_language_settings(language="hr")  # or "en", "multilingual"
+templates = language_config["prompts"]
 
 # ❌ Not general generation config
-general_config = get_generation_config()  # Missing Croatian templates
+general_config = get_generation_config()  # Missing language-specific templates
 ```
 
-### Croatian-specific considerations
-- Handle Croatian morphology and inflection in text processing
-- Preserve diacritics in document chunking and retrieval
-- Account for Croatian cultural context in prompt engineering
-- Test with Croatian Wikipedia articles or news documents
+### Language-specific considerations
+- **Croatian**: Handle morphology and inflection in text processing, preserve diacritics, account for cultural context
+- **English**: Optimize for technical terminology, handle code-switching in mixed documents
+- **Multilingual**: Detect language boundaries, handle code-switching, maintain context across languages
+- Test with diverse document types: Croatian Wikipedia/news, English technical docs, mixed-language content
 
 ## What to focus on
 

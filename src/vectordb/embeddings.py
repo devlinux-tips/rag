@@ -1,6 +1,6 @@
 """
-Embedding model management for Croatian RAG system.
-Handles multilingual sentence-transformers models optimized for Croatian language.
+Embedding model management for multilingual RAG system.
+Handles multilingual sentence-transformers models optimized for various languages.
 """
 
 import logging
@@ -16,7 +16,11 @@ from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
-from ..utils.config_loader import get_croatian_vectordb, get_embeddings_config, get_vectordb_config
+from ..utils.config_loader import (
+    get_embeddings_config,
+    get_language_specific_config,
+    get_vectordb_config,
+)
 from ..utils.error_handler import handle_config_error
 
 
@@ -66,8 +70,8 @@ class EmbeddingConfig:
         )
 
 
-class CroatianEmbeddingModel:
-    """Multilingual embedding model optimized for Croatian text."""
+class MultilingualEmbeddingModel:
+    """Multilingual embedding model optimized for various languages."""
 
     @property
     def recommended_models(self) -> Dict[str, str]:
@@ -75,7 +79,7 @@ class CroatianEmbeddingModel:
         return handle_config_error(
             operation=lambda: get_embeddings_config()["recommended_models"],
             fallback_value={
-                "bge_m3": "BAAI/bge-m3",  # Primary: BGE-M3 (Best for Croatian)
+                "bge_m3": "BAAI/bge-m3",  # Primary: BGE-M3 (Best for multilingual)
                 "labse": "sentence-transformers/LaBSE",  # Secondary: Language-Agnostic BERT
                 "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
                 "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
@@ -718,7 +722,7 @@ def create_embedding_model(
     model_name: str = None,
     device: str = None,
     cache_dir: str = None,
-) -> CroatianEmbeddingModel:
+) -> MultilingualEmbeddingModel:
     """
     Factory function to create embedding model.
 
@@ -728,7 +732,7 @@ def create_embedding_model(
         cache_dir: Directory for model cache (defaults from config)
 
     Returns:
-        Configured CroatianEmbeddingModel instance
+        Configured MultilingualEmbeddingModel instance
     """
     # Use config defaults if not provided
     factory_config = handle_config_error(
@@ -754,7 +758,7 @@ def create_embedding_model(
         batch_size=32,
         normalize_embeddings=True,
     )
-    return CroatianEmbeddingModel(config)
+    return MultilingualEmbeddingModel(config)
 
 
 def get_recommended_model(use_case: str = "general") -> str:

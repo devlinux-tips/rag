@@ -1,5 +1,5 @@
 """
-Document chunking strategies for Croatian text.
+Document chunking strategies for multilingual text.
 Implements various chunking approaches optimized for RAG retrieval.
 """
 
@@ -11,15 +11,14 @@ from typing import Dict, List, Optional, Tuple
 
 from ..utils.config_loader import (
     get_chunking_config,
-    get_croatian_text_processing,
+    get_language_specific_config,
     get_shared_config,
 )
 from ..utils.error_handler import create_config_loader, handle_config_error
 
 # Create specialized config loaders
 load_preprocessing_config = create_config_loader("config/config.toml", __name__)
-load_croatian_config = create_config_loader("config/croatian.toml", __name__)
-from .cleaners import CroatianTextCleaner
+from .cleaners import MultilingualTextCleaner
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ class TextChunk:
 
 
 class DocumentChunker:
-    """Chunk Croatian documents for optimal RAG retrieval."""
+    """Chunk multilingual documents for optimal RAG retrieval."""
 
     def __init__(
         self,
@@ -47,6 +46,7 @@ class DocumentChunker:
         overlap: int = None,
         min_chunk_size: int = None,
         respect_sentences: bool = None,
+        language: str = "hr",
     ):
         """
         Initialize document chunker.
@@ -56,7 +56,9 @@ class DocumentChunker:
             overlap: Overlap between chunks in characters (uses config if None)
             min_chunk_size: Minimum chunk size to keep (uses config if None)
             respect_sentences: Whether to try to keep sentences intact (uses config if None)
+            language: Language code for language-specific behavior
         """
+        self.language = language
         self._chunking_config = handle_config_error(
             operation=lambda: get_chunking_config(),
             fallback_value={
@@ -69,14 +71,14 @@ class DocumentChunker:
             config_file="config/config.toml",
             section="[chunking]",
         )
-        self._croatian_config = handle_config_error(
-            operation=lambda: get_croatian_text_processing(),
+        self._language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("text_processing", self.language),
             fallback_value={
                 "sentence_endings": [".", "!", "?"],
                 "preserve_diacritics": True,
-                "croatian_uppercase_chars": ["Č", "Ć", "Ž", "Š", "Đ"],
+                "language_uppercase_chars": ["Č", "Ć", "Ž", "Š", "Đ"],
             },
-            config_file="config/croatian.toml",
+            config_file=f"config/{self.language}.toml",
             section="[text_processing]",
         )
 
@@ -104,7 +106,7 @@ class DocumentChunker:
             if respect_sentences is not None
             else self._chunking_config["preserve_sentence_boundaries"]
         )
-        self.cleaner = CroatianTextCleaner()
+        self.cleaner = MultilingualTextCleaner(language=self.language)
 
         logger.info(f"Initialized chunker: size={chunk_size}, overlap={overlap}")
 
@@ -150,7 +152,7 @@ class DocumentChunker:
         return meaningful_chunks
 
     def _sliding_window_chunking(self, text: str, source_file: str) -> List[TextChunk]:
-        """Implement sliding window chunking with Croatian text awareness."""
+        """Implement sliding window chunking with language-specific text awareness."""
         chunks = []
         start = 0
         chunk_index = 0
@@ -360,7 +362,7 @@ class DocumentChunker:
         # Search forward for sentence ending
         for i in range(target_pos, min(target_pos + search_range, len(text))):
             if text[i] in ".!?" and (i + 1 >= len(text) or text[i + 1].isspace()):
-                # Check if next character (after space) is uppercase or Croatian uppercase
+                # Check if next character (after space) is uppercase
                 next_char_pos = i + 1
                 while next_char_pos < len(text) and text[next_char_pos].isspace():
                     next_char_pos += 1
@@ -368,7 +370,7 @@ class DocumentChunker:
                 if (
                     next_char_pos >= len(text)
                     or text[next_char_pos].isupper()
-                    or text[next_char_pos] in self._croatian_config["croatian_uppercase_chars"]
+                    or text[next_char_pos] in self._language_config["language_uppercase_chars"]
                 ):
                     return i + 1
 
@@ -400,15 +402,16 @@ class DocumentChunker:
         )
 
 
-def chunk_croatian_document(
+def chunk_document(
     text: str,
     source_file: str,
     chunk_size: int = None,
     overlap: int = None,
     strategy: str = None,
+    language: str = "hr",
 ) -> List[TextChunk]:
     """
-    Convenience function to chunk Croatian documents.
+    Chunk documents for optimal RAG retrieval with language support.
 
     Args:
         text: Document text
@@ -416,18 +419,13 @@ def chunk_croatian_document(
         chunk_size: Target chunk size in characters (uses config if None)
         overlap: Overlap between chunks (uses config if None)
         strategy: Chunking strategy (uses config if None)
+        language: Language code for language-specific behavior
 
     Returns:
         List of text chunks
     """
-    # Use the existing module-level config loader
     if strategy is None:
-        strategy = handle_config_error(
-            operation=lambda: get_chunking_config()["default_strategy"],
-            fallback_value="smart",
-            config_file="config/config.toml",
-            section="[chunking]",
-        )
+        strategy = "sentence_aware"  # Default strategy
 
-    chunker = DocumentChunker(chunk_size=chunk_size, overlap=overlap)
+    chunker = DocumentChunker(chunk_size=chunk_size, overlap=overlap, language=language)
     return chunker.chunk_document(text, source_file, strategy)

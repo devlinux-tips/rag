@@ -1,6 +1,6 @@
 """
-Ollama client for local LLM integration in Croatian RAG system.
-Handles communication with Ollama API for answer generation with Croatian language support.
+Ollama client for local LLM integration in multilingual RAG system.
+Handles communication with Ollama API for answer generation with language support.
 """
 
 import asyncio
@@ -15,21 +15,18 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 import requests
 
+from ..preprocessing.cleaners import detect_language_content, preserve_text_encoding
 from ..utils.config_loader import (
-    get_croatian_confidence_settings,
-    get_croatian_formal_prompts,
-    get_croatian_language_code,
-    get_croatian_prompts,
-    get_croatian_settings,
     get_generation_config,
+    get_language_shared,
+    get_language_specific_config,
     get_ollama_config,
 )
-from ..utils.croatian_utils import detect_croatian_content, preserve_croatian_encoding
 from ..utils.error_handler import create_config_loader, handle_config_error
 
 # Create specialized config loaders
 load_generation_config = create_config_loader("config/config.toml", __name__)
-load_croatian_config = create_config_loader("config/croatian.toml", __name__)
+# Language-specific config will be loaded dynamically based on language parameter
 
 
 @dataclass
@@ -41,13 +38,13 @@ class OllamaConfig:
     timeout: float = field(default=120.0)
 
     # Model settings
-    model: str = field(default="jobautomation/openeurollm-croatian:latest")
+    model: str = field(default="llama3.1:8b")
     temperature: float = field(default=0.7)
     max_tokens: int = field(default=2000)
     top_p: float = field(default=0.9)
     top_k: int = field(default=64)
 
-    # Croatian-specific settings
+    # Language-specific settings
     preserve_diacritics: bool = field(default=True)
     prefer_formal_style: bool = field(default=True)
     include_cultural_context: bool = field(default=True)
@@ -62,15 +59,16 @@ class OllamaConfig:
     )
 
     @classmethod
-    def from_config(cls, config_path: Optional[str] = None) -> "OllamaConfig":
+    def from_config(cls, config_path: Optional[str] = None, language: str = "hr") -> "OllamaConfig":
         """
         Load configuration from TOML files using centralized config loader.
 
         Args:
             config_path: Unused, kept for backwards compatibility
+            language: Language code for language-specific settings
 
         Returns:
-            OllamaConfig instance with loaded values from ollama.toml and croatian.toml
+            OllamaConfig instance with loaded values from config files
         """
 
         def load_config():
@@ -78,8 +76,8 @@ class OllamaConfig:
             generation_config = get_generation_config()
             ollama_config = get_ollama_config()
 
-            # Load Croatian settings
-            croatian_config = get_croatian_settings()
+            # Load language-specific settings
+            language_config = get_language_specific_config("generation", language)
 
             # Extract server settings directly from config
             base_url = ollama_config.get("base_url", "http://localhost:11434")
@@ -97,12 +95,9 @@ class OllamaConfig:
                 max_tokens=ollama_config.get("max_tokens", 2000),
                 top_p=ollama_config.get("top_p", 0.9),
                 top_k=ollama_config.get("top_k", 40),
-                # Croatian settings from Croatian config
+                # Language settings from language-specific config
                 preserve_diacritics=ollama_config.get("preserve_diacritics", True),
-                prefer_formal_style=croatian_config.get("generation", {}).get(
-                    "formality_level", "polite"
-                )
-                == "polite",
+                prefer_formal_style=language_config.get("formality_level", "polite") == "polite",
                 include_cultural_context=ollama_config.get("cultural_context", True),
                 # Generation settings
                 streaming=ollama_config.get("stream", True),
@@ -128,13 +123,8 @@ class GenerationRequest:
     context: List[str]
     query: str
     query_type: str = "general"
-    language: str = None  # Will be set from config
+    language: str = "hr"  # Default language, can be overridden
     metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        """Set default language from config if not provided."""
-        if self.language is None:
-            self.language = get_croatian_language_code()
 
 
 @dataclass
@@ -147,24 +137,27 @@ class GenerationResponse:
     generation_time: float
     confidence: float
     metadata: Dict[str, Any]
+    language: str = "hr"  # Language of the response
 
-    @property
-    def has_croatian_content(self) -> bool:
-        """Check if response contains Croatian content."""
-        return detect_croatian_content(self.text) > 0.3
+    def has_language_content(self, language: str = None) -> bool:
+        """Check if response contains content in specified language."""
+        target_language = language or self.language
+        return detect_language_content(self.text, target_language) > 0.3
 
 
 class OllamaClient:
-    """Enhanced client for interacting with Ollama API for Croatian text generation."""
+    """Enhanced client for interacting with Ollama API for multilingual text generation."""
 
-    def __init__(self, config: Optional[OllamaConfig] = None):
+    def __init__(self, config: Optional[OllamaConfig] = None, language: str = "hr"):
         """
-        Initialize Ollama client with Croatian language support.
+        Initialize Ollama client with language support.
 
         Args:
             config: Configuration object for Ollama settings. If None, loads from TOML.
+            language: Language code for language-specific behavior
         """
-        self.config = config or OllamaConfig.from_config()
+        self.language = language
+        self.config = config or OllamaConfig.from_config(language=language)
         self.logger = logging.getLogger(__name__)
         self._async_client = None
         self._model_info = None
@@ -238,7 +231,7 @@ class OllamaClient:
             return False
 
     async def generate_text_async(self, request: GenerationRequest) -> GenerationResponse:
-        """Generate text using Ollama with async support and Croatian optimization.
+        """Generate text using Ollama with async support and language optimization.
         Uses streaming mode based on configuration settings.
         """
         start_time = time.time()
@@ -254,13 +247,17 @@ class OllamaClient:
             # Step 2: Prepare prompt with config-driven enrichments
             prompt = request.prompt
             if self.config.prefer_formal_style:
-                formal_prompts = get_croatian_formal_prompts()
-                formal_instruction = formal_prompts["formal_instruction"]
-                prompt = f"{formal_instruction}\n\n{prompt}"
+                language_config = get_language_specific_config("prompts", self.language)
+                formal_prompts = language_config.get("formal", {})
+                formal_instruction = formal_prompts.get("formal_instruction", "")
+                if formal_instruction:
+                    prompt = f"{formal_instruction}\n\n{prompt}"
             if self.config.include_cultural_context:
-                formal_prompts = get_croatian_formal_prompts()
-                cultural_instruction = formal_prompts["cultural_context_instruction"]
-                prompt = f"{prompt}\n\n{cultural_instruction}"
+                language_config = get_language_specific_config("prompts", self.language)
+                formal_prompts = language_config.get("formal", {})
+                cultural_instruction = formal_prompts.get("cultural_context_instruction", "")
+                if cultural_instruction:
+                    prompt = f"{prompt}\n\n{cultural_instruction}"
 
             # Step 3: Prepare request (streaming based on config)
             ollama_request = {
@@ -282,10 +279,9 @@ class OllamaClient:
             else:
                 generated_text = await self._handle_non_streaming_response(ollama_request)
 
-            # Step 5: Preserve Croatian encoding if needed
-            croatian_lang_code = get_croatian_language_code()
-            if self.config.preserve_diacritics and request.language == croatian_lang_code:
-                generated_text = preserve_croatian_encoding(generated_text)
+            # Step 5: Preserve encoding if needed
+            if self.config.preserve_diacritics and request.language:
+                generated_text = preserve_text_encoding(generated_text)
 
             # Step 6: Confidence calculation
             confidence = self._calculate_confidence(generated_text, request)
@@ -317,9 +313,11 @@ class OllamaClient:
             self.logger.debug(f"Traceback:\n{tb}")
             error_msg = f"{type(e).__name__}: {str(e)}"
 
-            # Get error message template from Croatian config
-            croatian_prompts = get_croatian_prompts()
-            error_template = croatian_prompts["error_message_template"]
+            # Get error message template from language config
+            language_config = get_language_specific_config("prompts", self.language)
+            error_template = language_config.get(
+                "error_message_template", "An error occurred: {error}"
+            )
             error_text = error_template.format(error=error_msg)
 
             return GenerationResponse(
@@ -343,7 +341,7 @@ class OllamaClient:
             context=context or [],
             query=prompt,
             query_type="general",
-            language=get_croatian_language_code(),
+            language=self.language,
         )
 
         # Run async function in sync context
@@ -462,11 +460,10 @@ class OllamaClient:
         elif len(generated_text.strip()) > 50:
             confidence += 0.1
 
-        # Croatian content check
-        croatian_lang_code = get_croatian_language_code()
-        if request.language == croatian_lang_code:
-            croatian_score = detect_croatian_content(generated_text)
-            confidence += croatian_score * 0.3
+        # Language content check
+        if request.language:
+            language_score = detect_language_content(generated_text, request.language)
+            confidence += language_score * 0.3
 
         # Query relevance (simple keyword check)
         query_words = set(request.query.lower().split())
@@ -486,8 +483,8 @@ class OllamaClient:
                 confidence += context_usage
 
         # Error indicators from config
-        confidence_settings = get_croatian_confidence_settings()
-        error_phrases = confidence_settings["error_phrases"]
+        language_config = get_language_specific_config("confidence", self.language)
+        error_phrases = language_config.get("error_phrases", ["error", "failed", "sorry"])
         if any(phrase in generated_text.lower() for phrase in error_phrases):
             confidence -= 0.2
 
@@ -526,6 +523,7 @@ def create_ollama_client(
     model: Optional[str] = None,
     base_url: Optional[str] = None,
     temperature: Optional[float] = None,
+    language: str = "hr",
 ) -> OllamaClient:
     """
     Factory function to create configured Ollama client.
@@ -535,12 +533,13 @@ def create_ollama_client(
         model: Model name to use (overrides config)
         base_url: Ollama API base URL (overrides config)
         temperature: Generation temperature (overrides config)
+        language: Language code for language-specific behavior
 
     Returns:
         Configured OllamaClient instance
     """
     # Load config from TOML files
-    config = OllamaConfig.from_config(config_path)
+    config = OllamaConfig.from_config(language=language)
 
     # Override with provided parameters
     if model is not None:
@@ -550,4 +549,4 @@ def create_ollama_client(
     if temperature is not None:
         config.temperature = temperature
 
-    return OllamaClient(config)
+    return OllamaClient(config, language=language)

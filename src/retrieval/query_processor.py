@@ -1,6 +1,6 @@
 """
-Croatian query preprocessing for intelligent document retrieval.
-Handles query analysis, expansion, and Croatian language-specific processing.
+Multilingual query preprocessing for intelligent document retrieval.
+Handles query analysis, expansion, and language-specific processing for Croatian and English.
 """
 
 import logging
@@ -10,14 +10,11 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 from ..utils.config_loader import (
-    get_croatian_retrieval,
-    get_croatian_shared,
+    get_language_shared,
+    get_language_specific_config,
     get_query_processing_config,
 )
 from ..utils.error_handler import create_config_loader, handle_config_error
-
-# Create specialized config loader for Croatian config only (since query processing is now in main config)
-load_croatian_config = create_config_loader("config/croatian.toml", __name__)
 
 
 class QueryType(Enum):
@@ -76,74 +73,70 @@ class ProcessedQuery:
     metadata: Dict[str, Any]
 
 
-class CroatianQueryProcessor:
-    """Preprocessor for Croatian language queries."""
+class MultilingualQueryProcessor:
+    """Preprocessor for multilingual queries."""
 
-    def __init__(self, config: QueryProcessingConfig = None):
+    def __init__(self, language: str = "hr", config: QueryProcessingConfig = None):
         """
-        Initialize Croatian query processor.
+        Initialize multilingual query processor.
 
         Args:
+            language: Language code ('hr' for Croatian, 'en' for English)
             config: Query processing configuration
         """
+        self.language = language
         self.config = config or QueryProcessingConfig.from_config()
         self.logger = logging.getLogger(__name__)
 
-        # Croatian stop words from shared config
-        self.croatian_stop_words = load_croatian_config(
-            operation=lambda: set(get_croatian_shared()["stopwords"]["words"]),
+        # Language-specific stop words from shared config
+        shared_config = handle_config_error(
+            operation=lambda: get_language_shared(self.language),
             fallback_value={
-                "i",
-                "u",
-                "na",
-                "za",
-                "se",
-                "je",
-                "da",
-                "su",
-                "od",
-                "do",
-                "po",
-                "sa",
-                "te",
-                "ta",
-                "to",
-                "ti",
-                "tu",
-                "iz",
-                "ni",
-                "li",
-                "ga",
-                "mu",
-                "pa",
-                "ne",
-                "si",
-                "me",
-                "mi",
-                "ih",
-                "im",
-                "ju",
-                "jo",
-                "ja",
-                "ma",
-                "ah",
-                "oh",
-                "al",
+                "stopwords": {
+                    "words": (
+                        ["i", "u", "na", "za", "se", "je"]
+                        if language == "hr"
+                        else ["the", "a", "an", "and", "or", "but"]
+                    )
+                }
             },
-            section="[retrieval.stop_words]",
+            config_file=f"config/{self.language}.toml",
+            section="[shared]",
         )
+        self.stop_words = set(shared_config["stopwords"]["words"])
 
-        # Croatian question words and their types from shared config (convert to regex patterns)
-        question_words = load_croatian_config(
-            operation=lambda: get_croatian_shared()["question_patterns"],
+        # Language-specific question words and their types from shared config
+        shared_config_question = handle_config_error(
+            operation=lambda: get_language_shared(self.language),
             fallback_value={
-                "factual": ["tko", "što", "kada", "gdje", "koji", "koja", "koje"],
-                "explanatory": ["kako", "zašto", "objasni", "razloži"],
-                "comparison": ["razlika", "usporedi", "slično", "različito"],
-                "summarization": ["sažmi", "pregled", "ukratko", "glavno"],
+                "question_patterns": {
+                    "factual": (
+                        ["tko", "što", "kada", "gdje", "koji", "koja", "koje"]
+                        if language == "hr"
+                        else ["who", "what", "when", "where", "which", "how many"]
+                    ),
+                    "explanatory": (
+                        ["kako", "zašto", "objasni", "razloži"]
+                        if language == "hr"
+                        else ["how", "why", "explain", "describe"]
+                    ),
+                    "comparison": (
+                        ["razlika", "usporedi", "slično", "različito"]
+                        if language == "hr"
+                        else ["difference", "compare", "similar", "different"]
+                    ),
+                    "summarization": (
+                        ["sažmi", "pregled", "ukratko", "glavno"]
+                        if language == "hr"
+                        else ["summary", "overview", "briefly", "main"]
+                    ),
+                }
             },
+            config_file=f"config/{self.language}.toml",
             section="[shared.question_patterns]",
         )
+
+        question_words = shared_config_question.get("question_patterns", {})
 
         # Convert config words to regex patterns
         self.question_patterns = {
@@ -155,53 +148,64 @@ class CroatianQueryProcessor:
             ],
         }
 
-        # Croatian synonyms for query expansion from config
-        self.synonym_groups = load_croatian_config(
-            operation=lambda: get_croatian_retrieval()["synonyms"],
+        # Language-specific synonyms for query expansion from config
+        language_config = handle_config_error(
+            operation=lambda: get_language_specific_config("retrieval", self.language),
             fallback_value={
-                "velika": ["velika", "veća", "značajna", "važna"],
-                "mala": ["mala", "manja", "sitna", "nevažna"],
-                "dobra": ["dobra", "kvalitetna", "izvrsna", "odlična"],
-                "loša": ["loša", "slaba", "neispravna", "neadekvatna"],
+                "synonyms": {
+                    "velika": (
+                        ["velika", "veća", "značajna", "važna"]
+                        if language == "hr"
+                        else ["large", "big", "significant", "important"]
+                    ),
+                    "mala": (
+                        ["mala", "manja", "sitna", "nevažna"]
+                        if language == "hr"
+                        else ["small", "little", "minor", "insignificant"]
+                    ),
+                    "dobra": (
+                        ["dobra", "kvalitetna", "izvrsna", "odlična"]
+                        if language == "hr"
+                        else ["good", "quality", "excellent", "outstanding"]
+                    ),
+                    "loša": (
+                        ["loša", "slaba", "neispravna", "neadekvatna"]
+                        if language == "hr"
+                        else ["bad", "poor", "incorrect", "inadequate"]
+                    ),
+                },
+                "morphology": {
+                    "hrvatska": (
+                        ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"]
+                        if language == "hr"
+                        else ["croatian", "croatia", "croatians"]
+                    ),
+                    "ekonomija": (
+                        ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"]
+                        if language == "hr"
+                        else ["economy", "economic", "economics"]
+                    ),
+                    "politika": (
+                        ["politika", "politike", "političke", "političkih"]
+                        if language == "hr"
+                        else ["politics", "political", "policy"]
+                    ),
+                    "kultura": (
+                        ["kultura", "kulture", "kulturne", "kulturnih"]
+                        if language == "hr"
+                        else ["culture", "cultural", "cultures"]
+                    ),
+                },
             },
-            section="[retrieval.synonyms]",
+            config_file=f"config/{self.language}.toml",
+            section="[retrieval]",
         )
 
-        # Croatian morphological variations from config
-        self.morphological_variants = load_croatian_config(
-            operation=lambda: get_croatian_retrieval()["morphology"],
-            fallback_value={
-                "hrvatska": ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"],
-                "ekonomija": ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"],
-                "politika": ["politika", "politike", "političke", "političkih"],
-                "kultura": ["kultura", "kulture", "kulturne", "kulturnih"],
-            },
-            section="[retrieval.morphology]",
-        )
-
-        # Croatian synonyms for query expansion from config
-        self.synonym_groups = load_croatian_config(
-            operation=lambda: get_croatian_retrieval()["synonyms"],
-            fallback_value={
-                "velika": ["velika", "veća", "značajna", "važna"],
-                "mala": ["mala", "manja", "sitna", "nevažna"],
-                "dobra": ["dobra", "kvalitetna", "izvrsna", "odlična"],
-                "loša": ["loša", "slaba", "neispravna", "neadekvatna"],
-            },
-            section="[retrieval.synonyms]",
-        )
-
-        # Croatian morphological variations from config
-        self.morphological_patterns = load_croatian_config(
-            operation=lambda: get_croatian_retrieval()["morphology"],
-            fallback_value={
-                "hrvatska": ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"],
-                "ekonomija": ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"],
-                "politika": ["politika", "politike", "političke", "političkih"],
-                "kultura": ["kultura", "kulture", "kulturne", "kulturnih"],
-            },
-            section="[retrieval.morphology]",
-        )
+        self.synonym_groups = language_config.get("synonyms", {})
+        self.morphological_variants = language_config.get("morphology", {})
+        self.morphological_patterns = (
+            self.morphological_variants
+        )  # Alias for backward compatibility
 
     def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """
@@ -333,7 +337,7 @@ class CroatianQueryProcessor:
 
         # Remove stop words if configured
         if self.config.remove_stopwords:
-            words = [word for word in words if word not in self.croatian_stop_words]
+            words = [word for word in words if word not in self.stop_words]
 
         # Remove very short words
         words = [word for word in words if len(word) >= 2]
@@ -581,7 +585,7 @@ class CroatianQueryProcessor:
 
 def create_query_processor(
     language: str = "hr", expand_synonyms: bool = True
-) -> CroatianQueryProcessor:
+) -> MultilingualQueryProcessor:
     """
     Factory function to create query processor.
 
@@ -590,7 +594,7 @@ def create_query_processor(
         expand_synonyms: Whether to expand with synonyms
 
     Returns:
-        Configured CroatianQueryProcessor
+        Configured MultilingualQueryProcessor
     """
     config = QueryProcessingConfig(language=language, expand_synonyms=expand_synonyms)
-    return CroatianQueryProcessor(config)
+    return MultilingualQueryProcessor(language=language, config=config)
