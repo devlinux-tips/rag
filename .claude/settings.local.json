@@ -5,7 +5,11 @@
       "Bash(pip install:*)",
       "Bash(source:*)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

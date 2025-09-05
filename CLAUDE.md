@@ -1,4 +1,4 @@
-# Multilingual RAG Learning Project
+# Multilingual RAG Project
 
 ## Important
 
@@ -51,86 +51,212 @@ This is a production-ready Retrieval-Augmented Generation (RAG) system for multi
 - **Security**: PyTorch 2.8.0+cu128 resolving security vulnerabilities
 - **Performance**: BGE-M3 + BGE-reranker-v2-m3 for optimal multilingual performance
 
-### **Updated System Architecture**
+### **Updated System Architecture: Monorepo Platform Structure**
 
 ```
-learn-rag/
-├── config/
-│   ├── config.toml            # 🆕 UNIFIED configuration (replaces 7 files)
-│   ├── config.toml           # Main unified configuration
-│   ├── croatian.toml         # Croatian-specific settings
-│   ├── english.toml          # English-specific settings
-├── src/
-│   ├── preprocessing/          # Document processing pipeline
-│   │   ├── extractors.py      # PDF/DOCX/TXT extraction with proper encoding
-│   │   ├── cleaners.py        # Multilingual text normalization
-│   │   └── chunkers.py        # Language-aware chunking strategies
-│   ├── vectordb/              # Vector database operations
-│   │   ├── embeddings.py      # 🆕 BGE-M3 embedding management
-│   │   ├── storage.py         # 🆕 Persistent ChromaDB with collection management
-│   │   └── search.py          # Optimized similarity search
-│   ├── retrieval/             # 🆕 Advanced retrieval system
-│   │   ├── query_processor.py # Multilingual query preprocessing
-│   │   ├── retriever.py       # Main retrieval logic
-│   │   ├── hybrid_retriever.py # Dense + sparse hybrid search
-│   │   ├── reranker.py        # 🆕 BGE-reranker-v2-m3 integration
-│   │   └── ranker.py          # Result ranking & filtering
-│   ├── generation/            # Local LLM integration
-│   │   ├── ollama_client.py   # 🆕 Enhanced Ollama client
-│   │   ├── prompt_templates.py # Multilingual-optimized prompts
-│   │   └── response_parser.py # Language-aware response processing
-│   ├── pipeline/              # 🆕 Production RAG orchestration
-│   │   ├── rag_system.py      # RAGSystem - main multilingual interface
-│   │   └── config.py          # Configuration management
-│   └── utils/
-│       ├── croatian_utils.py  # Croatian language utilities
-│       ├── config_loader.py   # 🆕 Centralized config loading
-│       └── error_handler.py   # 🆕 DRY error handling patterns
-├── data/
-│   ├── raw/                   # Original multilingual documents
-│   │   ├── hr/               # Croatian documents
-│   │   ├── en/               # English documents
-│   │   └── multilingual/     # Mixed-language documents
-│   ├── vectordb/             # 🆕 Persistent vector storage
-│   └── test/                  # Test documents and queries
-├── models/
-│   └── embeddings/            # Cached embedding models
-└── notebooks/                 # Development and learning notebooks
+multilingual-rag-platform/     # 🆕 Monorepo root
+├── services/
+│   ├── rag-service/           # 🔄 Migrated Python RAG (existing system)
+│   │   ├── config/
+│   │   │   ├── config.toml    # Main unified configuration
+│   │   │   ├── croatian.toml  # Croatian-specific settings
+│   │   │   └── english.toml   # English-specific settings
+│   │   ├── src/
+│   │   │   ├── preprocessing/ # Document processing pipeline
+│   │   │   │   ├── extractors.py    # PDF/DOCX/TXT extraction
+│   │   │   │   ├── cleaners.py      # Multilingual text normalization
+│   │   │   │   └── chunkers.py      # Language-aware chunking
+│   │   │   ├── vectordb/      # Vector database operations
+│   │   │   │   ├── embeddings.py    # BGE-M3 embedding management
+│   │   │   │   ├── storage.py       # Persistent ChromaDB
+│   │   │   │   └── search.py        # Optimized similarity search
+│   │   │   ├── retrieval/     # Advanced retrieval system
+│   │   │   │   ├── query_processor.py # Query preprocessing
+│   │   │   │   ├── retriever.py     # Main retrieval logic
+│   │   │   │   ├── hybrid_retriever.py # Dense + sparse search
+│   │   │   │   ├── reranker.py      # BGE-reranker-v2-m3
+│   │   │   │   └── ranker.py        # Result ranking & filtering
+│   │   │   ├── generation/    # Local LLM integration
+│   │   │   │   ├── ollama_client.py   # Enhanced Ollama client
+│   │   │   │   ├── prompt_templates.py # Multilingual prompts
+│   │   │   │   └── response_parser.py # Response processing
+│   │   │   ├── pipeline/      # Production RAG orchestration
+│   │   │   │   ├── rag_system.py    # RAGSystem main interface
+│   │   │   │   └── config.py        # Configuration management
+│   │   │   └── utils/
+│   │   │       ├── croatian_utils.py  # Croatian utilities
+│   │   │       ├── config_loader.py   # Config loading
+│   │   │       └── error_handler.py   # Error handling
+│   │   ├── data/
+│   │   │   ├── raw/           # Original documents
+│   │   │   │   ├── hr/        # Croatian documents
+│   │   │   │   ├── en/        # English documents
+│   │   │   │   └── multilingual/ # Mixed-language documents
+│   │   │   ├── vectordb/      # Persistent vector storage
+│   │   │   └── test/          # Test documents and queries
+│   │   ├── models/
+│   │   │   └── embeddings/    # Cached embedding models
+│   │   ├── notebooks/         # Development notebooks
+│   │   ├── requirements.txt
+│   │   ├── Dockerfile
+│   │   └── README.md
+│   │
+│   ├── platform-api/          # 🆕 Elixir/Phoenix API + Jobs + Admin
+│   │   ├── lib/
+│   │   │   ├── platform_api/  # Core business logic
+│   │   │   │   ├── jobs/      # Oban workers
+│   │   │   │   │   ├── document_processor.ex
+│   │   │   │   │   ├── embedding_generator.ex
+│   │   │   │   │   └── search_worker.ex
+│   │   │   │   ├── rate_limiter/  # Multi-layer rate limiting
+│   │   │   │   │   ├── api_limiter.ex
+│   │   │   │   │   ├── resource_limiter.ex
+│   │   │   │   │   └── external_api_limiter.ex
+│   │   │   │   ├── feature_flags/  # Feature flag management
+│   │   │   │   │   ├── flag_manager.ex
+│   │   │   │   │   └── cache.ex
+│   │   │   │   └── rag_client/     # HTTP client for RAG service
+│   │   │   │       ├── client.ex
+│   │   │   │       └── response_handler.ex
+│   │   │   └── platform_api_web/  # Web layer + Admin UI
+│   │   │       ├── controllers/   # API endpoints
+│   │   │       │   ├── search_controller.ex
+│   │   │       │   ├── document_controller.ex
+│   │   │       │   └── api/       # API versioning
+│   │   │       ├── live/          # 🎨 LiveView Admin UI (embedded)
+│   │   │       │   ├── dashboard_live.ex    # System overview
+│   │   │       │   ├── jobs_live.ex         # Job queue monitoring
+│   │   │       │   ├── rate_limits_live.ex  # Rate limit management
+│   │   │       │   ├── feature_flags_live.ex # Feature flags
+│   │   │       │   └── analytics_live.ex    # Usage analytics
+│   │   │       ├── components/    # Shared LiveView components
+│   │   │       └── templates/     # Basic layouts
+│   │   ├── priv/
+│   │   │   ├── static/        # Admin UI assets
+│   │   │   └── repo/          # Database migrations
+│   │   ├── config/
+│   │   ├── test/
+│   │   ├── mix.exs
+│   │   ├── Dockerfile
+│   │   └── README.md
+│   │
+│   └── user-frontend/         # 🆕 React User Interface
+│       ├── src/
+│       │   ├── components/    # React components
+│       │   │   ├── SearchInterface.tsx
+│       │   │   ├── DocumentUpload.tsx
+│       │   │   ├── ResultsDisplay.tsx
+│       │   │   └── JobProgress.tsx
+│       │   ├── pages/         # Page components
+│       │   ├── hooks/         # Custom hooks
+│       │   ├── services/      # API clients
+│       │   └── utils/
+│       ├── public/
+│       ├── package.json
+│       ├── vite.config.ts
+│       ├── Dockerfile
+│       └── README.md
+│
+├── docs/                      # 📚 Documentation
+│   ├── architecture/          # System design and architecture
+│   ├── api/                   # API documentation
+│   ├── deployment/            # Deployment guides
+│   ├── croatian-language/     # Croatian language specifics
+│   └── user-guides/           # User documentation
+├── shared/                    # 🆕 Cross-service resources
+│   ├── config/
+│   │   ├── docker-compose.yml     # All services orchestration
+│   │   ├── docker-compose.dev.yml # Development environment
+│   │   └── environments/          # Environment configs
+│   ├── scripts/
+│   │   ├── setup.sh              # One-command setup
+│   │   ├── dev.sh                # Start development
+│   │   ├── test.sh               # Run all tests
+│   │   └── deploy.sh             # Deployment
+│   ├── docs/                     # 🔄 Consolidated documentation
+│   │   ├── PLATFORM_ARCHITECTURE_ROADMAP.md
+│   │   ├── CLAUDE.md             # This file
+│   │   ├── API.md                # API documentation
+│   │   └── DEPLOYMENT.md
+│   └── infrastructure/           # Infrastructure as code
+│       ├── k8s/                  # Kubernetes manifests
+│       └── terraform/            # Cloud infrastructure
+│
+├── tools/                     # 🆕 Development tooling
+│   ├── db-migrations/         # Shared database scripts
+│   ├── seed-data/             # Test data generation
+│   └── performance/           # Load testing, benchmarks
+│
+├── .github/                   # 🆕 CI/CD workflows
+│   └── workflows/
+│       ├── ci.yml             # Multi-service CI
+│       ├── deploy-dev.yml     # Development deployment
+│       └── deploy-prod.yml    # Production deployment
+│
+├── README.md                  # 🆕 Platform overview
+├── Makefile                   # 🆕 Cross-service commands
+├── .gitignore                 # Updated for all technologies
+└── docker-compose.yml        # 🆕 Root orchestration
 ```
 
-### **🆕 Key Architectural Improvements**
+### **🆕 Platform Architecture Evolution**
 
-#### **1. Unified Configuration System**
-- **Before**: 7 separate TOML files with duplication
-- **After**: TOML-based unified configuration with language-specific overrides in `croatian.toml`, `english.toml`
-- **Benefits**: Language-specific configurations, easier maintenance, environment-aware settings
-- **⚠️ Critical**: Language initialization required for all components: `RAGSystem(language="hr")`
+#### **1. Monorepo Service-Oriented Design**
+- **Services isolation**: Clear boundaries between RAG, API, and Frontend
+- **Shared resources**: Common configuration, tooling, and infrastructure
+- **Non-disruptive migration**: Existing RAG system moves to `services/rag-service/`
+- **Independent scaling**: Each service can scale and deploy independently
+- **Development efficiency**: Single repository, unified workflows
 
-#### **2. Configuration Architecture Lessons Learned**
-- **Language Initialization**: All system components require language parameter: `RAGSystem(language="hr")`
-- **TOML Configuration**: Modular design with language-specific overrides
-- **API Compatibility**: New `chunk_document()` API with `source_file` parameter replaces `chunk_text()`
-- **Error Handling**: Consistent error handling with language context
+#### **2. Job-Centric Platform Architecture**
+- **Everything as Jobs**: Document processing, search queries, maintenance
+- **Oban Integration**: Elixir job queue with retry logic and monitoring
+- **Rate Limiting**: Multi-layer protection (API, resources, external APIs)
+- **Feature Flags**: Database-backed toggles for safe experimentation
+- **Real-time Updates**: Phoenix Channels for job progress and system events
 
-#### **2. Enhanced Model Stack**
+#### **3. Hybrid Frontend Strategy**
+- **React User Interface**: Modern search interface with real-time job progress
+- **Embedded LiveView Admin**: Admin UI integrated within `platform-api` service
+- **Technology separation**: React for user experience, LiveView for admin efficiency
+- **WebSocket integration**: Real-time updates across both interfaces
+- **Independent development**: Frontend and admin can evolve separately
+
+#### **4. Enhanced RAG System (Preserved)**
 - **Embeddings**: BAAI/bge-m3 (1024-dim, multilingual, Croatian+English optimized)
 - **Reranking**: BAAI/bge-reranker-v2-m3 (Multilingual support)
 - **Generation**: qwen2.5:7b-instruct (Multilingual LLM with Croatian capabilities)
 - **Security**: PyTorch 2.8.0+cu128 (resolved security vulnerabilities)
+- **Storage**: Persistent language-specific ChromaDB collections
 
-#### **3. Multi-Device Support**
+#### **5. Multi-Device & Configuration Management**
 - **Auto-Detection**: Automatic CUDA/MPS/CPU detection
-- **Priority**: MPS (Apple Silicon) → CUDA (NVIDIA) → CPU
-- **Graceful Degradation**: Continues on CPU if GPU unavailable
-- **Apple Silicon**: Full M1/M2/M3/M4 Pro support
-
-#### **4. Production Storage**
-- **Persistent Collections**: Language-specific data survives system restarts
-- **Collection Management**: Language-aware naming ("croatian_documents", "english_documents")
-- **Metadata Tracking**: Document counts, distance metrics, language tags
-- **Storage Optimization**: Efficient chunk storage and retrieval per language
+- **TOML Configuration**: Unified configuration with language-specific overrides
+- **Language Initialization**: All components require language parameter: `RAGSystem(language="hr")`
+- **Environment Flexibility**: Development and production configuration separation
 
 ## Working on this project
+
+### **AI-First Project Management System**
+This project uses an **Obsidian-based project management system** optimized for **senior architect + AI development workflow**:
+
+**📁 Project Management Location**: `/obsidian-vault/`
+- **AI-Accessible**: Claude Code can read/write all planning documents
+- **Structured Templates**: PRD, Phase Planning, Implementation Specifications
+- **Natural Language Specs**: AI-optimized specification format for complex features
+- **Progress Tracking**: Real-time milestone and task tracking
+
+**🛠️ Development Workflow**:
+1. **Plan** using Obsidian templates (PRD → Phase Planning)
+2. **Specify** complex features with Implementation Specifications
+3. **Implement** with Claude Code using specs as detailed context
+4. **Track** progress and update milestones in real-time
+5. **Document** decisions and architectural changes
+
+**📋 Template System**:
+- **PRD Template**: Product requirements with Croatian language specifics
+- **Phase Planning Template**: Milestone tracking with dependencies and risks
+- **Implementation Specification Template**: Natural language specs for AI implementation
 
 ### **Production Development Approach**
 This project has evolved from learning-focused to **production-ready** implementation. Components are now integrated into a cohesive system with modern development practices.
@@ -639,35 +765,69 @@ general_config = get_generation_config()  # Missing language-specific templates
 - **With Batch Processing**: 2-3x concurrent query throughput
 - **With Quantization**: 40-60s generation time (additional 30-50% improvement)
 
-### **🎯 Implementation Roadmap**
+### **🎯 Platform Development Roadmap**
 
-#### **Phase 1: Quick Wins (Next 1-2 weeks)**
-1. ✅ Model optimization (qwen2.5:7b-instruct) - COMPLETED
-2. ✅ Configuration optimization - COMPLETED
-3. 🔲 Response caching implementation
-4. 🔲 GPU utilization investigation
+#### **Phase 1: Job-Centric Foundation (4-6 weeks)**
+**Strategy**: Build job-orchestrated system around existing RAG (non-disruptive)
 
-#### **Phase 2: Scalability (Weeks 3-4)**
-1. 🔲 Parallel processing implementation
-2. 🔲 Advanced monitoring setup
-3. 🔲 Performance benchmarking suite
+**Core Components**:
+- ✅ **Python RAG Service** (existing system preserved)
+- 🔲 **Elixir API + Job Layer** - HTTP wrapper with Oban job orchestration
+- 🔲 **Rate Limiting** - Multi-layer protection (API, resources, external APIs)
+- 🔲 **Feature Flags** - Simple database-backed feature toggles
+- 🔲 **Basic User UI** - Simple React search interface for RAG testing
+- 🔲 **PostgreSQL** - Jobs, rate limits, feature flags, tenant-ready schema
 
-#### **Phase 3: Production Features (Month 2)**
-1. 🔲 Web interface implementation
-2. 🔲 Advanced Croatian language features
-3. 🔲 Production deployment optimization
+**Job-Centric Operations**:
+- Document Processing → Background job pipeline with progress
+- Search Queries → Complex queries as jobs, simple queries immediate
+- Embedding Generation → Always background jobs with retry logic
+- Maintenance → Scheduled jobs for cleanup, optimization
 
-#### **Phase 4: Mobile & Advanced Features (Month 3)**
-1. 🔲 Mobile application development (React Native/Flutter/PWA)
-2. 🔲 Croatian voice recognition integration
-3. 🔲 Offline mode and document scanning
-4. 🔲 Advanced analytics and user insights
+**UI Deliverables**:
+- 🎨 **Basic Search Interface**: Simple React app for RAG testing
+  - Text input for queries (Croatian/English)
+  - Results display with source attribution
+  - Document upload with basic progress indicator
+  - Real-time job status updates via WebSocket
 
-#### **Phase 5: Enterprise Features (Month 4+)**
-1. 🔲 Multi-tenant architecture
-2. 🔲 Enterprise authentication and authorization
-3. 🔲 API rate limiting and usage analytics
-4. 🔲 Advanced Croatian language models fine-tuning
+#### **Phase 2: Distributed & Advanced Jobs (6-8 weeks)**
+**Goal**: Distributed coordination and advanced job orchestration
+
+**Enhanced Components**:
+- 🔲 **Distributed Rate Limiting** - Cross-node coordination with ETS + PubSub
+- 🔲 **Job Workflows** - Complex multi-step job pipelines with dependencies
+- 🔲 **Advanced Feature Flags** - A/B testing, gradual rollouts, circuit breakers
+- 🔲 **Job Analytics** - Performance tracking, cost analysis, failure analysis
+- 🔲 **External Integrations** - Third-party crawler jobs, webhook notifications
+
+**UI Deliverables**:
+- 🎨 **Enhanced User Interface**: Polished React app with advanced features
+- 🖥️ **Admin Dashboard**: Phoenix LiveView for system monitoring
+
+#### **Phase 3: Multi-Tenancy & Scale (8-10 weeks)**
+**Goal**: True multi-tenancy and production scaling (when needed)
+
+**New Components**:
+- 🔲 **Multi-Tenant Architecture** - Row-level security, tenant isolation
+- 🔲 **Tenant Management UI** - Signup, billing, resource quotas
+- 🔲 **Advanced Monitoring** - Cross-tenant metrics, alerts
+- 🔲 **Horizontal Scaling** - Load balancing, distributed deployment
+
+#### **Phase 4: Advanced Features & Optimization**
+**Performance & Croatian Language Enhancement**:
+- 🔲 Response caching implementation
+- 🔲 GPU utilization investigation and optimization
+- 🔲 Parallel processing for multiple queries
+- 🔲 Advanced Croatian language features (morphological analysis)
+- 🔲 Mobile application development (React Native/Flutter/PWA)
+
+#### **Phase 5: Enterprise & Analytics**
+**Enterprise-Ready Features**:
+- 🔲 Advanced authentication and authorization
+- 🔲 Usage analytics and billing integration
+- 🔲 Croatian voice recognition integration
+- 🔲 Offline mode and advanced mobile features
 
 ---
 
