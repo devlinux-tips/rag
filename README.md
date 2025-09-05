@@ -62,7 +62,7 @@ python simple_test.py
 │  │"Koliki je   │ ──────────→ │ System      │                    │
 │  │ ukupni      │             └─────────────┘                    │
 │  │ iznos?"     │                    │                           │
-│  └─────────────┘                     ▼                          │
+│  └─────────────┘                    ▼                           │
 │                              ┌──────────────┐                   │
 │                              │ Qwen2.5      │                   │
 │                              │ LLM          │                   │
@@ -413,63 +413,6 @@ python debug_ollama.py           # Test LLM connection
 python debug_rag_context.py      # Check retrieval system
 python test_setup.py             # Verify system components
 ```
-
-## 📄 License
-
-MIT License - Feel free to use for learning and development.
-
----
-
-**Built with ❤️ for multilingual AI learning**
-
-## 📚 Documentation
-
-For comprehensive documentation, visit the **[docs/ folder](docs/README.md)**:
-
-- **[Multilingual Architecture](docs/MULTILINGUAL_ARCHITECTURE.md)** - Language-based folder structure and advanced features
-- **[Performance Optimization](docs/PERFORMANCE_OPTIMIZATION.md)** - System tuning and optimization
-- **[Web Interface Plan](docs/WEB_INTERFACE_PLAN.md)** - User interface development roadmap
-- **[Device Setup Guides](docs/)** - Hardware configuration and troubleshooting
-
-## 📚 Learning Path
-
-This project is designed for hands-on multilingual RAG learning:
-
-1. **Document Processing** - Handle multilingual text extraction and language-aware chunking
-2. **Vector Database** - Implement cross-language embeddings and similarity search
-3. **Retrieval System** - Build intelligent multilingual document retrieval
-4. **Generation System** - Integrate local LLM with language-specific processing
-5. **Complete Pipeline** - Orchestrate all components with language detection and routing
-
-Each step includes comprehensive notebooks explaining the concepts and language-specific implementation details.
-
-## 🔧 Configuration
-
-Key settings in `config/`:
-
-- **Language Support**: Croatian (`hr/`), English (`en/`), extensible for additional languages
-- **Embedding Models**: BGE-M3 multilingual sentence-transformers
-- **Language Processing**: Morphology patterns, stop words, cultural context per language
-- **Retrieval Strategy**: Cross-language search weights, ranking signals, filtering
-- **Generation**: Qwen2.5 model selection, language-specific prompt templates, response parsing
-
-## � Multilingual Language Challenges Solved
-
-### Croatian (🇭🇷)
-- **Morphology**: Handles complex word inflections (Zagreb → Zagreba, Zagrebu, etc.)
-- **Diacritics**: Preserves and processes Č, Ć, Š, Ž, Đ correctly
-- **Cultural Context**: Recognizes "biser Jadrana" = Dubrovnik, historical references
-- **Query Types**: Classifies Croatian questions (Koji? Kako? Zašto? etc.)
-
-### English (🇬🇧)
-- **Business Documents**: Handles financial reports, legal documents, technical specs
-- **Semantic Understanding**: Captures meaning beyond keyword matching
-- **Query Processing**: Advanced question classification and expansion
-
-### Cross-Language (🌐)
-- **Unified Search**: Find relevant content regardless of document/query language
-- **Language Detection**: Automatic language identification for documents and queries
-- **Translation Ready**: Framework for query translation and response localization
 
 ## 📄 License
 
