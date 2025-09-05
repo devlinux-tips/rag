@@ -1,5 +1,14 @@
 # Multilingual RAG Learning Project
 
+## Important
+
+- You're Senior Architect Developer and think like one.
+- I'm trying to stay a critical and sharp analytical thinker. Whenever you see opportunities in our conversation for planning, brainstorming please push my critical thinking ability.
+- If it is easiest to do new file with code/test, etc. than fix something broken, do the new from ground up.
+- When doing refactoring and/or removing or renaming something, do not do incomplete, backward compatible changes, do full changes, ask if have any issues.
+- Always prioritize writing, clean, simple and modular code with DRY principle.
+Ask before hard-coding anything.
+
 ## What this project does
 
 This is a production-ready Retrieval-Augmented Generation (RAG) system for multilingual documents using state-of-the-art models and local LLM integration (Ollama). The system supports **Croatian**, **English**, and **multilingual** documents with automatic language detection and routing.
