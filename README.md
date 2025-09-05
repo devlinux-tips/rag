@@ -1,17 +1,6 @@
 # Multilingual RAG Learning Project
 
-A hands-on learning project to build a complete Retrieval-Augmented Generation (RAG) system for multilingual documents us# Run multilingual tests
-pytest tests/
-
-# Test specific components
-pytest tests/test_preprocessing.py -v
-pytest tests/test_retrieval.py -v
-
-# Test language-specific functionality
-python -m pytest tests/ -k "croatian" -v    # Croatian tests
-python -m pytest tests/ -k "english" -v     # English tests
-python -m pytest tests/ -k "multilingual" -v # Cross-language tests
-```LLM processing. This system handles multiple languages with specialized support for Croatian, English, and extensible architecture for additional languages including German, French, Spanish, and more.
+A hands-on learning project to build a complete Retrieval-Augmented Generation (RAG) system for multilingual documents LLM processing. This system handles multiple languages with specialized support for Croatian, English, and extensible architecture for additional languages including German, French, Spanish, and more.
 
 ## 🌍 Multilingual Capabilities
 
