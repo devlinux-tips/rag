@@ -1,17 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python test:*)",
-      "Bash(pip install:*)",
-      "Bash(source:*)",
-      "Bash(python -m pytest tests/ -v)",
-      "Bash(python:*)",
-      "mcp__sequential-thinking__sequentialthinking",
-      "Bash(find:*)",
-      "Bash(tree:*)",
-      "Bash(chmod:*)"
+      "mcp__ruv-swarm",
+      "mcp__claude-flow"
     ],
-    "deny": [],
-    "ask": []
+    "deny": []
   }
 }
