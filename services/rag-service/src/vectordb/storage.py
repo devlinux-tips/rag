@@ -1,590 +1,449 @@
 """
-ChromaDB storage operations for multilingual RAG system.
-Handles vector database operations, collections, and persistence.
+Clean slate testable ChromaDB storage system.
+Implements 100% testable architecture with pure functions and dependency injection.
 """
 
+import asyncio
 import logging
 import uuid
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Protocol, Union
 
-import chromadb
 import numpy as np
-from chromadb.api.models.Collection import Collection
-from chromadb.config import Settings
-
-from ..utils.config_loader import (
-    get_language_specific_config,
-    get_search_config,
-    get_storage_config,
-)
-from ..utils.error_handler import create_config_loader, handle_config_error
-
-logger = logging.getLogger(__name__)
-
-# Create specialized config loaders
-load_vectordb_config = create_config_loader("config/config.toml", __name__)
-
-
-@dataclass
-class StorageConfig:
-    """Configuration for ChromaDB storage."""
-
-    db_path: str
-    collection_name: str
-    distance_metric: str
-    persist: bool
-    allow_reset: bool
-
-    @classmethod
-    def from_config(cls) -> "StorageConfig":
-        """Load configuration from TOML files."""
-        return load_vectordb_config(
-            operation=lambda: cls(
-                db_path=get_storage_config()["db_path"],
-                collection_name=get_storage_config()["collection_name"],
-                distance_metric=get_storage_config()["distance_metric"],
-                persist=get_storage_config()["persist"],
-                allow_reset=get_storage_config()["allow_reset"],
-            ),
-            fallback_value=cls(
-                db_path="./data/chromadb",
-                collection_name="multilingual_documents",
-                distance_metric="cosine",
-                persist=True,
-                allow_reset=True,
-            ),
-            section="[storage]",
-            error_level="error",
-        )
 
 
 @dataclass
 class DocumentMetadata:
-    """Metadata structure for stored documents."""
+    """Document metadata - pure data structure."""
 
-    source: str
-    title: Optional[str] = None
-    chunk_index: Optional[int] = None
-    total_chunks: Optional[int] = None
-    language: str = None
-    processed_at: Optional[str] = None
-    content_type: Optional[str] = None
-    file_size: Optional[int] = None
+    source_file: str
+    chunk_index: int
+    language: str
+    timestamp: Optional[datetime] = None
 
     def __post_init__(self):
-        """Set default language from config if not provided."""
-        if self.language is None:
-            try:
-                # Use default language code from general config
-                self.language = "hr"  # Default language
-                # Note: No logging here as this is normal operation
-            except Exception as e:
-                self.language = "hr"
-                import logging
-
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to load language code, using fallback 'hr': {e}")
-                logger.warning("Check your config files")
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for ChromaDB storage."""
-        return {k: v for k, v in asdict(self).items() if v is not None}
+        """Convert to dictionary for storage."""
+        return {
+            "source_file": self.source_file,
+            "chunk_index": self.chunk_index,
+            "language": self.language,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
 
 
-class ChromaDBStorage:
-    """ChromaDB client for vector storage and retrieval."""
+@dataclass
+class StorageResult:
+    """Result from storage operation - pure data structure."""
 
-    def __init__(self, config: StorageConfig = None):
-        """
-        Initialize ChromaDB storage.
+    success: bool
+    documents_stored: int = 0
+    batches_processed: int = 0
+    document_ids: List[str] = field(default_factory=list)
+    error_message: Optional[str] = None
 
-        Args:
-            config: Storage configuration
-        """
-        self.config = config or StorageConfig.from_config()
-        self.logger = logging.getLogger(__name__)
 
-        # Create database directory
-        Path(self.config.db_path).mkdir(parents=True, exist_ok=True)
+@dataclass
+class QueryResult:
+    """Query result from vector database - pure data structure."""
 
-        # Initialize ChromaDB client
-        self.client = None
-        self.collection = None
-        self._initialize_client()
+    id: str
+    content: str
+    metadata: Dict[str, Any]
+    score: float
 
-    def _initialize_client(self) -> None:
-        """Initialize ChromaDB client and settings."""
-        try:
-            settings = Settings(
-                persist_directory=self.config.db_path if self.config.persist else None,
-                allow_reset=self.config.allow_reset,
-                anonymized_telemetry=False,
-            )
 
-            if self.config.persist:
-                self.client = chromadb.PersistentClient(path=self.config.db_path, settings=settings)
-            else:
-                self.client = chromadb.EphemeralClient(settings=settings)
+# Protocols for dependency injection
+class VectorCollection(Protocol):
+    """Vector collection interface."""
 
-            self.logger.info(f"ChromaDB client initialized with persist={self.config.persist}")
-
-        except Exception as e:
-            self.logger.error(f"Failed to initialize ChromaDB client: {e}")
-            raise
-
-    def create_collection(
-        self, collection_name: Optional[str] = None, reset_if_exists: bool = False
-    ) -> Collection:
-        """
-        Create or get collection.
-
-        Args:
-            collection_name: Name of collection (uses config default if None)
-            reset_if_exists: Whether to reset collection if it exists
-
-        Returns:
-            ChromaDB Collection object
-        """
-        collection_name = collection_name or self.config.collection_name
-
-        try:
-            if reset_if_exists:
-                try:
-                    self.client.delete_collection(collection_name)
-                    self.logger.info(f"Deleted existing collection: {collection_name}")
-                except Exception:
-                    pass  # Collection might not exist
-
-            # Create or get collection
-            self.collection = self.client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": self.config.distance_metric},
-            )
-
-            self.logger.info(f"Collection '{collection_name}' ready")
-            return self.collection
-
-        except Exception as e:
-            self.logger.error(f"Failed to create collection: {e}")
-            raise
-
-    def add_documents(
+    def add(
         self,
+        ids: List[str],
         documents: List[str],
         metadatas: List[Dict[str, Any]],
-        embeddings: Optional[List[List[float]]] = None,
-        ids: Optional[List[str]] = None,
-    ) -> List[str]:
-        """
-        Add documents to the collection.
+        embeddings: Optional[List[np.ndarray]] = None,
+    ) -> None:
+        ...
 
-        Args:
-            documents: List of document texts
-            metadatas: List of metadata dictionaries
-            embeddings: Pre-computed embeddings (optional)
-            ids: Document IDs (auto-generated if not provided)
-
-        Returns:
-            List of document IDs
-        """
-        if not self.collection:
-            self.create_collection()
-
-        # Validate inputs
-        if len(documents) != len(metadatas):
-            raise ValueError("Number of documents and metadatas must match")
-
-        if embeddings and len(embeddings) != len(documents):
-            raise ValueError("Number of embeddings and documents must match")
-
-        # Generate IDs if not provided
-        if not ids:
-            ids = [str(uuid.uuid4()) for _ in documents]
-
-        try:
-            add_kwargs = {"documents": documents, "metadatas": metadatas, "ids": ids}
-
-            if embeddings:
-                add_kwargs["embeddings"] = embeddings
-
-            self.collection.add(**add_kwargs)
-
-            self.logger.info(f"Added {len(documents)} documents to collection")
-            return ids
-
-        except Exception as e:
-            self.logger.error(f"Failed to add documents: {e}")
-            raise
-
-    def add_document_chunks(
-        self,
-        chunks: List[Dict[str, Any]],
-        embeddings: Optional[List[List[float]]] = None,
-    ) -> List[str]:
-        """
-        Add document chunks with structured metadata.
-
-        Args:
-            chunks: List of document chunks with content and metadata
-            embeddings: Pre-computed embeddings for chunks
-
-        Returns:
-            List of chunk IDs
-        """
-        documents = []
-        metadatas = []
-        ids = []
-
-        for chunk in chunks:
-            # Extract content
-            content = chunk.get("content", "")
-            if not content:
-                continue
-
-            documents.append(content)
-
-            # Prepare metadata
-            metadata = chunk.copy()
-            metadata.pop("content", None)  # Remove content from metadata
-
-            # Ensure required metadata fields
-            if "id" not in metadata:
-                metadata["id"] = str(uuid.uuid4())
-
-            metadatas.append(metadata)
-            ids.append(metadata["id"])
-
-        return self.add_documents(documents, metadatas, embeddings, ids)
-
-    def query_similar(
+    def query(
         self,
         query_texts: Optional[List[str]] = None,
-        query_embeddings: Optional[List[List[float]]] = None,
-        n_results: int = None,
+        query_embeddings: Optional[List[np.ndarray]] = None,
+        n_results: int = 10,
         where: Optional[Dict[str, Any]] = None,
         where_document: Optional[Dict[str, Any]] = None,
-        include: List[str] = None,
+        include: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """
-        Query for similar documents.
+        ...
 
-        Args:
-            query_texts: Query texts (will be embedded automatically)
-            query_embeddings: Pre-computed query embeddings
-            n_results: Number of results to return (defaults from config)
-            where: Metadata filter conditions
-            where_document: Document content filter conditions
-            include: What to include in results ("embeddings", "documents", "metadatas", "distances")
-
-        Returns:
-            Query results from ChromaDB
-        """
-        if not self.collection:
-            raise ValueError("No collection available. Create collection first.")
-
-        if not query_texts and not query_embeddings:
-            raise ValueError("Either query_texts or query_embeddings must be provided")
-
-        # Use config default for n_results if not provided
-        if n_results is None:
-            try:
-                search_config = get_search_config()
-                n_results = search_config["top_k"]
-                self.logger.debug(f"Using search config top_k: {n_results}")
-            except Exception as e:
-                n_results = 5
-                self.logger.warning(
-                    f"Failed to load search config for n_results, using fallback value {n_results}: {e}"
-                )
-                self.logger.warning("Check your config/vectordb.toml and config/search.toml files")
-
-        # Default include list
-        if include is None:
-            include = ["documents", "metadatas", "distances"]
-
-        try:
-            query_kwargs = {"n_results": n_results, "include": include}
-
-            if query_texts:
-                query_kwargs["query_texts"] = query_texts
-
-            if query_embeddings:
-                query_kwargs["query_embeddings"] = query_embeddings
-
-            if where:
-                query_kwargs["where"] = where
-
-            if where_document:
-                query_kwargs["where_document"] = where_document
-
-            results = self.collection.query(**query_kwargs)
-
-            result_count = (
-                len(results.get("ids", [[]])[0]) if results.get("ids") and results["ids"] else 0
-            )
-            self.logger.debug(f"Query returned {result_count} results")
-            return results
-
-        except Exception as e:
-            self.logger.error(f"Query failed: {e}")
-            raise
-
-    def get_documents(
+    def get(
         self,
         ids: Optional[List[str]] = None,
         where: Optional[Dict[str, Any]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        include: List[str] = None,
+        include: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """
-        Get documents by IDs or metadata filters.
+        ...
 
-        Args:
-            ids: Specific document IDs to retrieve
-            where: Metadata filter conditions
-            limit: Maximum number of results
-            offset: Number of results to skip
-            include: What to include in results
-
-        Returns:
-            Retrieved documents
-        """
-        if not self.collection:
-            raise ValueError("No collection available")
-
-        if include is None:
-            include = ["documents", "metadatas"]
-
-        try:
-            get_kwargs = {"include": include}
-
-            if ids:
-                get_kwargs["ids"] = ids
-
-            if where:
-                get_kwargs["where"] = where
-
-            if limit:
-                get_kwargs["limit"] = limit
-
-            if offset:
-                get_kwargs["offset"] = offset
-
-            return self.collection.get(**get_kwargs)
-
-        except Exception as e:
-            self.logger.error(f"Failed to get documents: {e}")
-            raise
-
-    def update_documents(
+    def update(
         self,
         ids: List[str],
         documents: Optional[List[str]] = None,
         metadatas: Optional[List[Dict[str, Any]]] = None,
-        embeddings: Optional[List[List[float]]] = None,
+        embeddings: Optional[List[np.ndarray]] = None,
     ) -> None:
-        """
-        Update existing documents.
+        ...
 
-        Args:
-            ids: Document IDs to update
-            documents: New document texts
-            metadatas: New metadata
-            embeddings: New embeddings
-        """
-        if not self.collection:
-            raise ValueError("No collection available")
-
-        try:
-            update_kwargs = {"ids": ids}
-
-            if documents:
-                update_kwargs["documents"] = documents
-
-            if metadatas:
-                update_kwargs["metadatas"] = metadatas
-
-            if embeddings:
-                update_kwargs["embeddings"] = embeddings
-
-            self.collection.update(**update_kwargs)
-
-            self.logger.info(f"Updated {len(ids)} documents")
-
-        except Exception as e:
-            self.logger.error(f"Failed to update documents: {e}")
-            raise
-
-    def delete_documents(
+    def delete(
         self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Delete documents by IDs or metadata filters.
+        ...
 
-        Args:
-            ids: Document IDs to delete
-            where: Metadata filter for deletion
-        """
+    def count(self) -> int:
+        ...
+
+    @property
+    def name(self) -> str:
+        ...
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        ...
+
+
+class VectorDatabase(Protocol):
+    """Vector database interface."""
+
+    def create_collection(
+        self, name: str, reset_if_exists: bool = False
+    ) -> VectorCollection:
+        ...
+
+    def get_collection(self, name: str) -> VectorCollection:
+        ...
+
+    def delete_collection(self, name: str) -> None:
+        ...
+
+    def list_collections(self) -> List[str]:
+        ...
+
+    def reset(self) -> None:
+        ...
+
+
+# Pure functions for business logic
+def validate_documents_for_storage(documents: List[str]) -> List[str]:
+    """Validate documents for storage - pure function."""
+    if not documents:
+        raise ValueError("Documents list cannot be empty")
+
+    validated_docs = []
+    for i, doc in enumerate(documents):
+        if doc is None:
+            raise ValueError(f"Document at index {i} is None")
+        if not isinstance(doc, str):
+            raise ValueError(f"Document at index {i} must be string, got {type(doc)}")
+        if not doc.strip():
+            raise ValueError(f"Document at index {i} is empty")
+        validated_docs.append(doc)
+
+    return validated_docs
+
+
+def validate_embeddings_for_storage(
+    embeddings: List[np.ndarray], expected_dim: Optional[int] = None
+) -> List[np.ndarray]:
+    """Validate embeddings for storage - pure function."""
+    if not embeddings:
+        raise ValueError("Embeddings list cannot be empty")
+
+    validated_embeddings = []
+    for i, emb in enumerate(embeddings):
+        if emb is None:
+            raise ValueError(f"Embedding at index {i} is None")
+        if not isinstance(emb, np.ndarray):
+            raise ValueError(
+                f"Embedding at index {i} must be numpy array, got {type(emb)}"
+            )
+
+        if expected_dim is not None and emb.shape[0] != expected_dim:
+            raise ValueError(
+                f"Embedding at index {i} has shape {emb.shape}, expected ({expected_dim},)"
+            )
+
+        validated_embeddings.append(emb)
+
+    return validated_embeddings
+
+
+def prepare_storage_batch(
+    documents: List[str],
+    embeddings: List[np.ndarray],
+    metadata_list: List[DocumentMetadata],
+    batch_size: int = 100,
+) -> List[Dict[str, Any]]:
+    """Prepare documents for batch storage - pure function."""
+    if len(documents) != len(embeddings) != len(metadata_list):
+        raise ValueError(
+            "Documents, embeddings, and metadata lists must have same length"
+        )
+
+    batches = []
+    total_items = len(documents)
+
+    for i in range(0, total_items, batch_size):
+        end_idx = min(i + batch_size, total_items)
+
+        batch_documents = documents[i:end_idx]
+        batch_embeddings = embeddings[i:end_idx]
+        batch_metadata = metadata_list[i:end_idx]
+
+        # Generate IDs from metadata
+        batch_ids = []
+        batch_metadatas = []
+
+        for metadata in batch_metadata:
+            doc_id = f"{metadata.source_file}_chunk_{metadata.chunk_index}_{uuid.uuid4().hex[:8]}"
+            batch_ids.append(doc_id)
+            batch_metadatas.append(metadata.to_dict())
+
+        batch = {
+            "ids": batch_ids,
+            "documents": batch_documents,
+            "embeddings": batch_embeddings,
+            "metadatas": batch_metadatas,
+        }
+
+        batches.append(batch)
+
+    return batches
+
+
+def parse_query_results(raw_results: Dict[str, Any]) -> List[QueryResult]:
+    """Parse raw ChromaDB query results - pure function."""
+    if not raw_results or "ids" not in raw_results:
+        return []
+
+    ids_list = raw_results["ids"][0] if raw_results["ids"] else []
+    documents_list = raw_results.get("documents", [[]])[0]
+    metadatas_list = raw_results.get("metadatas", [[]])[0]
+    distances_list = raw_results.get("distances", [[]])[0]
+
+    results = []
+    for i, doc_id in enumerate(ids_list):
+        content = documents_list[i] if i < len(documents_list) else ""
+        metadata = metadatas_list[i] if i < len(metadatas_list) else {}
+        score = distances_list[i] if i < len(distances_list) else 1.0
+
+        result = QueryResult(id=doc_id, content=content, metadata=metadata, score=score)
+        results.append(result)
+
+    return results
+
+
+def calculate_batch_sizes(num_documents: int, max_batch_size: int = 100) -> int:
+    """Calculate optimal batch size - pure function."""
+    if num_documents <= 100:
+        return min(25, num_documents)
+    elif num_documents <= 1000:
+        return 50
+    else:
+        return max_batch_size
+
+
+def extract_document_ids(documents: List[Dict[str, Any]]) -> List[str]:
+    """Extract document IDs - pure function."""
+    ids = []
+    for i, doc in enumerate(documents):
+        if "id" not in doc:
+            raise KeyError(f"Document at index {i} missing 'id' field")
+        ids.append(doc["id"])
+    return ids
+
+
+def merge_search_results(
+    results_list: List[List[QueryResult]], max_results: int = 10
+) -> List[QueryResult]:
+    """Merge and sort search results from multiple sources - pure function."""
+    all_results = []
+    for results in results_list:
+        all_results.extend(results)
+
+    # Sort by score (ascending - lower distance is better)
+    all_results.sort(key=lambda r: r.score)
+
+    return all_results[:max_results]
+
+
+# Main vector storage class
+class VectorStorage:
+    """Vector storage system with dependency injection."""
+
+    def __init__(self, database: VectorDatabase):
+        self.database = database
+        self.collection: Optional[VectorCollection] = None
+        self.logger = logging.getLogger(__name__)
+
+    async def initialize(
+        self, collection_name: str, reset_if_exists: bool = False
+    ) -> None:
+        """Initialize storage with collection."""
+        try:
+            self.collection = self.database.create_collection(
+                name=collection_name, reset_if_exists=reset_if_exists
+            )
+            self.logger.info(f"Initialized storage with collection: {collection_name}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize storage: {e}")
+            raise
+
+    async def store_documents(
+        self,
+        documents: List[str],
+        embeddings: List[np.ndarray],
+        metadata_list: List[DocumentMetadata],
+        batch_size: int = 100,
+    ) -> StorageResult:
+        """Store documents in batches."""
         if not self.collection:
-            raise ValueError("No collection available")
+            return StorageResult(
+                success=False,
+                error_message="Storage not initialized - call initialize() first",
+            )
 
-        if not ids and not where:
-            raise ValueError("Either ids or where filter must be provided")
+        try:
+            # Validate inputs using pure functions
+            validated_docs = validate_documents_for_storage(documents)
+            validated_embeddings = validate_embeddings_for_storage(embeddings)
+
+            # Prepare batches using pure function
+            batches = prepare_storage_batch(
+                validated_docs, validated_embeddings, metadata_list, batch_size
+            )
+
+            # Store each batch
+            all_doc_ids = []
+            for batch in batches:
+                self.collection.add(**batch)
+                all_doc_ids.extend(batch["ids"])
+
+            self.logger.info(
+                f"Stored {len(validated_docs)} documents in {len(batches)} batches"
+            )
+
+            return StorageResult(
+                success=True,
+                documents_stored=len(validated_docs),
+                batches_processed=len(batches),
+                document_ids=all_doc_ids,
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to store documents: {e}")
+            return StorageResult(success=False, error_message=str(e))
+
+    async def search_documents(
+        self,
+        query_text: Optional[str] = None,
+        query_embedding: Optional[np.ndarray] = None,
+        top_k: int = 10,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[QueryResult]:
+        """Search documents by text or embedding."""
+        if not self.collection:
+            self.logger.error("Storage not initialized")
+            return []
+
+        try:
+            query_kwargs = {
+                "n_results": top_k,
+                "include": ["documents", "metadatas", "distances"],
+            }
+
+            if query_text:
+                query_kwargs["query_texts"] = [query_text]
+            elif query_embedding is not None:
+                query_kwargs["query_embeddings"] = [query_embedding]
+            else:
+                raise ValueError(
+                    "Either query_text or query_embedding must be provided"
+                )
+
+            if filter_metadata:
+                query_kwargs["where"] = filter_metadata
+
+            raw_results = self.collection.query(**query_kwargs)
+            results = parse_query_results(raw_results)
+
+            self.logger.debug(f"Search returned {len(results)} results")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Failed to search documents: {e}")
+            return []
+
+    async def get_collection_stats(self) -> Dict[str, Any]:
+        """Get collection statistics."""
+        if not self.collection:
+            return {"error": "Storage not initialized"}
+
+        try:
+            count = self.collection.count()
+            return {
+                "name": self.collection.name,
+                "document_count": count,
+                "metadata": self.collection.metadata,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Failed to get collection stats: {e}")
+            return {"error": str(e)}
+
+    async def delete_documents(
+        self,
+        ids: Optional[List[str]] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Delete documents from collection."""
+        if not self.collection:
+            raise ValueError("Storage not initialized")
 
         try:
             delete_kwargs = {}
-
             if ids:
                 delete_kwargs["ids"] = ids
+            if filter_metadata:
+                delete_kwargs["where"] = filter_metadata
 
-            if where:
-                delete_kwargs["where"] = where
+            if not delete_kwargs:
+                raise ValueError("Either ids or filter_metadata must be provided")
 
             self.collection.delete(**delete_kwargs)
-
-            self.logger.info(f"Deleted documents with filter: {delete_kwargs}")
+            self.logger.info("Documents deleted successfully")
 
         except Exception as e:
             self.logger.error(f"Failed to delete documents: {e}")
             raise
 
-    def get_collection_info(self) -> Dict[str, Any]:
-        """
-        Get information about the collection.
 
-        Returns:
-            Collection statistics and metadata
-        """
-        if not self.collection:
-            return {"error": "No collection available"}
-
-        try:
-            count = self.collection.count()
-
-            return {
-                "name": self.collection.name,
-                "count": count,
-                "metadata": self.collection.metadata,
-                "distance_metric": self.config.distance_metric,
-                "persist_directory": (self.config.db_path if self.config.persist else None),
-            }
-
-        except Exception as e:
-            self.logger.error(f"Failed to get collection info: {e}")
-            return {"error": str(e)}
-
-    def reset_collection(self, collection_name: Optional[str] = None) -> None:
-        """
-        Reset (delete and recreate) collection.
-
-        Args:
-            collection_name: Collection name to reset
-        """
-        collection_name = collection_name or self.config.collection_name
-
-        try:
-            self.client.delete_collection(collection_name)
-            self.logger.info(f"Deleted collection: {collection_name}")
-
-            self.create_collection(collection_name)
-            self.logger.info(f"Recreated collection: {collection_name}")
-
-        except Exception as e:
-            self.logger.error(f"Failed to reset collection: {e}")
-            raise
-
-    def list_collections(self) -> List[str]:
-        """
-        List all available collections.
-
-        Returns:
-            List of collection names
-        """
-        try:
-            collections = self.client.list_collections()
-            return [col.name for col in collections]
-        except Exception as e:
-            self.logger.error(f"Failed to list collections: {e}")
-            return []
-
-    def get_document_count(self, collection_name: Optional[str] = None) -> int:
-        """
-        Get the total number of documents in the collection.
-
-        Args:
-            collection_name: Optional collection name, uses default if None
-
-        Returns:
-            Number of documents in the collection
-        """
-        try:
-            collection_name = collection_name or self.config.collection_name
-            collection = self.client.get_collection(collection_name)
-            return collection.count()
-        except Exception as e:
-            self.logger.error(f"Failed to get document count: {e}")
-            return 0
-
-    async def close(self) -> None:
-        """
-        Close the ChromaDB storage connection gracefully.
-
-        Note: ChromaDB persistent client doesn't require explicit closing,
-        but this method provides a standard interface for cleanup.
-        """
-        try:
-            self.logger.info("Closing ChromaDB storage connection...")
-            # ChromaDB persistent client automatically handles cleanup
-            # No explicit close needed for the client
-            self.logger.info("ChromaDB storage connection closed successfully")
-        except Exception as e:
-            self.logger.error(f"Error during ChromaDB storage cleanup: {e}")
+# Factory functions
+def create_vector_storage(database: VectorDatabase) -> VectorStorage:
+    """Factory function to create vector storage."""
+    return VectorStorage(database)
 
 
-def create_storage_client(
-    db_path: str = None,
-    collection_name: str = None,
-    persist: bool = None,
-) -> ChromaDBStorage:
-    """
-    Factory function to create ChromaDB storage client.
+def create_mock_storage() -> VectorStorage:
+    """Factory function to create mock storage for testing."""
+    from .storage_factories import create_mock_database
 
-    Args:
-        db_path: Database storage path (defaults from config)
-        collection_name: Default collection name (defaults from config)
-        persist: Whether to persist data to disk (defaults from config)
-
-    Returns:
-        Configured ChromaDBStorage instance
-    """
-    # Use config defaults if not provided
-    if any(param is None for param in [db_path, collection_name, persist]):
-        try:
-            storage_config = get_storage_config()
-            db_path = db_path or storage_config["db_path"]
-            collection_name = collection_name or storage_config["collection_name"]
-            persist = persist if persist is not None else storage_config["persist"]
-        except Exception as e:
-            # Fallback to hardcoded defaults
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Failed to load storage config for factory function, using hardcoded defaults: {e}"
-            )
-            logger.warning("Check your config/vectordb.toml file")
-            db_path = db_path or "./data/chromadb"
-            collection_name = collection_name or "multilingual_documents"
-            persist = persist if persist is not None else True
-
-    config = StorageConfig(
-        db_path=db_path,
-        collection_name=collection_name,
-        distance_metric="cosine",
-        persist=persist,
-        allow_reset=True,
-    )
-    return ChromaDBStorage(config)
+    mock_db = create_mock_database()
+    return VectorStorage(mock_db)

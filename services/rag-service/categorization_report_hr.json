@@ -1,0 +1,32 @@
+{
+  "language": "hr",
+  "categorization_system": {
+    "supported_categories": 13,
+    "category_names": [
+      "cultural",
+      "tourism",
+      "technical",
+      "legal",
+      "business",
+      "educational",
+      "news",
+      "reference",
+      "faq",
+      "procedural",
+      "comparative",
+      "historical",
+      "general"
+    ]
+  },
+  "prompt_templates": {
+    "total_categories": 0,
+    "language": "hr",
+    "categories": {}
+  },
+  "validation": {
+    "valid": true,
+    "issues": [],
+    "warnings": []
+  },
+  "test_timestamp": 162166.263285527
+}

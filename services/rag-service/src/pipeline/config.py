@@ -5,7 +5,10 @@ Configuration management for RAG system.
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ..utils.config_protocol import ConfigProvider
 
 import yaml
 
@@ -32,37 +35,49 @@ class ProcessingConfig:
 
     @classmethod
     def from_config(
-        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        language: str = "hr",
+        config_provider: Optional["ConfigProvider"] = None,
     ) -> "ProcessingConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_language_specific_config, get_processing_config
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            processing_config = config_dict
+            language_config = config_dict.get("language_specific", {})
+            language_processing = language_config.get("processing", {})
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load main processing config
-        processing_config = config_dict or handle_config_error(
-            operation=get_processing_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="processing",
-        )
+                config_provider = get_config_provider()
 
-        # Load language-specific settings
-        language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("pipeline", language),
-            fallback_value={"processing": {}},
-            config_file=f"config/{language}.toml",
-            section="pipeline",
-        )
-        language_processing = language_config.get("processing", {})
+            # Get configs through provider
+            full_config = config_provider.load_config("config")
+            processing_config = full_config["processing"]
+            chunking_config = full_config["chunking"]
+
+            # Get language-specific config
+            language_config = config_provider.get_language_specific_config(
+                "pipeline", language
+            )
+            language_processing = language_config.get("pipeline", {}).get(
+                "processing", {}
+            )
 
         return cls(
-            max_chunk_size=processing_config.get("max_chunk_size", 512),
-            chunk_overlap=processing_config.get("chunk_overlap", 50),
-            min_chunk_size=processing_config.get("min_chunk_size", 100),
-            sentence_chunk_overlap=processing_config.get("sentence_chunk_overlap", 2),
-            preserve_paragraphs=processing_config.get("preserve_paragraphs", True),
-            enable_smart_chunking=processing_config.get("enable_smart_chunking", True),
-            respect_document_structure=processing_config.get("respect_document_structure", True),
+            max_chunk_size=chunking_config["max_chunk_size"],
+            chunk_overlap=chunking_config.get(
+                "chunk_overlap", 100
+            ),  # Default if not present
+            min_chunk_size=chunking_config.get(
+                "min_chunk_size", 100
+            ),  # Default if not present
+            sentence_chunk_overlap=processing_config["sentence_chunk_overlap"],
+            preserve_paragraphs=processing_config["preserve_paragraphs"],
+            enable_smart_chunking=processing_config["enable_smart_chunking"],
+            respect_document_structure=processing_config["respect_document_structure"],
         )
 
 
@@ -78,27 +93,35 @@ class EmbeddingConfig:
     normalize_embeddings: bool = True
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "EmbeddingConfig":
+    def from_config(
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        config_provider: Optional["ConfigProvider"] = None,
+    ) -> "EmbeddingConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_pipeline_config
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            embedding_config = config_dict
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load pipeline embedding config (this references vectordb config)
-        pipeline_config = config_dict or handle_config_error(
-            operation=get_pipeline_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="pipeline",
-        )
-        embedding_config = pipeline_config.get("embedding", {})
+                config_provider = get_config_provider()
+
+            # Get config through provider
+            full_config = config_provider.load_config("config")
+            embedding_config = full_config["embeddings"]
 
         return cls(
-            model_name=embedding_config.get("model_name", "BAAI/bge-m3"),
-            cache_folder=embedding_config.get("cache_folder", "./models/embeddings"),
-            batch_size=embedding_config.get("batch_size", 32),
-            max_seq_length=embedding_config.get("max_seq_length", 512),
-            device=embedding_config.get("device", "auto"),
-            normalize_embeddings=embedding_config.get("normalize_embeddings", True),
+            model_name=embedding_config["model_name"],
+            cache_folder=embedding_config.get(
+                "cache_folder", "models/embeddings"
+            ),  # Optional with default
+            batch_size=embedding_config["batch_size"],
+            max_seq_length=embedding_config["max_seq_length"],
+            device=embedding_config["device"],
+            normalize_embeddings=embedding_config["normalize_embeddings"],
         )
 
 
@@ -115,27 +138,34 @@ class ChromaConfig:
     allow_reset: bool = False
 
     @classmethod
-    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None) -> "ChromaConfig":
+    def from_config(
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        config_provider: Optional["ConfigProvider"] = None,
+    ) -> "ChromaConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_chroma_config
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            chroma_config = config_dict
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load chroma config
-        chroma_config = config_dict or handle_config_error(
-            operation=get_chroma_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="chroma",
-        )
+                config_provider = get_config_provider()
+
+            # Get config through provider
+            full_config = config_provider.load_config("config")
+            chroma_config = full_config["chroma"]
 
         return cls(
-            db_path=chroma_config.get("db_path", "./data/chromadb"),
-            collection_name=chroma_config.get("collection_name", "multilingual_documents"),
-            distance_metric=chroma_config.get("distance_metric", "cosine"),
-            ef_construction=chroma_config.get("ef_construction", 200),
-            m=chroma_config.get("m", 16),
-            persist=chroma_config.get("persist", True),
-            allow_reset=chroma_config.get("allow_reset", False),
+            db_path=chroma_config["db_path"],
+            collection_name=chroma_config["collection_name"],
+            distance_metric=chroma_config["distance_metric"],
+            ef_construction=chroma_config["ef_construction"],
+            m=chroma_config["m"],
+            persist=chroma_config["persist"],
+            allow_reset=chroma_config["allow_reset"],
         )
 
 
@@ -154,39 +184,45 @@ class RetrievalConfig:
 
     @classmethod
     def from_config(
-        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        language: str = "hr",
+        config_provider: Optional["ConfigProvider"] = None,
     ) -> "RetrievalConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import get_language_specific_config, get_pipeline_config
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            retrieval_config = config_dict.get("retrieval", config_dict)
+            language_config = config_dict.get("language_specific", {})
+            language_retrieval = language_config.get("retrieval", {})
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load main retrieval config
-        pipeline_config = config_dict or handle_config_error(
-            operation=get_pipeline_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="pipeline",
-        )
-        retrieval_config = pipeline_config.get("retrieval", {})
+                config_provider = get_config_provider()
 
-        # Load language-specific settings
-        language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("pipeline", language),
-            fallback_value={"retrieval": {}},
-            config_file=f"config/{language}.toml",
-            section="pipeline",
-        )
-        language_retrieval = language_config.get("retrieval", {})
+            # Get configs through provider
+            full_config = config_provider.load_config("config")
+            retrieval_config = full_config["retrieval"]
+
+            # Get language-specific config
+            language_config = config_provider.get_language_specific_config(
+                "pipeline", language
+            )
+            language_retrieval = language_config.get("pipeline", {}).get(
+                "retrieval", {}
+            )
 
         return cls(
-            default_k=retrieval_config.get("default_k", 5),
-            max_k=retrieval_config.get("max_k", 10),
-            min_similarity_score=retrieval_config.get("min_similarity_score", 0.3),
-            adaptive_retrieval=retrieval_config.get("adaptive_retrieval", True),
-            enable_reranking=retrieval_config.get("enable_reranking", True),
-            diversity_lambda=retrieval_config.get("diversity_lambda", 0.3),
-            use_hybrid_search=retrieval_config.get("use_hybrid_search", True),
-            enable_query_expansion=retrieval_config.get("enable_query_expansion", True),
+            default_k=retrieval_config["default_k"],
+            max_k=retrieval_config["max_k"],
+            min_similarity_score=retrieval_config["min_similarity_score"],
+            adaptive_retrieval=retrieval_config["adaptive_retrieval"],
+            enable_reranking=retrieval_config["enable_reranking"],
+            diversity_lambda=retrieval_config["diversity_lambda"],
+            use_hybrid_search=retrieval_config["use_hybrid_search"],
+            enable_query_expansion=retrieval_config["enable_query_expansion"],
         )
 
 
@@ -203,64 +239,66 @@ class OllamaConfig:
     timeout: float
     preserve_diacritics: bool
     prefer_formal_style: bool
-    include_cultural_context: bool
     stream: bool = True
     keep_alive: str = "5m"
 
     @classmethod
     def from_config(
-        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        language: str = "hr",
+        config_provider: Optional["ConfigProvider"] = None,
     ) -> "OllamaConfig":
         """Create config from dictionary with DRY error handling."""
-        from ..utils.config_loader import (
-            get_language_specific_config,
-            get_ollama_config,
-            get_shared_config,
-        )
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            ollama_config = config_dict.get("ollama", config_dict)
+            language_config = config_dict.get("language_specific", {})
+            language_generation = language_config.get("generation", {})
+            language_shared = language_config.get("shared", {})
+            pipeline_generation = language_config.get("pipeline", {}).get(
+                "generation", {}
+            )
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load main ollama config
-        ollama_config = config_dict or handle_config_error(
-            operation=get_ollama_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="ollama",
-        )
+                config_provider = get_config_provider()
 
-        # Load language-specific generation settings
-        language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("pipeline", language),
-            fallback_value={"generation": {}},
-            config_file=f"config/{language}.toml",
-            section="pipeline",
-        )
-        language_generation = language_config.get("generation", {})
-        language_shared = language_config.get("shared", {})
-        pipeline_generation = language_config.get("pipeline", {}).get("generation", {})
+            # Get configs through provider
+            full_config = config_provider.load_config("config")
+            ollama_config = full_config["ollama"]
+
+            # Get language-specific config
+            language_config = config_provider.get_language_specific_config(
+                "pipeline", language
+            )
+            language_generation = language_config.get("generation", {})
+            language_shared = language_config.get("shared", {})
+            pipeline_generation = language_config.get("pipeline", {}).get(
+                "generation", {}
+            )
 
         return cls(
-            base_url=ollama_config.get("base_url", "http://localhost:11434"),
-            model=ollama_config.get("model", "llama3.1:8b"),
-            temperature=ollama_config.get("temperature", 0.7),
-            max_tokens=ollama_config.get("max_tokens", 2000),
-            top_p=ollama_config.get("top_p", 0.9),
-            top_k=ollama_config.get("top_k", 40),
-            timeout=ollama_config.get("timeout", 60.0),
+            base_url=ollama_config["base_url"],
+            model=ollama_config["model"],
+            temperature=ollama_config["temperature"],
+            max_tokens=ollama_config["max_tokens"],
+            top_p=ollama_config["top_p"],
+            top_k=ollama_config["top_k"],
+            timeout=ollama_config["timeout"],
             preserve_diacritics=pipeline_generation.get(
                 "preserve_diacritics",
                 language_shared.get(
-                    "preserve_diacritics", language_generation.get("preserve_diacritics", True)
+                    "preserve_diacritics", language_generation["preserve_diacritics"]
                 ),
             ),
             prefer_formal_style=pipeline_generation.get(
-                "prefer_formal_style", language_generation.get("prefer_formal_style", True)
+                "prefer_formal_style", language_generation["prefer_formal_style"]
             ),
-            include_cultural_context=pipeline_generation.get(
-                "include_cultural_context",
-                language_generation.get("include_cultural_context", True),
-            ),
-            stream=ollama_config.get("stream", True),
-            keep_alive=ollama_config.get("keep_alive", "5m"),
+            stream=ollama_config["stream"],
+            keep_alive=ollama_config["keep_alive"],
         )
 
 
@@ -270,49 +308,50 @@ class LanguageConfig:
 
     enable_morphological_expansion: bool
     enable_synonym_expansion: bool
-    enable_cultural_context: bool
     use_language_query_processing: bool
     language_priority: bool
     language_code: str = "hr"
     stop_words_file: str = "config/hr_stop_words.txt"
     morphology_patterns_file: str = "config/hr_morphology.json"
-    cultural_context_file: str = "config/hr_cultural_context.json"
 
     @classmethod
     def from_config(
-        cls, config_dict: Optional[Dict[str, Any]] = None, language: str = "hr"
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        language: str = "hr",
+        config_provider: Optional["ConfigProvider"] = None,
     ) -> "LanguageConfig":
         """Create config from dictionary with language support."""
-        from ..utils.config_loader import get_language_specific_config
-        from ..utils.error_handler import handle_config_error
+        if config_dict:
+            # Direct config provided
+            language_config = config_dict
+        else:
+            # Use dependency injection - falls back to production provider
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
 
-        # Load language-specific pipeline config
-        language_config = config_dict or handle_config_error(
-            operation=lambda: get_language_specific_config("pipeline", language),
-            fallback_value={},
-            config_file=f"config/{language}.toml",
-            section="pipeline",
-        )
+                config_provider = get_config_provider()
+
+            # Get language-specific config through provider
+            language_config = config_provider.get_language_specific_config(
+                "pipeline", language
+            )
 
         return cls(
             language_code=language,
             enable_morphological_expansion=language_config.get(
                 "enable_morphological_expansion", True
             ),
-            enable_synonym_expansion=language_config.get("enable_synonym_expansion", True),
-            enable_cultural_context=language_config.get("enable_cultural_context", True),
+            enable_synonym_expansion=language_config["enable_synonym_expansion"],
             use_language_query_processing=language_config.get(
                 "use_language_query_processing", True
             ),
-            language_priority=language_config.get("language_priority", True),
+            language_priority=language_config["language_priority"],
             stop_words_file=language_config.get(
                 "stop_words_file", f"config/{language}_stop_words.txt"
             ),
             morphology_patterns_file=language_config.get(
                 "morphology_patterns_file", f"config/{language}_morphology.json"
-            ),
-            cultural_context_file=language_config.get(
-                "cultural_context_file", f"config/{language}_cultural_context.json"
             ),
         )
 
@@ -357,45 +396,22 @@ class RAGConfig(BaseSettings):
         """Initialize with DRY config loading."""
         # If no data provided, load from config files
         if not data:
-            from ..utils.config_loader import (
-                get_paths_config,
-                get_performance_config,
-                get_shared_config,
-                get_system_config,
-            )
-            from ..utils.error_handler import handle_config_error
+            from ..utils.config_loader import (get_paths_config,
+                                               get_performance_config,
+                                               get_shared_config,
+                                               get_system_config)
 
             # Load shared config for common settings
-            shared_config = handle_config_error(
-                operation=get_shared_config,
-                fallback_value={},
-                config_file="config/config.toml",
-                section="shared",
-            )
+            shared_config = get_shared_config()
 
             # Load system config
-            system_config = handle_config_error(
-                operation=get_system_config,
-                fallback_value={},
-                config_file="config/config.toml",
-                section="system",
-            )
+            system_config = get_system_config()
 
             # Load paths config
-            paths_config = handle_config_error(
-                operation=get_paths_config,
-                fallback_value={},
-                config_file="config/config.toml",
-                section="paths",
-            )
+            paths_config = get_paths_config()
 
             # Load performance config
-            performance_config = handle_config_error(
-                operation=get_performance_config,
-                fallback_value={},
-                config_file="config/config.toml",
-                section="performance",
-            )
+            performance_config = get_performance_config()
 
             # Create component configs
             data = {
@@ -405,16 +421,16 @@ class RAGConfig(BaseSettings):
                 "retrieval": RetrievalConfig.from_config(language=language),
                 "ollama": OllamaConfig.from_config(language=language),
                 "language": LanguageConfig.from_config(language=language),
-                "log_level": system_config.get("log_level", "INFO"),
-                "enable_caching": system_config.get("enable_caching", True),
-                "cache_dir": shared_config.get("cache_dir", "./data/cache"),
-                "max_concurrent_requests": system_config.get("max_concurrent_requests", 5),
-                "request_timeout": shared_config.get("request_timeout", 120.0),
-                "enable_metrics": system_config.get("enable_metrics", True),
-                "metrics_dir": shared_config.get("metrics_dir", "./data/metrics"),
-                "documents_dir": paths_config.get("documents_dir", "./data/raw"),
-                "processed_dir": paths_config.get("processed_dir", "./data/processed"),
-                "test_data_dir": paths_config.get("test_data_dir", "./data/test"),
+                "log_level": system_config["log_level"],
+                "enable_caching": system_config["enable_caching"],
+                "cache_dir": shared_config["cache_dir"],
+                "max_concurrent_requests": system_config["max_concurrent_requests"],
+                "request_timeout": shared_config["request_timeout"],
+                "enable_metrics": system_config["enable_metrics"],
+                "metrics_dir": shared_config["metrics_dir"],
+                "documents_dir": paths_config["documents_dir"],
+                "processed_dir": paths_config["processed_dir"],
+                "test_data_dir": paths_config["test_data_dir"],
             }
 
         super().__init__(**data)

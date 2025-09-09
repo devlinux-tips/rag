@@ -1,797 +1,611 @@
 """
-Embedding model management for multilingual RAG system.
-Handles multilingual sentence-transformers models optimized for various languages.
+Clean slate testable embedding system for multilingual RAG.
+Implements 100% testable architecture with dependency injection and pure functions.
 """
 
 import logging
-import os
-import pickle
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Protocol, Union
 
 import numpy as np
-import torch
-from sentence_transformers import SentenceTransformer
-
-logger = logging.getLogger(__name__)
-
-from ..utils.config_loader import (
-    get_embeddings_config,
-    get_language_specific_config,
-    get_vectordb_config,
-)
-from ..utils.error_handler import handle_config_error
 
 
 @dataclass
 class EmbeddingConfig:
-    """Configuration for embedding models."""
+    """Configuration for embedding models - pure data structure."""
 
-    model_name: str
-    cache_dir: str
-    device: str
-    max_seq_length: int
-    batch_size: int
-    normalize_embeddings: bool
+    model_name: str = "BAAI/bge-m3"
+    cache_dir: str = "models/embeddings"
+    device: str = "auto"
+    max_seq_length: int = 8192
+    batch_size: int = 32
+    normalize_embeddings: bool = True
     use_safetensors: bool = True
     trust_remote_code: bool = False
     torch_dtype: str = "auto"
 
-    @classmethod
-    def from_config(cls) -> "EmbeddingConfig":
-        """Load configuration from TOML files."""
-        return handle_config_error(
-            operation=lambda: cls(
-                model_name=get_embeddings_config()["model_name"],
-                cache_dir=get_embeddings_config()["cache_dir"],
-                device=get_embeddings_config()["device"],
-                max_seq_length=get_embeddings_config()["max_seq_length"],
-                batch_size=get_embeddings_config()["batch_size"],
-                normalize_embeddings=get_embeddings_config()["normalize_embeddings"],
-                use_safetensors=get_embeddings_config().get("use_safetensors", True),
-                trust_remote_code=get_embeddings_config().get("trust_remote_code", False),
-                torch_dtype=get_embeddings_config().get("torch_dtype", "auto"),
-            ),
-            fallback_value=cls(
-                model_name="BAAI/bge-m3",  # Default to BGE-M3
-                cache_dir="./models/embeddings",
-                device="auto",
-                max_seq_length=512,
-                batch_size=32,
-                normalize_embeddings=True,
-                use_safetensors=True,
-                trust_remote_code=False,
-                torch_dtype="auto",
-            ),
-            config_file="config/config.toml",
-            section="[embeddings]",
-            error_level="error",
-        )
+
+@dataclass
+class EmbeddingResult:
+    """Result from embedding generation - pure data structure."""
+
+    embeddings: np.ndarray
+    input_texts: List[str]
+    model_name: str
+    embedding_dim: int
+    processing_time: float
+    metadata: Dict[str, Any]
 
 
-class MultilingualEmbeddingModel:
-    """Multilingual embedding model optimized for various languages."""
+@dataclass
+class DeviceInfo:
+    """Device information for embedding computation."""
+
+    device_type: str  # "cuda", "mps", "cpu"
+    device_name: str
+    available_memory: Optional[int] = None
+    device_properties: Optional[Dict[str, Any]] = None
+
+
+# Protocols for dependency injection
+class EmbeddingModel(Protocol):
+    """Embedding model interface for dependency injection."""
+
+    def encode(
+        self,
+        texts: List[str],
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        **kwargs,
+    ) -> np.ndarray:
+        """Generate embeddings for texts."""
+        ...
 
     @property
-    def recommended_models(self) -> Dict[str, str]:
-        """Get recommended models from config."""
-        return handle_config_error(
-            operation=lambda: get_embeddings_config()["recommended_models"],
-            fallback_value={
-                "bge_m3": "BAAI/bge-m3",  # Primary: BGE-M3 (Best for multilingual)
-                "labse": "sentence-transformers/LaBSE",  # Secondary: Language-Agnostic BERT
-                "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
-                "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
-                "distiluse_multilingual": "distiluse-base-multilingual-cased",
-            },
-            config_file="config/config.toml",
-            section="[embeddings.recommended_models]",
+    def device(self) -> str:
+        """Get current device."""
+        ...
+
+    @property
+    def max_seq_length(self) -> int:
+        """Get maximum sequence length."""
+        ...
+
+    def get_sentence_embedding_dimension(self) -> int:
+        """Get embedding dimension."""
+        ...
+
+
+class ModelLoader(Protocol):
+    """Model loader interface for dependency injection."""
+
+    def load_model(
+        self, model_name: str, cache_dir: str, device: str, **kwargs
+    ) -> EmbeddingModel:
+        """Load embedding model."""
+        ...
+
+    def is_model_available(self, model_name: str) -> bool:
+        """Check if model is available."""
+        ...
+
+
+class DeviceDetector(Protocol):
+    """Device detection interface for dependency injection."""
+
+    def detect_best_device(self, preferred_device: str = "auto") -> DeviceInfo:
+        """Detect best available device."""
+        ...
+
+    def is_device_available(self, device: str) -> bool:
+        """Check if device is available."""
+        ...
+
+
+# Pure functions for business logic
+def validate_texts_for_embedding(texts: List[str]) -> List[str]:
+    """
+    Validate and clean texts for embedding generation.
+
+    Args:
+        texts: Input texts to validate
+
+    Returns:
+        Cleaned and validated texts
+
+    Raises:
+        ValueError: If texts are invalid
+    """
+    if not texts:
+        raise ValueError("Cannot generate embeddings for empty text list")
+
+    if not isinstance(texts, list):
+        raise ValueError("Texts must be provided as a list")
+
+    cleaned_texts = []
+    for i, text in enumerate(texts):
+        if text is None:
+            raise ValueError(f"Text at index {i} is None")
+
+        if not isinstance(text, str):
+            raise ValueError(f"Text at index {i} is not a string: {type(text)}")
+
+        # Clean whitespace but preserve content
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            raise ValueError(f"Text at index {i} is empty after cleaning")
+
+        cleaned_texts.append(cleaned_text)
+
+    return cleaned_texts
+
+
+def calculate_optimal_batch_size(
+    num_texts: int,
+    available_memory: Optional[int],
+    base_batch_size: int = 32,
+    max_batch_size: int = 256,
+) -> int:
+    """
+    Calculate optimal batch size for embedding generation.
+
+    Args:
+        num_texts: Number of texts to process
+        available_memory: Available memory in MB
+        base_batch_size: Base batch size to use
+        max_batch_size: Maximum allowed batch size
+
+    Returns:
+        Optimal batch size
+    """
+    if num_texts <= 0:
+        return base_batch_size
+
+    # Start with base batch size
+    optimal_batch = base_batch_size
+
+    # Adjust based on available memory if known
+    if available_memory is not None and available_memory > 0:
+        # Rough heuristic: 1GB allows ~64 batch size for typical models
+        memory_based_batch = min(int(available_memory / 16), max_batch_size)
+        optimal_batch = min(optimal_batch, memory_based_batch)
+
+    # Don't use batch larger than total texts
+    optimal_batch = min(optimal_batch, num_texts)
+
+    # Ensure minimum batch size of 1
+    return max(1, optimal_batch)
+
+
+def split_texts_into_batches(texts: List[str], batch_size: int) -> List[List[str]]:
+    """
+    Split texts into batches for processing.
+
+    Args:
+        texts: Texts to split
+        batch_size: Size of each batch
+
+    Returns:
+        List of text batches
+    """
+    if batch_size <= 0:
+        raise ValueError("Batch size must be positive")
+
+    batches = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        batches.append(batch)
+
+    return batches
+
+
+def normalize_embeddings_array(embeddings: np.ndarray) -> np.ndarray:
+    """
+    Normalize embeddings to unit length.
+
+    Args:
+        embeddings: Raw embeddings array [num_texts, embedding_dim]
+
+    Returns:
+        Normalized embeddings array
+    """
+    if embeddings.size == 0:
+        return embeddings
+
+    # L2 normalization
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-12)  # Avoid division by zero
+    return embeddings / norms
+
+
+def combine_batch_embeddings(batch_embeddings: List[np.ndarray]) -> np.ndarray:
+    """
+    Combine embeddings from multiple batches.
+
+    Args:
+        batch_embeddings: List of embedding arrays from batches
+
+    Returns:
+        Combined embeddings array
+    """
+    if not batch_embeddings:
+        return np.array([])
+
+    return np.vstack(batch_embeddings)
+
+
+def validate_embedding_dimensions(
+    embeddings: np.ndarray,
+    expected_dim: Optional[int] = None,
+    num_texts: Optional[int] = None,
+) -> None:
+    """
+    Validate embedding array dimensions.
+
+    Args:
+        embeddings: Embedding array to validate
+        expected_dim: Expected embedding dimension
+        num_texts: Expected number of texts
+
+    Raises:
+        ValueError: If dimensions are invalid
+    """
+    if embeddings.size == 0:
+        raise ValueError("Embedding array is empty")
+
+    if len(embeddings.shape) != 2:
+        raise ValueError(f"Embeddings must be 2D array, got shape: {embeddings.shape}")
+
+    if num_texts is not None and embeddings.shape[0] != num_texts:
+        raise ValueError(f"Expected {num_texts} embeddings, got {embeddings.shape[0]}")
+
+    if expected_dim is not None and embeddings.shape[1] != expected_dim:
+        raise ValueError(
+            f"Expected embedding dimension {expected_dim}, got {embeddings.shape[1]}"
         )
 
-    def __init__(self, config: EmbeddingConfig = None):
+
+def calculate_embedding_statistics(embeddings: np.ndarray) -> Dict[str, Any]:
+    """
+    Calculate statistics for embedding array.
+
+    Args:
+        embeddings: Embedding array to analyze
+
+    Returns:
+        Dictionary with embedding statistics
+    """
+    if embeddings.size == 0:
+        return {"empty": True}
+
+    return {
+        "num_embeddings": embeddings.shape[0],
+        "embedding_dim": embeddings.shape[1],
+        "mean_norm": float(np.mean(np.linalg.norm(embeddings, axis=1))),
+        "std_norm": float(np.std(np.linalg.norm(embeddings, axis=1))),
+        "min_value": float(np.min(embeddings)),
+        "max_value": float(np.max(embeddings)),
+        "mean_value": float(np.mean(embeddings)),
+        "std_value": float(np.std(embeddings)),
+    }
+
+
+def get_recommended_models() -> Dict[str, str]:
+    """
+    Get dictionary of recommended embedding models.
+
+    Returns:
+        Dictionary mapping model keys to model names
+    """
+    return {
+        "bge_m3": "BAAI/bge-m3",
+        "bge_large": "BAAI/bge-large-en-v1.5",
+        "labse": "sentence-transformers/LaBSE",
+        "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
+        "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
+        "distiluse_multilingual": "distiluse-base-multilingual-cased",
+        "croatian_electra": "classla/bcms-bertic",
+    }
+
+
+def choose_model_for_language(language: str) -> str:
+    """
+    Choose optimal model for specific language.
+
+    Args:
+        language: Language code (e.g., 'hr', 'en', 'multilingual')
+
+    Returns:
+        Recommended model name
+    """
+    models = get_recommended_models()
+
+    if language.lower() in ["hr", "croatian", "serbian", "bosnian"]:
+        # For Croatian and related languages, prefer BGE-M3 or specific BCMS models
+        return models["bge_m3"]  # Best multilingual performance for Croatian
+    elif language.lower() in ["en", "english"]:
+        # For English, BGE-large or BGE-M3 work well
+        return models["bge_m3"]  # Consistent choice for multilingual systems
+    else:
+        # For other languages or multilingual, use BGE-M3
+        return models["bge_m3"]
+
+
+class MultilingualEmbeddingGenerator:
+    """
+    Testable multilingual embedding generator with dependency injection.
+
+    All external dependencies (model loading, device detection) are injected,
+    enabling 100% testable architecture.
+    """
+
+    def __init__(
+        self,
+        config: EmbeddingConfig,
+        model_loader: Optional[ModelLoader] = None,
+        device_detector: Optional[DeviceDetector] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
         """
-        Initialize embedding model.
+        Initialize embedding generator with injected dependencies.
 
         Args:
-            config: Configuration for embedding model
+            config: Embedding configuration
+            model_loader: Model loading implementation
+            device_detector: Device detection implementation
+            logger: Logger instance
         """
-        self.config = config or EmbeddingConfig.from_config()
-        self.logger = logging.getLogger(__name__)
-        self.model = None
-        self._model_loaded = False
+        self.config = config
+        self.model_loader = model_loader or self._create_default_model_loader()
+        self.device_detector = device_detector or self._create_default_device_detector()
+        self.logger = logger or logging.getLogger(__name__)
 
-        # Create cache directory
-        Path(self.config.cache_dir).mkdir(parents=True, exist_ok=True)
+        self._model: Optional[EmbeddingModel] = None
+        self._device_info: Optional[DeviceInfo] = None
+        self._is_initialized = False
 
-        # Set device
-        self.device = self._get_device()
-        self.logger.info(f"Using device: {self.device}")
+    def _create_default_model_loader(self) -> ModelLoader:
+        """Create default model loader implementation."""
+        from .embedding_loaders import SentenceTransformerLoader
 
-    def _get_device(self) -> str:
-        """Determine the best available device with detailed logging."""
-        if self.config.device == "auto":
-            # Auto-detect best available device
-            # Priority: MPS (Apple Silicon) > CUDA (NVIDIA) > CPU
+        return SentenceTransformerLoader()
 
-            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                device = "mps"
-                self.logger.info("Apple Silicon Metal Performance Shaders (MPS) detected")
+    def _create_default_device_detector(self) -> DeviceDetector:
+        """Create default device detector implementation."""
+        from .embedding_devices import TorchDeviceDetector
 
-                # Try to get Apple Silicon chip info
-                try:
-                    import platform
+        return TorchDeviceDetector()
 
-                    machine = platform.machine()
-                    if machine == "arm64":
-                        # Running on Apple Silicon
-                        self.logger.info(f"Apple Silicon detected: {machine}")
-                        if "M4" in platform.processor() or torch.backends.mps.is_built():
-                            self.logger.info("Optimized for M4 Pro/Max performance")
-                    self.logger.info(f"Using device: {device}")
-                except:
-                    self.logger.info(f"Using device: {device}")
+    def initialize(self) -> None:
+        """
+        Initialize the embedding system.
 
-                return device
+        Raises:
+            RuntimeError: If initialization fails
+        """
+        try:
+            # Detect device
+            self._device_info = self.device_detector.detect_best_device(
+                self.config.device
+            )
+            self.logger.info(f"Using device: {self._device_info.device_type}")
 
-            # Check CUDA with graceful error handling
-            cuda_available = False
-            try:
-                # Suppress CUDA initialization warnings temporarily
-                import warnings
+            # Load model
+            self._model = self.model_loader.load_model(
+                model_name=self.config.model_name,
+                cache_dir=self.config.cache_dir,
+                device=self._device_info.device_type,
+                max_seq_length=self.config.max_seq_length,
+                use_safetensors=self.config.use_safetensors,
+                trust_remote_code=self.config.trust_remote_code,
+            )
 
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", message=".*CUDA initialization.*")
-                    cuda_available = torch.cuda.is_available()
-            except Exception as e:
-                self.logger.debug(f"CUDA check failed: {e}")
-                cuda_available = False
+            self._is_initialized = True
+            self.logger.info(
+                f"Embedding system initialized with model: {self.config.model_name}"
+            )
 
-            if cuda_available:
-                try:
-                    device = "cuda"
-                    # Log CUDA info
-                    cuda_count = torch.cuda.device_count()
-                    current_device = torch.cuda.current_device()
-                    device_name = torch.cuda.get_device_name(current_device)
-                    memory_info = torch.cuda.get_device_properties(current_device)
-                    total_memory = memory_info.total_memory / 1024**3  # GB
+        except Exception as e:
+            self.logger.error(f"Failed to initialize embedding system: {e}")
+            raise RuntimeError(f"Embedding system initialization failed: {e}")
 
-                    self.logger.info(f"CUDA detected: {device_name}")
-                    self.logger.info(f"CUDA memory: {total_memory:.1f}GB total")
-                    self.logger.info(f"Using device: cuda (device {current_device})")
+    def generate_embeddings(
+        self,
+        texts: List[str],
+        normalize: Optional[bool] = None,
+        batch_size: Optional[int] = None,
+    ) -> EmbeddingResult:
+        """
+        Generate embeddings for input texts.
 
-                    return device
-                except Exception as e:
-                    self.logger.warning(f"CUDA detected but initialization failed: {e}")
-                    self.logger.info("Falling back to CPU (restart terminal to fix CUDA)")
-                    device = "cpu"
-            else:
-                device = "cpu"
-                self.logger.info("No GPU acceleration available")
-                self.logger.info(f"Using device: {device}")
-                return device
-                self.logger.info(f"Using device: {device}")
-                return device
-        else:
-            # Use specified device
-            device = self.config.device
+        Args:
+            texts: Input texts to embed
+            normalize: Whether to normalize embeddings (overrides config)
+            batch_size: Batch size to use (overrides config)
 
-            # Validate specified device
-            if device == "mps":
-                if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
-                    self.logger.warning("MPS requested but not available, falling back to CPU")
-                    return "cpu"
-                self.logger.info(f"Using specified device: {device}")
+        Returns:
+            Embedding result with embeddings and metadata
 
-            elif device.startswith("cuda"):
-                if not torch.cuda.is_available():
-                    self.logger.warning(f"CUDA requested but not available, falling back to CPU")
-                    return "cpu"
+        Raises:
+            RuntimeError: If system not initialized or generation fails
+            ValueError: If input texts are invalid
+        """
+        if not self._is_initialized:
+            raise RuntimeError(
+                "Embedding system not initialized. Call initialize() first."
+            )
 
-                # Check specific CUDA device if specified (e.g., "cuda:1")
-                if ":" in device:
-                    device_id = int(device.split(":")[1])
-                    if device_id >= torch.cuda.device_count():
-                        self.logger.warning(f"CUDA device {device_id} not available, using cuda:0")
-                        device = "cuda:0"
+        import time
 
-                self.logger.info(f"Using specified device: {device}")
-
-            elif device == "cpu":
-                self.logger.info(f"Using specified device: {device}")
-
-            else:
-                self.logger.warning(f"Unknown device '{device}', falling back to CPU")
-                return "cpu"
-
-            return device
-
-    def load_model(self) -> None:
-        """Load the sentence transformer model with safetensors support."""
-        if self._model_loaded:
-            return
+        start_time = time.time()
 
         try:
-            self.logger.info(f"Loading embedding model: {self.config.model_name}")
+            # Validate and clean input texts
+            cleaned_texts = validate_texts_for_embedding(texts)
 
-            # Get safetensors preference from config
-            embeddings_config = get_embeddings_config()
-            use_safetensors = embeddings_config.get("use_safetensors", True)
-            trust_remote_code = embeddings_config.get("trust_remote_code", False)
-            torch_dtype = embeddings_config.get("torch_dtype", "auto")
+            # Determine processing parameters
+            use_normalize = (
+                normalize if normalize is not None else self.config.normalize_embeddings
+            )
+            use_batch_size = (
+                batch_size if batch_size is not None else self.config.batch_size
+            )
 
-            # Prepare model loading kwargs
-            model_kwargs = {
-                "cache_folder": self.config.cache_dir,
-                "device": self.device,
-                "trust_remote_code": trust_remote_code,
+            # Calculate optimal batch size
+            available_memory = None
+            if self._device_info and self._device_info.available_memory:
+                available_memory = self._device_info.available_memory
+
+            optimal_batch_size = calculate_optimal_batch_size(
+                len(cleaned_texts), available_memory, use_batch_size
+            )
+
+            self.logger.info(
+                f"Processing {len(cleaned_texts)} texts with batch size {optimal_batch_size}"
+            )
+
+            # Generate embeddings in batches
+            text_batches = split_texts_into_batches(cleaned_texts, optimal_batch_size)
+            batch_embeddings = []
+
+            for batch in text_batches:
+                batch_emb = self._model.encode(
+                    batch,
+                    batch_size=optimal_batch_size,
+                    normalize_embeddings=False,  # We'll normalize at the end if needed
+                )
+                batch_embeddings.append(batch_emb)
+
+            # Combine all batch embeddings
+            all_embeddings = combine_batch_embeddings(batch_embeddings)
+
+            # Normalize if requested
+            if use_normalize:
+                all_embeddings = normalize_embeddings_array(all_embeddings)
+
+            # Validate results
+            embedding_dim = self._model.get_sentence_embedding_dimension()
+            validate_embedding_dimensions(
+                all_embeddings, expected_dim=embedding_dim, num_texts=len(cleaned_texts)
+            )
+
+            # Calculate processing time and statistics
+            processing_time = time.time() - start_time
+            statistics = calculate_embedding_statistics(all_embeddings)
+
+            # Create result
+            metadata = {
+                "processing_time": processing_time,
+                "batch_size_used": optimal_batch_size,
+                "num_batches": len(text_batches),
+                "normalized": use_normalize,
+                "device": self._device_info.device_type,
+                "statistics": statistics,
             }
 
-            # Add torch_dtype if specified
-            if torch_dtype != "auto":
-                model_kwargs["torch_dtype"] = getattr(torch, torch_dtype, None)
-
-            # For BGE-M3 and newer models, prefer safetensors
-            if use_safetensors:
-                try:
-                    # SentenceTransformer doesn't directly support use_safetensors parameter
-                    # but will use safetensors automatically if available and secure
-                    self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
-                    self.logger.info("Model loaded (safetensors preferred)")
-                except Exception as safetensors_error:
-                    self.logger.warning(
-                        f"Model loading with safetensors preference failed: {safetensors_error}"
-                    )
-                    # Fallback to regular loading
-                    self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
-                    self.logger.info("Model loaded with standard format")
-            else:
-                # Standard loading
-                self.model = SentenceTransformer(self.config.model_name, **model_kwargs)
-
-            # Configure model settings
-            self.model.max_seq_length = self.config.max_seq_length
-
-            self._model_loaded = True
-            self.logger.info("Embedding model loaded successfully")
+            return EmbeddingResult(
+                embeddings=all_embeddings,
+                input_texts=cleaned_texts,
+                model_name=self.config.model_name,
+                embedding_dim=embedding_dim,
+                processing_time=processing_time,
+                metadata=metadata,
+            )
 
         except Exception as e:
-            self.logger.error(f"Failed to load embedding model: {e}")
-            # Check if it's the PyTorch security error
-            if "torch.load" in str(e) and "vulnerability" in str(e).lower():
-                self.logger.error("PyTorch security vulnerability detected!")
-                self.logger.error("Solutions:")
-                self.logger.error("1. Upgrade PyTorch: pip install torch>=2.6.0")
-                self.logger.error("2. Install safetensors: pip install safetensors>=0.4.0")
-                self.logger.error("3. Set use_safetensors=true in config.toml")
-            raise
+            self.logger.error(f"Embedding generation failed: {e}")
+            raise RuntimeError(f"Failed to generate embeddings: {e}")
 
-    def encode_text(
-        self,
-        texts: Union[str, List[str]],
-        batch_size: Optional[int] = None,
-        show_progress: bool = False,
-    ) -> np.ndarray:
+    def get_embedding_dimension(self) -> int:
         """
-        Encode text(s) into embeddings.
-
-        Args:
-            texts: Single text or list of texts to embed
-            batch_size: Batch size for processing (uses config default if None)
-            show_progress: Show progress bar for large batches
+        Get the embedding dimension of the loaded model.
 
         Returns:
-            Numpy array of embeddings
+            Embedding dimension
+
+        Raises:
+            RuntimeError: If system not initialized
         """
-        if not self._model_loaded:
-            self.load_model()
+        if not self._is_initialized or not self._model:
+            raise RuntimeError("Embedding system not initialized")
 
-        # Handle single text input
-        if isinstance(texts, str):
-            texts = [texts]
+        return self._model.get_sentence_embedding_dimension()
 
-        if not texts:
-            return np.array([])
-
-        batch_size = batch_size or self.config.batch_size
-
-        try:
-            embeddings = self.model.encode(
-                texts,
-                batch_size=batch_size,
-                show_progress_bar=show_progress,
-                normalize_embeddings=self.config.normalize_embeddings,
-                convert_to_numpy=True,
-            )
-
-            return embeddings
-
-        except Exception as e:
-            self.logger.error(f"Failed to encode texts: {e}")
-            raise
-
-    def encode_documents(
-        self, documents: List[Dict[str, Any]], text_field: str = "content"
-    ) -> List[Dict[str, Any]]:
+    def is_model_available(self, model_name: Optional[str] = None) -> bool:
         """
-        Encode a list of document dictionaries.
+        Check if a model is available for loading.
 
         Args:
-            documents: List of document dictionaries
-            text_field: Field name containing text to embed
+            model_name: Model name to check (defaults to configured model)
 
         Returns:
-            List of documents with added embeddings
+            True if model is available
         """
-        if not documents:
-            return []
+        check_model = model_name or self.config.model_name
+        return self.model_loader.is_model_available(check_model)
 
-        # Extract texts
-        texts = [doc.get(text_field, "") for doc in documents]
-
-        # Generate embeddings
-        self.logger.info(f"Encoding {len(texts)} documents...")
-        embeddings = self.encode_text(texts, show_progress=True)
-
-        # Add embeddings to documents
-        enriched_docs = []
-        for doc, embedding in zip(documents, embeddings):
-            doc_copy = doc.copy()
-            doc_copy["embedding"] = embedding
-            doc_copy["embedding_model"] = self.config.model_name
-            enriched_docs.append(doc_copy)
-
-        return enriched_docs
-
-    def compute_similarity(
-        self, embedding1: np.ndarray, embedding2: np.ndarray, metric: str = "cosine"
-    ) -> float:
+    def get_device_info(self) -> Optional[DeviceInfo]:
         """
-        Compute similarity between two embeddings.
-
-        Args:
-            embedding1: First embedding vector
-            embedding2: Second embedding vector
-            metric: Similarity metric ("cosine", "dot", "euclidean")
+        Get information about the current device.
 
         Returns:
-            Similarity score
+            Device information if initialized
         """
-        if metric == "cosine":
-            # Cosine similarity
-            dot_product = np.dot(embedding1, embedding2)
-            norm1 = np.linalg.norm(embedding1)
-            norm2 = np.linalg.norm(embedding2)
-            return dot_product / (norm1 * norm2)
-
-        elif metric == "dot":
-            # Dot product similarity
-            return np.dot(embedding1, embedding2)
-
-        elif metric == "euclidean":
-            # Negative euclidean distance (higher is more similar)
-            return -np.linalg.norm(embedding1 - embedding2)
-
-        else:
-            raise ValueError(f"Unknown similarity metric: {metric}")
-
-    def find_most_similar(
-        self,
-        query_embedding: np.ndarray,
-        candidate_embeddings: np.ndarray,
-        top_k: int = None,
-        metric: str = None,
-    ) -> List[tuple[int, float]]:
-        """
-        Find most similar embeddings to a query.
-
-        Args:
-            query_embedding: Query embedding vector
-            candidate_embeddings: Array of candidate embeddings
-            top_k: Number of top results to return
-            metric: Similarity metric to use
-
-        Returns:
-            List of (index, similarity_score) tuples, sorted by similarity
-        """
-        # Use config defaults if not provided
-        if top_k is None:
-            top_k = handle_config_error(
-                operation=lambda: get_embeddings_config()["similarity"]["top_k_default"],
-                fallback_value=5,
-                config_file="config/config.toml",
-                section="[embeddings.similarity]",
-                logger=logger,
-            )
-
-        if metric is None:
-            metric = handle_config_error(
-                operation=lambda: get_embeddings_config()["similarity"]["default_metric"],
-                fallback_value="cosine",
-                config_file="config/config.toml",
-                section="[embeddings.similarity]",
-                logger=logger,
-            )
-
-        similarities = []
-
-        for i, candidate in enumerate(candidate_embeddings):
-            similarity = self.compute_similarity(query_embedding, candidate, metric)
-            similarities.append((i, similarity))
-
-        # Sort by similarity (descending) and return top_k
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        return similarities[:top_k]
+        return self._device_info
 
     def get_model_info(self) -> Dict[str, Any]:
         """
         Get information about the loaded model.
 
         Returns:
-            Dictionary with model information
-        """
-        if not self._model_loaded:
-            self.load_model()
+            Model information dictionary
 
-        info = {
+        Raises:
+            RuntimeError: If system not initialized
+        """
+        if not self._is_initialized:
+            raise RuntimeError("Embedding system not initialized")
+
+        return {
             "model_name": self.config.model_name,
-            "max_seq_length": self.model.max_seq_length,
-            "embedding_dimension": self.model.get_sentence_embedding_dimension(),
-            "device": str(self.device),
-            "normalize_embeddings": self.config.normalize_embeddings,
-            "pooling_mode": str(self.model._modules.get("1", "unknown")),
-            "pytorch_version": torch.__version__,
+            "embedding_dimension": self.get_embedding_dimension(),
+            "max_seq_length": self.config.max_seq_length,
+            "device": self._device_info.device_type if self._device_info else "unknown",
+            "normalized_by_default": self.config.normalize_embeddings,
         }
 
-        # Add device-specific information
-        if self.device.startswith("cuda"):
-            if torch.cuda.is_available():
-                device_id = 0
-                if ":" in self.device:
-                    device_id = int(self.device.split(":")[1])
 
-                info.update(
-                    {
-                        "cuda_device_name": torch.cuda.get_device_name(device_id),
-                        "cuda_memory_total": f"{torch.cuda.get_device_properties(device_id).total_memory / 1024**3:.1f}GB",
-                        "cuda_memory_allocated": f"{torch.cuda.memory_allocated(device_id) / 1024**3:.1f}GB",
-                        "cuda_memory_cached": f"{torch.cuda.memory_reserved(device_id) / 1024**3:.1f}GB",
-                        "cuda_version": torch.version.cuda,
-                    }
-                )
-        elif self.device == "mps":
-            info["mps_available"] = torch.backends.mps.is_available()
-            if torch.backends.mps.is_available():
-                info["mps_built"] = torch.backends.mps.is_built()
-
-                # Apple Silicon specific info
-                try:
-                    import platform
-
-                    import psutil
-
-                    machine = platform.machine()
-                    if machine == "arm64":
-                        info["apple_silicon"] = True
-                        info["platform_machine"] = machine
-
-                        # Get system memory (unified memory on Apple Silicon)
-                        memory = psutil.virtual_memory()
-                        info["unified_memory_total"] = f"{memory.total / 1024**3:.1f}GB"
-                        info["unified_memory_available"] = f"{memory.available / 1024**3:.1f}GB"
-
-                        # Try to detect specific M-series chip
-                        try:
-                            processor = platform.processor()
-                            if "M4" in processor:
-                                info["apple_chip"] = "M4 Pro/Max/Ultra"
-                                info["performance_cores"] = "10-16"  # M4 Pro/Max range
-                                info["gpu_cores"] = "16-40"  # M4 Pro/Max range
-                            elif any(m in processor for m in ["M1", "M2", "M3"]):
-                                info["apple_chip"] = processor
-                            else:
-                                info["apple_chip"] = "Apple Silicon (M-series)"
-                        except:
-                            info["apple_chip"] = "Apple Silicon"
-                except ImportError:
-                    info["apple_silicon"] = "unknown (install psutil for detailed info)"
-                except:
-                    info["apple_silicon"] = "unknown"
-
-        return info
-
-    def get_device_info(self) -> Dict[str, Any]:
-        """
-        Get detailed information about available devices.
-
-        Returns:
-            Dictionary with device capabilities
-        """
-        info = {
-            "current_device": str(self.device),
-            "pytorch_version": torch.__version__,
-            "cpu_available": True,
-        }
-
-        # CUDA information with graceful error handling
-        try:
-            import warnings
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message=".*CUDA initialization.*")
-                cuda_available = torch.cuda.is_available()
-
-            info["cuda_available"] = cuda_available
-
-            if cuda_available:
-                try:
-                    info["cuda_version"] = torch.version.cuda
-                    info["cuda_device_count"] = torch.cuda.device_count()
-                    info["cuda_devices"] = []
-
-                    for i in range(torch.cuda.device_count()):
-                        props = torch.cuda.get_device_properties(i)
-                        device_info = {
-                            "id": i,
-                            "name": torch.cuda.get_device_name(i),
-                            "memory_total": f"{props.total_memory / 1024**3:.1f}GB",
-                            "memory_allocated": f"{torch.cuda.memory_allocated(i) / 1024**3:.1f}GB",
-                            "memory_cached": f"{torch.cuda.memory_reserved(i) / 1024**3:.1f}GB",
-                            "compute_capability": f"{props.major}.{props.minor}",
-                        }
-                        info["cuda_devices"].append(device_info)
-                except Exception as e:
-                    info["cuda_error"] = f"CUDA detected but initialization failed: {e}"
-                    info["cuda_solution"] = "Restart terminal to fix CUDA initialization"
-        except Exception as e:
-            info["cuda_available"] = False
-            info["cuda_error"] = str(e)
-
-        # MPS information (Apple Silicon)
-        if hasattr(torch.backends, "mps"):
-            info["mps_available"] = torch.backends.mps.is_available()
-            if torch.backends.mps.is_available():
-                info["mps_built"] = torch.backends.mps.is_built()
-
-                # Try to detect Apple Silicon chip info
-                try:
-                    import platform
-
-                    machine = platform.machine()
-                    if machine == "arm64":
-                        info["apple_silicon"] = True
-                        info["platform_machine"] = machine
-
-                        # Try to detect M-series chip
-                        try:
-                            processor = platform.processor()
-                            if any(m in processor for m in ["M1", "M2", "M3", "M4"]):
-                                info["apple_chip"] = processor
-                            else:
-                                info["apple_chip"] = "Apple Silicon (M-series)"
-                        except:
-                            info["apple_chip"] = "Apple Silicon"
-                    else:
-                        info["apple_silicon"] = False
-                except:
-                    info["apple_silicon"] = "unknown"
-        else:
-            info["mps_available"] = False
-
-        return info
-
-    def switch_device(self, new_device: str) -> None:
-        """
-        Switch the model to a different device.
-
-        Args:
-            new_device: Target device ("cpu", "cuda", "cuda:0", etc.)
-        """
-        if not self._model_loaded:
-            self.logger.warning("Model not loaded yet, updating device configuration")
-            self.config.device = new_device
-            self.device = self._get_device()
-            return
-
-        old_device = self.device
-        self.config.device = new_device
-        self.device = self._get_device()
-
-        if old_device != self.device:
-            self.logger.info(f"Switching model from {old_device} to {self.device}")
-            try:
-                # Move model to new device
-                self.model = self.model.to(self.device)
-                self.logger.info(f"Model successfully moved to {self.device}")
-            except Exception as e:
-                self.logger.error(f"Failed to move model to {self.device}: {e}")
-                # Revert to old device
-                self.config.device = old_device
-                self.device = old_device
-                raise
-        else:
-            self.logger.info(f"Device unchanged: {self.device}")
-
-    def save_embeddings(self, embeddings: np.ndarray, metadata: List[Dict], filepath: str) -> None:
-        """
-        Save embeddings and metadata to file.
-
-        Args:
-            embeddings: Embedding vectors
-            metadata: Corresponding metadata
-            filepath: Path to save file
-        """
-        data = {
-            "embeddings": embeddings,
-            "metadata": metadata,
-            "model_name": self.config.model_name,
-            "model_info": self.get_model_info(),
-        }
-
-        with open(filepath, "wb") as f:
-            pickle.dump(data, f)
-
-        self.logger.info(f"Saved {len(embeddings)} embeddings to {filepath}")
-
-    def load_embeddings(self, filepath: str) -> tuple[np.ndarray, List[Dict]]:
-        """
-        Load embeddings and metadata from file.
-
-        Args:
-            filepath: Path to embedding file
-
-        Returns:
-            Tuple of (embeddings, metadata)
-        """
-        with open(filepath, "rb") as f:
-            data = pickle.load(f)
-
-        embeddings = data["embeddings"]
-        metadata = data["metadata"]
-
-        self.logger.info(f"Loaded {len(embeddings)} embeddings from {filepath}")
-        return embeddings, metadata
-
-
-class EmbeddingCache:
-    """Cache for storing and retrieving embeddings."""
-
-    def __init__(self, cache_dir: str = None):
-        if cache_dir is None:
-            cache_dir = handle_config_error(
-                operation=lambda: get_vectordb_config()["factory"]["cache_embeddings_dir"],
-                fallback_value="./cache/embeddings",
-                config_file="config/config.toml",
-                section="[factory]",
-                logger=logger,
-            )
-
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = logging.getLogger(__name__)
-
-    def _get_cache_key(self, text: str, model_name: str) -> str:
-        """Generate cache key for text and model combination."""
-        import hashlib
-
-        combined = f"{model_name}:{text}"
-        return hashlib.md5(combined.encode()).hexdigest()
-
-    def get(self, text: str, model_name: str) -> Optional[np.ndarray]:
-        """
-        Get cached embedding for text.
-
-        Args:
-            text: Input text
-            model_name: Model name used for embedding
-
-        Returns:
-            Cached embedding or None if not found
-        """
-        cache_key = self._get_cache_key(text, model_name)
-        cache_file = self.cache_dir / f"{cache_key}.npy"
-
-        if cache_file.exists():
-            try:
-                return np.load(cache_file)
-            except Exception as e:
-                self.logger.warning(f"Failed to load cached embedding: {e}")
-
-        return None
-
-    def set(self, text: str, model_name: str, embedding: np.ndarray) -> None:
-        """
-        Cache embedding for text.
-
-        Args:
-            text: Input text
-            model_name: Model name used for embedding
-            embedding: Embedding vector to cache
-        """
-        cache_key = self._get_cache_key(text, model_name)
-        cache_file = self.cache_dir / f"{cache_key}.npy"
-
-        try:
-            np.save(cache_file, embedding)
-        except Exception as e:
-            self.logger.warning(f"Failed to cache embedding: {e}")
-
-
-def create_embedding_model(
-    model_name: str = None,
-    device: str = None,
-    cache_dir: str = None,
-) -> MultilingualEmbeddingModel:
+# Factory function for convenient creation
+def create_embedding_generator(
+    config: Optional[EmbeddingConfig] = None,
+    model_loader: Optional[ModelLoader] = None,
+    device_detector: Optional[DeviceDetector] = None,
+    logger: Optional[logging.Logger] = None,
+) -> MultilingualEmbeddingGenerator:
     """
-    Factory function to create embedding model.
+    Factory function to create configured embedding generator.
 
     Args:
-        model_name: Sentence transformer model name (defaults from config)
-        device: Device to use (defaults from config)
-        cache_dir: Directory for model cache (defaults from config)
+        config: Embedding configuration (creates default if None)
+        model_loader: Model loader implementation
+        device_detector: Device detector implementation
+        logger: Logger instance
 
     Returns:
-        Configured MultilingualEmbeddingModel instance
+        Configured MultilingualEmbeddingGenerator
     """
-    # Use config defaults if not provided
-    factory_config = handle_config_error(
-        operation=lambda: get_vectordb_config()["factory"],
-        fallback_value={
-            "default_model": "paraphrase-multilingual-MiniLM-L12-v2",
-            "default_device": "auto",
-            "default_cache_dir": "./models/embeddings",
-        },
-        config_file="config/config.toml",
-        section="[factory]",
+    if config is None:
+        config = EmbeddingConfig()
+
+    return MultilingualEmbeddingGenerator(
+        config=config,
+        model_loader=model_loader,
+        device_detector=device_detector,
+        logger=logger,
     )
 
-    model_name = model_name or factory_config["default_model"]
-    device = device or factory_config["default_device"]
-    cache_dir = cache_dir or factory_config["default_cache_dir"]
 
-    config = EmbeddingConfig(
-        model_name=model_name,
-        device=device,
-        cache_dir=cache_dir,
-        max_seq_length=512,
-        batch_size=32,
-        normalize_embeddings=True,
-    )
-    return MultilingualEmbeddingModel(config)
-
-
-def get_recommended_model(use_case: str = "general") -> str:
-    """
-    Get recommended model for specific use case.
-
-    Args:
-        use_case: Use case type ("general", "fast", "accurate", "cross-lingual")
-
-    Returns:
-        Recommended model name
-    """
-    models = handle_config_error(
-        operation=lambda: get_embeddings_config()["recommended_models"],
-        fallback_value={
-            "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
-            "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
-            "distiluse_multilingual": "distiluse-base-multilingual-cased",
-            "labse": "sentence-transformers/LaBSE",
-        },
-        config_file="config/config.toml",
-        section="[embeddings.recommended_models]",
-    )
-
-    recommendations = {
-        "general": models.get("bge_m3", "BAAI/bge-m3"),  # BGE-M3: Best overall
-        "fast": models.get(
-            "multilingual_minilm", "paraphrase-multilingual-MiniLM-L12-v2"
-        ),  # Fastest option
-        "accurate": models.get("bge_m3", "BAAI/bge-m3"),  # BGE-M3: Also most accurate
-        "cross-lingual": models.get(
-            "bge_m3", "BAAI/bge-m3"
-        ),  # BGE-M3: Excellent for multiple languages
-    }
-
-    return recommendations.get(use_case, models.get("bge_m3", "BAAI/bge-m3"))
+# Backward compatibility aliases
+EmbeddingModelV2 = MultilingualEmbeddingGenerator

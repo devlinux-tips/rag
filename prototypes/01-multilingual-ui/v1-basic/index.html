@@ -17,9 +17,8 @@
 
             <!-- Interface Language Switcher -->
             <div class="language-switcher">
-                <span data-i18n="ui.interfaceLanguage">Interface:</span>
-                <button class="lang-btn active" data-lang="hr">HR</button>
-                <button class="lang-btn" data-lang="en">EN</button>
+                <span class="lang-flag active" data-lang="hr" aria-label="Switch to Croatian" title="Croatian">🇭🇷</span>
+                <span class="lang-flag" data-lang="en" aria-label="Switch to English" title="English">🇬🇧</span>
             </div>
         </div>
     </header>
@@ -28,21 +27,23 @@
     <main class="main-content">
         <!-- Search Section -->
         <section class="search-section">
-            <div class="search-header">
-                <h2 data-i18n="search.title">Search Documents</h2>
-                <p data-i18n="search.description">Search through multilingual documents with language-specific processing</p>
+            <div class="section-header">
+                <div class="title-with-dropdown">
+                    <h2 data-i18n="search.title">
+                        <svg class="title-icon" viewBox="0 0 24 24">
+                            <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                        Intelligent Search
+                    </h2>
+                    <select id="inputLanguage" class="language-select compact">
+                        <option value="multilingual" data-i18n="languages.multilingual">🌐 Search Everything</option>
+                        <option value="hr" data-i18n="languages.croatian">🇭🇷 Croatian Focus</option>
+                        <option value="en" data-i18n="languages.english">🇬🇧 English Focus</option>
+                    </select>
+                </div>
             </div>
 
             <div class="search-container">
-                <!-- Input Language Selection -->
-                <div class="input-language-selector">
-                    <label data-i18n="search.inputLanguage">Search in:</label>
-                    <select id="inputLanguage" class="language-select">
-                        <option value="multilingual" data-i18n="languages.multilingual">All Languages</option>
-                        <option value="hr" data-i18n="languages.croatian">Croatian</option>
-                        <option value="en" data-i18n="languages.english">English</option>
-                    </select>
-                </div>
 
                 <!-- Search Input -->
                 <div class="search-input-container">
@@ -89,21 +90,24 @@
 
         <!-- Upload Section -->
         <section class="upload-section">
-            <div class="upload-header">
-                <h2 data-i18n="upload.title">Upload Documents</h2>
-                <p data-i18n="upload.description">Add new documents to the multilingual knowledge base</p>
+            <div class="section-header">
+                <div class="title-with-dropdown">
+                    <h2 data-i18n="upload.title">
+                        <svg class="title-icon" viewBox="0 0 24 24">
+                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z M12,12L16,16H13.5V19H10.5V16H8L12,12Z"/>
+                        </svg>
+                        Knowledge Base
+                    </h2>
+                    <select id="uploadLanguage" class="language-select compact">
+                        <option value="auto" data-i18n="upload.autoDetect">🤖 Auto-Detect</option>
+                        <option value="hr" data-i18n="languages.croatian">🇭🇷 Croatian Document</option>
+                        <option value="en" data-i18n="languages.english">🇬🇧 English Document</option>
+                        <option value="multilingual" data-i18n="languages.multilingual">🌐 Multilingual Document</option>
+                    </select>
+                </div>
             </div>
 
             <div class="upload-container">
-                <div class="upload-language-selector">
-                    <label data-i18n="upload.documentLanguage">Document language:</label>
-                    <select id="uploadLanguage" class="language-select">
-                        <option value="auto" data-i18n="upload.autoDetect">Auto-detect</option>
-                        <option value="hr" data-i18n="languages.croatian">Croatian</option>
-                        <option value="en" data-i18n="languages.english">English</option>
-                        <option value="multilingual" data-i18n="languages.multilingual">Multilingual</option>
-                    </select>
-                </div>
 
                 <div class="upload-dropzone" id="uploadDropzone">
                     <div class="upload-content">

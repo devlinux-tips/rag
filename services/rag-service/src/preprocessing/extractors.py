@@ -1,147 +1,434 @@
 """
-Document text extraction for multilingual documents.
-Supports PDF, DOCX, and TXT files with proper UTF-8 encoding.
+Pure function document text extraction system with dependency injection.
+100% testable architecture with no side effects and deterministic output.
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import (Any, Dict, List, Optional, Protocol, Tuple,
+                    runtime_checkable)
 
+# Optional dependencies - handle gracefully if not available
 try:
     from pypdf import PdfReader
+
+    PYPDF_AVAILABLE = True
 except ImportError:
-    # Fallback to PyPDF2 if pypdf not available
-    from PyPDF2 import PdfReader
-from docx import Document
+    PdfReader = None
+    PYPDF_AVAILABLE = False
 
-from ..utils.config_loader import get_extraction_config
-from ..utils.error_handler import handle_config_error
+try:
+    from docx import Document
 
-logger = logging.getLogger(__name__)
+    DOCX_AVAILABLE = True
+except ImportError:
+    Document = None
+    DOCX_AVAILABLE = False
+
+
+@dataclass
+class ExtractionResult:
+    """Result of document text extraction."""
+
+    text: str
+    character_count: int
+    extraction_method: str
+    encoding_used: Optional[str] = None
+    pages_processed: Optional[int] = None
+    error_details: Optional[str] = None
+
+
+@dataclass
+class ExtractionConfig:
+    """Configuration for document extraction."""
+
+    supported_formats: List[str]
+    text_encodings: List[str]
+    max_file_size_mb: int = 50
+    enable_logging: bool = True
+
+
+@runtime_checkable
+class FileSystemProvider(Protocol):
+    """Protocol for file system operations to enable testing."""
+
+    def file_exists(self, file_path: Path) -> bool:
+        """Check if file exists."""
+        ...
+
+    def get_file_size_mb(self, file_path: Path) -> float:
+        """Get file size in MB."""
+        ...
+
+    def open_binary(self, file_path: Path) -> bytes:
+        """Open file in binary mode."""
+        ...
+
+    def open_text(self, file_path: Path, encoding: str) -> str:
+        """Open file in text mode with specified encoding."""
+        ...
+
+
+@runtime_checkable
+class ConfigProvider(Protocol):
+    """Protocol for configuration access."""
+
+    def get_extraction_config(self) -> Dict[str, Any]:
+        """Get extraction configuration."""
+        ...
+
+
+@runtime_checkable
+class LoggerProvider(Protocol):
+    """Protocol for logging operations."""
+
+    def info(self, message: str) -> None:
+        """Log info message."""
+        ...
+
+    def error(self, message: str) -> None:
+        """Log error message."""
+        ...
+
+
+# ================================
+# PURE BUSINESS LOGIC FUNCTIONS
+# ================================
+
+
+def validate_file_format(
+    file_path: Path, supported_formats: List[str]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Validate if file format is supported.
+
+    Args:
+        file_path: Path to document file
+        supported_formats: List of supported file extensions
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    suffix = file_path.suffix.lower()
+    if suffix not in supported_formats:
+        error_msg = f"Unsupported format: {suffix}. Supported: {supported_formats}"
+        return False, error_msg
+    return True, None
+
+
+def extract_text_from_pdf_binary(pdf_binary: bytes) -> Tuple[str, int]:
+    """
+    Extract text from PDF binary data.
+    Pure function with no side effects.
+
+    Args:
+        pdf_binary: PDF file content as bytes
+
+    Returns:
+        Tuple of (extracted_text, pages_processed)
+
+    Raises:
+        Exception: If PDF processing fails
+        ImportError: If pypdf is not available
+    """
+    if not PYPDF_AVAILABLE:
+        raise ImportError(
+            "pypdf is required for PDF extraction. Install with: pip install pypdf"
+        )
+
+    from io import BytesIO
+
+    text_content = []
+
+    with BytesIO(pdf_binary) as pdf_stream:
+        pdf_reader = PdfReader(pdf_stream)
+        pages_processed = len(pdf_reader.pages)
+
+        for page_num in range(pages_processed):
+            page = pdf_reader.pages[page_num]
+            text = page.extract_text()
+            if text.strip():
+                text_content.append(text.strip())
+
+    full_text = "\n\n".join(text_content)
+    return full_text, pages_processed
+
+
+def extract_text_from_docx_binary(docx_binary: bytes) -> str:
+    """
+    Extract text from DOCX binary data.
+    Pure function with no side effects.
+
+    Args:
+        docx_binary: DOCX file content as bytes
+
+    Returns:
+        Extracted text content
+
+    Raises:
+        Exception: If DOCX processing fails
+        ImportError: If python-docx is not available
+    """
+    if not DOCX_AVAILABLE:
+        raise ImportError(
+            "python-docx is required for DOCX extraction. Install with: pip install python-docx"
+        )
+
+    from io import BytesIO
+
+    text_content = []
+
+    with BytesIO(docx_binary) as docx_stream:
+        doc = Document(docx_stream)
+
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text_content.append(paragraph.text.strip())
+
+    full_text = "\n\n".join(text_content)
+    return full_text
+
+
+def extract_text_with_encoding_fallback(
+    text_binary: bytes, encodings: List[str]
+) -> Tuple[str, str]:
+    """
+    Extract text with multiple encoding fallback.
+    Pure function with no side effects.
+
+    Args:
+        text_binary: Text file content as bytes
+        encodings: List of encodings to try in order
+
+    Returns:
+        Tuple of (extracted_text, successful_encoding)
+
+    Raises:
+        ValueError: If no encoding succeeds
+    """
+    for encoding in encodings:
+        try:
+            text = text_binary.decode(encoding).strip()
+            return text, encoding
+        except UnicodeDecodeError:
+            continue
+
+    raise ValueError(f"Could not decode text with any supported encoding: {encodings}")
+
+
+def post_process_extracted_text(text: str) -> str:
+    """
+    Post-process extracted text for consistency.
+    Pure function with no side effects.
+
+    Args:
+        text: Raw extracted text
+
+    Returns:
+        Processed text content
+    """
+    if not text:
+        return ""
+
+    # Basic text cleaning
+    processed_text = text.strip()
+
+    # Normalize whitespace while preserving paragraphs
+    lines = processed_text.split("\n")
+    cleaned_lines = [line.strip() for line in lines if line.strip()]
+
+    return "\n\n".join(cleaned_lines)
+
+
+# ================================
+# DEPENDENCY INJECTION ORCHESTRATION
+# ================================
 
 
 class DocumentExtractor:
-    """Extract text from various document formats with multilingual support."""
+    """Document extractor with dependency injection for 100% testability."""
 
-    def __init__(self):
-        """Initialize the document extractor."""
-        self._config = handle_config_error(
-            operation=lambda: get_extraction_config(),
-            fallback_value={
-                "supported_formats": [".txt", ".pdf", ".docx", ".doc"],
-                "encoding": "utf-8",
-                "text_encodings": ["utf-8", "cp1252", "iso-8859-2"],
-            },
-            config_file="config/config.toml",
-            section="[extraction]",
+    def __init__(
+        self,
+        config_provider: ConfigProvider,
+        file_system_provider: FileSystemProvider,
+        logger_provider: Optional[LoggerProvider] = None,
+    ):
+        """Initialize extractor with injected dependencies."""
+        self._config_provider = config_provider
+        self._file_system = file_system_provider
+        self._logger = logger_provider
+
+        # Load configuration once during initialization
+        config_data = config_provider.get_extraction_config()
+        self._config = ExtractionConfig(
+            supported_formats=config_data["supported_formats"],
+            text_encodings=config_data["text_encodings"],
+            max_file_size_mb=config_data.get("max_file_size_mb", 50),
+            enable_logging=config_data.get("enable_logging", True),
         )
-        self.supported_formats = set(self._config["supported_formats"])
 
-    def extract_text(self, file_path: Path) -> str:
+    def extract_text(self, file_path: Path) -> ExtractionResult:
         """
-        Extract text from a document file.
+        Extract text from document using dependency injection.
 
         Args:
-            file_path: Path to the document file
+            file_path: Path to document file
 
         Returns:
-            Extracted text content
+            ExtractionResult with text and metadata
 
         Raises:
-            ValueError: If file format is not supported
             FileNotFoundError: If file doesn't exist
+            ValueError: If file format is not supported or file too large
         """
-        if not file_path.exists():
+        # File existence validation
+        if not self._file_system.file_exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
+        # File size validation
+        file_size_mb = self._file_system.get_file_size_mb(file_path)
+        if file_size_mb > self._config.max_file_size_mb:
+            raise ValueError(
+                f"File too large: {file_size_mb:.1f}MB > {self._config.max_file_size_mb}MB"
+            )
+
+        # Format validation
+        is_valid, error_msg = validate_file_format(
+            file_path, self._config.supported_formats
+        )
+        if not is_valid:
+            raise ValueError(error_msg)
+
+        self._log_info(f"Extracting text from {file_path}")
+
         suffix = file_path.suffix.lower()
-        if suffix not in self.supported_formats:
-            raise ValueError(f"Unsupported format: {suffix}. Supported: {self.supported_formats}")
 
-        logger.info(f"Extracting text from {file_path}")
-
-        if suffix == ".pdf":
-            return self._extract_from_pdf(file_path)
-        elif suffix == ".docx":
-            return self._extract_from_docx(file_path)
-        elif suffix == ".txt":
-            return self._extract_from_txt(file_path)
-
-    def _extract_from_pdf(self, file_path: Path) -> str:
-        """Extract text from PDF file."""
         try:
-            text_content = []
-
-            with open(file_path, "rb") as file:
-                pdf_reader = PdfReader(file)
-
-                for page_num in range(len(pdf_reader.pages)):
-                    page = pdf_reader.pages[page_num]
-                    text = page.extract_text()
-                    if text.strip():
-                        text_content.append(text.strip())
-
-            full_text = "\n\n".join(text_content)
-            logger.info(f"Extracted {len(full_text)} characters from PDF")
-            return full_text
+            if suffix == ".pdf":
+                return self._extract_pdf(file_path)
+            elif suffix == ".docx":
+                return self._extract_docx(file_path)
+            elif suffix == ".txt":
+                return self._extract_txt(file_path)
+            else:
+                raise ValueError(f"Unsupported format: {suffix}")
 
         except Exception as e:
-            logger.error(f"Error extracting from PDF {file_path}: {e}")
-            raise
+            error_msg = f"Error extracting from {suffix.upper()} {file_path}: {e}"
+            self._log_error(error_msg)
+            return ExtractionResult(
+                text="",
+                character_count=0,
+                extraction_method=suffix[1:].upper(),
+                error_details=str(e),
+            )
 
-    def _extract_from_docx(self, file_path: Path) -> str:
-        """Extract text from DOCX file."""
-        try:
-            doc = Document(str(file_path))
+    def _extract_pdf(self, file_path: Path) -> ExtractionResult:
+        """Extract text from PDF using pure function."""
+        pdf_binary = self._file_system.open_binary(file_path)
+        text, pages_processed = extract_text_from_pdf_binary(pdf_binary)
+        processed_text = post_process_extracted_text(text)
 
-            text_content = []
-            for paragraph in doc.paragraphs:
-                if paragraph.text.strip():
-                    text_content.append(paragraph.text.strip())
+        self._log_info(
+            f"Extracted {len(processed_text)} characters from {pages_processed} PDF pages"
+        )
 
-            full_text = "\n\n".join(text_content)
-            logger.info(f"Extracted {len(full_text)} characters from DOCX")
-            return full_text
+        return ExtractionResult(
+            text=processed_text,
+            character_count=len(processed_text),
+            extraction_method="PDF",
+            pages_processed=pages_processed,
+        )
 
-        except Exception as e:
-            logger.error(f"Error extracting from DOCX {file_path}: {e}")
-            raise
+    def _extract_docx(self, file_path: Path) -> ExtractionResult:
+        """Extract text from DOCX using pure function."""
+        docx_binary = self._file_system.open_binary(file_path)
+        text = extract_text_from_docx_binary(docx_binary)
+        processed_text = post_process_extracted_text(text)
 
-    def _extract_from_txt(self, file_path: Path) -> str:
-        """Extract text from TXT file with proper UTF-8 encoding."""
-        try:
-            # Try UTF-8 first, then fallback to other configured encodings
-            encodings = self._config["text_encodings"]
+        self._log_info(f"Extracted {len(processed_text)} characters from DOCX")
 
-            for encoding in encodings:
-                try:
-                    with open(file_path, "r", encoding=encoding) as f:
-                        text = f.read().strip()
-                    logger.info(f"Successfully read TXT file with {encoding} encoding")
-                    logger.info(f"Extracted {len(text)} characters from TXT")
-                    return text
-                except UnicodeDecodeError:
-                    continue
+        return ExtractionResult(
+            text=processed_text,
+            character_count=len(processed_text),
+            extraction_method="DOCX",
+        )
 
-            raise ValueError(f"Could not decode file {file_path} with any supported encoding")
+    def _extract_txt(self, file_path: Path) -> ExtractionResult:
+        """Extract text from TXT using pure function with encoding fallback."""
+        text_binary = self._file_system.open_binary(file_path)
+        text, encoding_used = extract_text_with_encoding_fallback(
+            text_binary, self._config.text_encodings
+        )
+        processed_text = post_process_extracted_text(text)
 
-        except Exception as e:
-            logger.error(f"Error extracting from TXT {file_path}: {e}")
-            raise
+        self._log_info(f"Successfully read TXT file with {encoding_used} encoding")
+        self._log_info(f"Extracted {len(processed_text)} characters from TXT")
+
+        return ExtractionResult(
+            text=processed_text,
+            character_count=len(processed_text),
+            extraction_method="TXT",
+            encoding_used=encoding_used,
+        )
+
+    def _log_info(self, message: str) -> None:
+        """Log info message if logger available."""
+        if self._logger and self._config.enable_logging:
+            self._logger.info(message)
+
+    def _log_error(self, message: str) -> None:
+        """Log error message if logger available."""
+        if self._logger and self._config.enable_logging:
+            self._logger.error(message)
 
 
-def extract_document_text(file_path: str | Path) -> str:
+# ================================
+# CONVENIENCE FUNCTIONS (Backward Compatibility)
+# ================================
+
+
+def extract_document_text(
+    file_path: str | Path,
+    config_provider: Optional[ConfigProvider] = None,
+    file_system_provider: Optional[FileSystemProvider] = None,
+) -> str:
     """
-    Convenience function to extract text from a document.
+    Convenience function for backward compatibility.
 
     Args:
-        file_path: Path to document file (string or Path object)
+        file_path: Path to document file
+        config_provider: Optional config provider (uses production if None)
+        file_system_provider: Optional file system provider (uses production if None)
 
     Returns:
         Extracted text content
     """
+    from .extractors_providers import (create_config_provider,
+                                       create_file_system_provider)
+
     if isinstance(file_path, str):
         file_path = Path(file_path)
 
-    extractor = DocumentExtractor()
-    return extractor.extract_text(file_path)
+    # Use injected providers or create defaults
+    config = config_provider or create_config_provider()
+    file_system = file_system_provider or create_file_system_provider()
+
+    extractor = DocumentExtractor(config, file_system)
+    result = extractor.extract_text(file_path)
+
+    return result.text
+
+
+# ================================
+# BACKWARD COMPATIBILITY ALIASES
+# ================================
+
+
+# Legacy class name for compatibility
+class DocumentExtractorV2(DocumentExtractor):
+    """Backward compatibility alias for DocumentExtractor."""
+
+    pass

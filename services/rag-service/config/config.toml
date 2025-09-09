@@ -38,14 +38,10 @@ similarity_threshold = 0.3
 # ============================================================================
 [languages]
 # Supported languages - add new languages here
+# Convention: Language code maps directly to config file (hr -> hr.toml, en -> en.toml)
 supported = ["hr", "en"]
 default = "hr"
 auto_detect = false  # For future implementation
-
-# Language-to-config-file mapping
-[languages.config_files]
-hr = "croatian.toml"
-en = "english.toml"
 
 # Language display names
 [languages.names]
@@ -62,19 +58,31 @@ description = "Advanced RAG system optimized for Croatian language"
 author = "RAG Team"
 
 [paths]
-# Base directories for multilingual content
-documents_dir = "./data/raw"
-processed_dir = "./data/processed"
-test_data_dir = "./data/test"
+# Multi-tenant base directories
+data_base_dir = "./data"
+models_base_dir = "./models"
+system_dir = "./system"
 
-# Language-specific subdirectories (auto-constructed: {base_dir}/{language}/)
-# Examples: ./data/raw/hr/, ./data/raw/en/, ./data/test/hr/, ./data/test/en/
+# Multi-tenant path templates - explicit configuration for flexibility
+# Templates use {variable} format and are rendered with tenant/user/language data
+tenant_root_template = "{data_base_dir}/{tenant_slug}"
+user_documents_template = "{data_base_dir}/{tenant_slug}/users/{user_id}/documents/{language}"
+tenant_shared_template = "{data_base_dir}/{tenant_slug}/shared/documents/{language}"
+user_processed_template = "{data_base_dir}/{tenant_slug}/users/{user_id}/processed/{language}"
+tenant_processed_template = "{data_base_dir}/{tenant_slug}/shared/processed/{language}"
+chromadb_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
+models_path_template = "{models_base_dir}/{tenant_slug}/{language}"
+
+# Legacy single-tenant directories (deprecated - use templates above)
+documents_dir = "./data/raw"           # Use user_documents_template instead
+processed_dir = "./data/processed"     # Use user_processed_template instead
+test_data_dir = "./data/test"          # Use tenant structure instead
+cache_dir = "./data/cache"             # Now per-tenant: {tenant_root}/cache
+temp_dir = "./temp"                    # System-wide temp
+export_dir = "./data/exports"          # Now per-tenant: {tenant_root}/exports
+
+# Language-specific subdirectories (handled by templates)
 use_language_subdirs = true
-
-# Cache and temporary directories
-cache_dir = "./data/cache"
-temp_dir = "./temp"
-export_dir = "./data/exports"
 
 [logging]
 level = "INFO"
@@ -86,7 +94,7 @@ log_to_file = true
 # ============================================================================
 [embeddings]
 # Primary embedding model settings
-model_name = "BAAI/bge-m3"  # BGE-M3: Best multilingual model for Croatian
+model_name = "BAAI/bge-m3"  # Primary multilingual model
 device = "auto"  # Uses shared.default_device
 max_seq_length = 512
 batch_size = 32  # Uses shared.default_batch_size
@@ -99,11 +107,17 @@ torch_dtype = "auto"  # or "float32", "float16", "bfloat16"
 
 # Recommended models for multilingual support
 [embeddings.recommended_models]
-bge_m3 = "BAAI/bge-m3"  # Primary: BGE-M3 (Best for Croatian)
+bge_m3 = "BAAI/bge-m3"  # Primary multilingual model
 labse = "sentence-transformers/LaBSE"  # Secondary: Language-Agnostic BERT
 multilingual_minilm = "paraphrase-multilingual-MiniLM-L12-v2"  # Fast option
 multilingual_mpnet = "paraphrase-multilingual-mpnet-base-v2"  # Accuracy option
 distiluse_multilingual = "distiluse-base-multilingual-cased"  # Lightweight option
+
+# Language-specific models (for reference by language configs)
+all_minilm_l6 = "sentence-transformers/all-MiniLM-L6-v2"  # English-optimized fast model
+all_mpnet_base = "sentence-transformers/all-mpnet-base-v2"  # English-optimized accuracy model
+bge_small_en = "BAAI/bge-small-en-v1.5"  # English-specific BGE small
+bge_base_en = "BAAI/bge-base-en-v1.5"  # English-specific BGE base
 
 # Similarity calculation settings
 [embeddings.similarity]
@@ -114,10 +128,15 @@ top_k_default = 5
 # VECTOR DATABASE CONFIGURATION
 # ============================================================================
 [storage]
-# ChromaDB storage settings
-db_path = "./data/chromadb"
-# Collection naming - can be language-specific or generic
-collection_name = "multilingual_documents"
+# Multi-tenant ChromaDB storage settings
+db_path = "./data/chromadb"                    # Legacy single-tenant path (deprecated)
+db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"  # Multi-tenant template
+
+# Collection naming templates
+collection_name = "multilingual_documents"    # Legacy single-tenant (deprecated)
+collection_name_template = "{tenant_slug}_{scope}_{language}"  # Multi-tenant template
+# Examples: "development_user_hr", "enterprise_tenant_en", "acme_user_multilingual"
+
 distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
 persist = true
 allow_reset = false
@@ -175,6 +194,10 @@ respect_paragraph_breaks = true
 enable_smart_splitting = true
 sentence_search_range = 100
 
+# Common paragraph and sentence settings (language-specific settings in language files)
+paragraph_separators = ["\n\n", "\r\n\r\n"]  # Universal paragraph separators
+min_sentence_length = 10  # Minimum sentence length for all languages
+
 [cleaning]
 # Text cleaning settings
 remove_extra_whitespace = true
@@ -231,14 +254,14 @@ enable_query_expansion = true
 
 [ranking]
 # Document ranking and scoring
-method = "croatian"
+method = "language_enhanced"
 enable_diversity = true
 diversity_threshold = 0.8
 boost_recent = true
 boost_authoritative = true
 content_length_factor = true
 keyword_density_factor = true
-croatian_specific_boost = true
+language_specific_boost = true  # Enable language-specific ranking features
 boost_exact_match = 1.5
 boost_title_match = 1.3
 boost_metadata_match = 1.2
@@ -275,7 +298,7 @@ bm25_b = 0.75
 [ollama]
 # Ollama LLM configuration - OPTIMIZED FOR PERFORMANCE (uses shared.generation_timeout)
 base_url = "http://localhost:11434"
-model = "qwen2.5:7b-instruct"  # 1.7x faster than Croatian model, good quality
+model = "qwen2.5:7b-instruct"  # Fast multilingual model with good quality
 temperature = 0.7
 max_tokens = 800               # Reduced from 2000 for faster generation
 top_p = 0.9
@@ -349,3 +372,29 @@ retry_delay = 1.0
 exponential_backoff = true
 retry_on_timeout = true
 retry_on_connection_error = true
+
+# ============================================================================
+# MULTI-TENANT CONFIGURATION
+# ============================================================================
+[multi_tenant]
+# Multi-tenancy settings
+enable_multi_tenancy = true
+default_tenant_slug = "development"
+auto_create_tenant_folders = true
+tenant_isolation_mode = "strict"  # "strict" or "shared"
+
+# Tenant limits and quotas
+max_tenants = 100
+max_users_per_tenant = 1000
+max_documents_per_tenant = 10000
+max_documents_per_user = 1000
+
+# Folder management
+create_missing_folders = true
+validate_tenant_paths = true
+cleanup_empty_folders = false
+
+# Collection management
+auto_create_collections = true
+collection_per_language = true
+collection_per_scope = true  # Separate user/tenant collections

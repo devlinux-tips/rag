@@ -74,7 +74,6 @@ def create_config_loader(config_file: str, logger_name: str = None):
         """Pre-configured loader for this config file."""
         return handle_config_error(
             operation=operation,
-            fallback_value=fallback_value,
             config_file=config_file,
             section=section,
             logger=logger,

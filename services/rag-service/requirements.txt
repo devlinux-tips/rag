@@ -37,5 +37,6 @@ tqdm
 # Development and testing
 jupyter
 pytest
+pytest-asyncio
 black
 flake8

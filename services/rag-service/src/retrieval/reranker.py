@@ -1,225 +1,708 @@
 """
-Multilingual reranker using BAAI/bge-reranker-v2-m3 for multilingual RAG
+100% testable multilingual reranker system.
+Clean architecture with dependency injection and pure functions.
 """
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import numpy as np
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from ..utils.config_loader import get_reranking_config
-from ..utils.error_handler import handle_config_error
+logger = logging.getLogger(__name__)
+
+
+# ===== PURE FUNCTIONS =====
+
+
+def calculate_rank_changes(
+    original_ranks: List[int], new_ranks: List[int]
+) -> List[int]:
+    """
+    Calculate rank change for each item.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        original_ranks: Original ranking positions
+        new_ranks: New ranking positions
+
+    Returns:
+        List of rank changes (positive = moved up, negative = moved down)
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(original_ranks, list):
+        raise ValueError(f"Original ranks must be list, got {type(original_ranks)}")
+
+    if not isinstance(new_ranks, list):
+        raise ValueError(f"New ranks must be list, got {type(new_ranks)}")
+
+    if len(original_ranks) != len(new_ranks):
+        raise ValueError(
+            f"Rank lists must have same length: {len(original_ranks)} vs {len(new_ranks)}"
+        )
+
+    if not all(isinstance(rank, int) for rank in original_ranks):
+        raise ValueError("All original ranks must be integers")
+
+    if not all(isinstance(rank, int) for rank in new_ranks):
+        raise ValueError("All new ranks must be integers")
+
+    return [orig - new for orig, new in zip(original_ranks, new_ranks)]
+
+
+def sort_by_scores(
+    items: List[Any], scores: List[float], descending: bool = True
+) -> Tuple[List[Any], List[float], List[int]]:
+    """
+    Sort items by scores and return sorted items, scores, and original indices.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        items: List of items to sort
+        scores: List of scores for sorting
+        descending: Whether to sort in descending order
+
+    Returns:
+        Tuple of (sorted_items, sorted_scores, original_indices)
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(items, list):
+        raise ValueError(f"Items must be list, got {type(items)}")
+
+    if not isinstance(scores, list):
+        raise ValueError(f"Scores must be list, got {type(scores)}")
+
+    if len(items) != len(scores):
+        raise ValueError(
+            f"Items and scores must have same length: {len(items)} vs {len(scores)}"
+        )
+
+    if not all(isinstance(score, (int, float)) for score in scores):
+        raise ValueError("All scores must be numbers")
+
+    # Create indexed pairs and sort
+    indexed_pairs = list(enumerate(zip(items, scores)))
+    indexed_pairs.sort(key=lambda x: x[1][1], reverse=descending)
+
+    # Extract sorted data
+    sorted_items = [pair[1][0] for pair in indexed_pairs]
+    sorted_scores = [pair[1][1] for pair in indexed_pairs]
+    original_indices = [pair[0] for pair in indexed_pairs]
+
+    return sorted_items, sorted_scores, original_indices
+
+
+def normalize_scores_to_range(
+    scores: List[float], min_val: float = 0.0, max_val: float = 1.0
+) -> List[float]:
+    """
+    Normalize scores to specified range.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        scores: List of scores to normalize
+        min_val: Minimum value in output range
+        max_val: Maximum value in output range
+
+    Returns:
+        List of normalized scores
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(scores, list):
+        raise ValueError(f"Scores must be list, got {type(scores)}")
+
+    if not all(isinstance(score, (int, float)) for score in scores):
+        raise ValueError("All scores must be numbers")
+
+    if not isinstance(min_val, (int, float)):
+        raise ValueError(f"Min value must be number, got {type(min_val)}")
+
+    if not isinstance(max_val, (int, float)):
+        raise ValueError(f"Max value must be number, got {type(max_val)}")
+
+    if min_val >= max_val:
+        raise ValueError(
+            f"Min value ({min_val}) must be less than max value ({max_val})"
+        )
+
+    if not scores:
+        return []
+
+    original_min = min(scores)
+    original_max = max(scores)
+
+    if original_min == original_max:
+        # All scores are equal, return middle of range
+        mid_val = (min_val + max_val) / 2
+        return [mid_val] * len(scores)
+
+    # Normalize to [0, 1] then scale to desired range
+    normalized = [
+        (score - original_min) / (original_max - original_min) for score in scores
+    ]
+
+    # Scale to desired range
+    scaled = [min_val + norm * (max_val - min_val) for norm in normalized]
+
+    return scaled
+
+
+def calculate_reranking_metrics(
+    original_ranks: List[int], new_ranks: List[int]
+) -> Dict[str, float]:
+    """
+    Calculate metrics for reranking quality.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        original_ranks: Original ranking positions
+        new_ranks: New ranking positions
+
+    Returns:
+        Dictionary with reranking metrics
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(original_ranks, list) or not isinstance(new_ranks, list):
+        raise ValueError("Both rank lists must be lists")
+
+    if len(original_ranks) != len(new_ranks):
+        raise ValueError("Rank lists must have same length")
+
+    if not all(isinstance(rank, int) for rank in original_ranks + new_ranks):
+        raise ValueError("All ranks must be integers")
+
+    n = len(original_ranks)
+
+    if n == 0:
+        return {
+            "kendall_tau": 0.0,
+            "spearman_rho": 0.0,
+            "rank_correlation": 0.0,
+            "items_moved": 0,
+            "average_rank_change": 0.0,
+        }
+
+    # Calculate rank changes
+    rank_changes = calculate_rank_changes(original_ranks, new_ranks)
+
+    # Items moved (rank changed)
+    items_moved = sum(1 for change in rank_changes if change != 0)
+
+    # Average rank change
+    avg_rank_change = sum(abs(change) for change in rank_changes) / n
+
+    # Simple rank correlation (Spearman-like)
+    if n > 1:
+        # Convert ranks to relative positions for correlation
+        orig_positions = [
+            original_ranks.index(i) if i in original_ranks else 0 for i in range(n)
+        ]
+        new_positions = [new_ranks.index(i) if i in new_ranks else 0 for i in range(n)]
+
+        # Simple correlation calculation
+        mean_orig = sum(orig_positions) / n
+        mean_new = sum(new_positions) / n
+
+        numerator = sum(
+            (o - mean_orig) * (n - mean_new)
+            for o, n in zip(orig_positions, new_positions)
+        )
+
+        orig_var = sum((o - mean_orig) ** 2 for o in orig_positions)
+        new_var = sum((n - mean_new) ** 2 for n in new_positions)
+
+        if orig_var > 0 and new_var > 0:
+            correlation = numerator / (orig_var * new_var) ** 0.5
+        else:
+            correlation = 0.0
+    else:
+        correlation = 1.0
+
+    return {
+        "kendall_tau": correlation,  # Simplified
+        "spearman_rho": correlation,
+        "rank_correlation": correlation,
+        "items_moved": items_moved,
+        "average_rank_change": avg_rank_change,
+    }
+
+
+def create_query_document_pairs(
+    query: str, documents: List[str]
+) -> List[Tuple[str, str]]:
+    """
+    Create query-document pairs for reranking.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        query: Search query
+        documents: List of documents
+
+    Returns:
+        List of (query, document) pairs
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(query, str):
+        raise ValueError(f"Query must be string, got {type(query)}")
+
+    if not isinstance(documents, list):
+        raise ValueError(f"Documents must be list, got {type(documents)}")
+
+    if not all(isinstance(doc, str) for doc in documents):
+        raise ValueError("All documents must be strings")
+
+    return [(query, doc) for doc in documents]
+
+
+# ===== DATA STRUCTURES =====
 
 
 @dataclass
-class RerankerResult:
-    """Result from reranking."""
+class RerankerConfig:
+    """Configuration for reranker."""
+
+    model_name: str = "BAAI/bge-reranker-v2-m3"
+    device: str = "cpu"
+    max_length: int = 512
+    batch_size: int = 4
+    normalize_scores: bool = True
+    score_threshold: float = 0.0
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if not isinstance(self.model_name, str):
+            raise ValueError("Model name must be string")
+
+        if not isinstance(self.device, str):
+            raise ValueError("Device must be string")
+
+        if not isinstance(self.max_length, int) or self.max_length < 1:
+            raise ValueError("Max length must be positive integer")
+
+        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+            raise ValueError("Batch size must be positive integer")
+
+        if not isinstance(self.normalize_scores, bool):
+            raise ValueError("Normalize scores must be boolean")
+
+        if not isinstance(self.score_threshold, (int, float)):
+            raise ValueError("Score threshold must be number")
+
+
+@dataclass
+class RerankingResult:
+    """Result from reranking operation."""
 
     content: str
     score: float
     original_rank: int
     new_rank: int
-    metadata: Dict[str, Any]
+    rank_change: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Validate and calculate derived fields."""
+        if not isinstance(self.content, str):
+            raise ValueError("Content must be string")
+
+        if not isinstance(self.score, (int, float)):
+            raise ValueError("Score must be number")
+
+        if not isinstance(self.original_rank, int) or self.original_rank < 0:
+            raise ValueError("Original rank must be non-negative integer")
+
+        if not isinstance(self.new_rank, int) or self.new_rank < 0:
+            raise ValueError("New rank must be non-negative integer")
+
+        if not isinstance(self.metadata, dict):
+            raise ValueError("Metadata must be dict")
+
+        # Calculate rank change if not provided
+        if (
+            self.rank_change == 0
+            and hasattr(self, "original_rank")
+            and hasattr(self, "new_rank")
+        ):
+            self.rank_change = self.original_rank - self.new_rank
+
+
+@dataclass
+class DocumentItem:
+    """Document item for reranking."""
+
+    content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    original_score: float = 0.0
+
+    def __post_init__(self):
+        """Validate document item."""
+        if not isinstance(self.content, str):
+            raise ValueError("Content must be string")
+
+        if not isinstance(self.metadata, dict):
+            raise ValueError("Metadata must be dict")
+
+        if not isinstance(self.original_score, (int, float)):
+            raise ValueError("Original score must be number")
+
+
+# ===== PROTOCOLS =====
+
+
+class ModelLoader(Protocol):
+    """Protocol for model loading."""
+
+    def load_model(self, model_name: str, device: str) -> Any:
+        """Load reranker model."""
+        ...
+
+    def is_model_loaded(self) -> bool:
+        """Check if model is loaded."""
+        ...
+
+
+class ScoreCalculator(Protocol):
+    """Protocol for score calculation."""
+
+    def calculate_scores(
+        self, query_document_pairs: List[Tuple[str, str]], batch_size: int
+    ) -> List[float]:
+        """Calculate relevance scores for query-document pairs."""
+        ...
+
+
+# ===== CORE CLASSES =====
 
 
 class MultilingualReranker:
-    """Multilingual cross-encoder reranker using BGE-reranker-v2-m3."""
+    """Multilingual document reranker with dependency injection."""
 
     def __init__(
         self,
-        model_name: str = None,
-        device: str = None,
-        max_length: int = None,
-        batch_size: int = None,
+        model_loader: ModelLoader,
+        score_calculator: ScoreCalculator,
+        config: RerankerConfig,
     ):
         """
-        Initialize multilingual reranker with config.
+        Initialize reranker with dependency injection.
 
         Args:
-            model_name: HuggingFace model name (from config if None)
-            device: Device to run on (from config if None)
-            max_length: Maximum sequence length (from config if None)
-            batch_size: Batch size for processing (from config if None)
+            model_loader: Model loading interface
+            score_calculator: Score calculation interface
+            config: Reranker configuration
         """
-        # Load configuration with DRY pattern
-        config = handle_config_error(
-            operation=lambda: get_reranking_config(),
-            fallback_value={
-                "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
-                "device": "cpu",
-                "batch_size": 4,
-                "confidence_threshold": 0.5,
-            },
-            config_file="config/config.toml",
-            section="[reranking]",
-        )
+        self.model_loader = model_loader
+        self.score_calculator = score_calculator
+        self.config = config
+        self.logger = logging.getLogger(__name__)
 
-        self.model_name = model_name or config["model_name"]
-        self.device = device or config["device"]
-        self.max_length = max_length or 512  # Not in config yet
-        self.batch_size = batch_size or config["batch_size"]
+        self.is_ready = False
+        self._initialize()
 
-        self.tokenizer = None
-        self.model = None
-        self.is_loaded = False
-
-    def load_model(self):
-        """Load the reranker model and tokenizer."""
+    def _initialize(self) -> None:
+        """Initialize the reranker."""
         try:
-            print(f"🔧 Loading reranker model: {self.model_name}")
+            self.model_loader.load_model(self.config.model_name, self.config.device)
+            self.is_ready = self.model_loader.is_model_loaded()
 
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
-
-            # Determine optimal dtype based on device
-            model_dtype = torch.float32 if self.device == "cpu" else torch.float16
-
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-            )
-
-            # Convert to appropriate dtype and device
-            self.model = self.model.to(device=self.device, dtype=model_dtype)
-            self.model.eval()
-
-            self.is_loaded = True
-            print("✅ Reranker model loaded")
+            if self.is_ready:
+                self.logger.info(f"Reranker initialized with {self.config.model_name}")
+            else:
+                self.logger.warning("Reranker model not loaded, using fallback scoring")
 
         except Exception as e:
-            print(f"❌ Failed to load reranker: {e}")
-            print("💡 Falling back to score-based reranking")
-            self.is_loaded = False
+            self.logger.error(f"Failed to initialize reranker: {e}")
+            self.is_ready = False
 
     def rerank(
-        self,
-        query: str,
-        documents: List[str],
-        metadatas: List[Dict[str, Any]] = None,
-        top_k: int = 5,
-    ) -> List[RerankerResult]:
+        self, query: str, documents: List[DocumentItem], top_k: Optional[int] = None
+    ) -> List[RerankingResult]:
         """
-        Rerank documents using cross-encoder model.
+        Rerank documents based on relevance to query.
 
         Args:
             query: Search query
-            documents: List of document texts to rerank
-            metadatas: Optional metadata for each document
+            documents: List of documents to rerank
             top_k: Number of top results to return
 
         Returns:
-            List of RerankerResult objects
+            List of reranking results
+
+        Raises:
+            ValueError: If inputs are invalid
         """
-        if metadatas is None:
-            metadatas = [{"index": i} for i in range(len(documents))]
+        if not isinstance(query, str):
+            raise ValueError(f"Query must be string, got {type(query)}")
 
-        if not self.is_loaded:
-            # Fallback: return documents in original order with dummy scores
-            return [
-                RerankerResult(
-                    content=doc,
-                    score=1.0 - (i * 0.1),  # Decreasing scores
-                    original_rank=i,
-                    new_rank=i,
-                    metadata=meta,
-                )
-                for i, (doc, meta) in enumerate(zip(documents[:top_k], metadatas[:top_k]))
-            ]
+        if not isinstance(documents, list):
+            raise ValueError(f"Documents must be list, got {type(documents)}")
 
-        # Prepare query-document pairs
-        pairs = [(query, doc) for doc in documents]
+        if not all(isinstance(doc, DocumentItem) for doc in documents):
+            raise ValueError("All documents must be DocumentItem instances")
 
-        # Get reranker scores in batches
-        all_scores = []
+        if top_k is not None and (not isinstance(top_k, int) or top_k < 1):
+            raise ValueError("Top k must be positive integer or None")
 
-        for i in range(0, len(pairs), self.batch_size):
-            batch_pairs = pairs[i : i + self.batch_size]
-            batch_scores = self._score_batch(batch_pairs)
-            all_scores.extend(batch_scores)
-
-        # Create results with scores
-        results = []
-        for i, (doc, meta, score) in enumerate(zip(documents, metadatas, all_scores)):
-            results.append(
-                RerankerResult(
-                    content=doc,
-                    score=score,
-                    original_rank=i,
-                    new_rank=-1,  # Will be set after sorting
-                    metadata=meta,
-                )
-            )
-
-        # Sort by score (descending) and assign new ranks
-        results.sort(key=lambda x: x.score, reverse=True)
-        for new_rank, result in enumerate(results):
-            result.new_rank = new_rank
-
-        return results[:top_k]
-
-    def _score_batch(self, pairs: List[Tuple[str, str]]) -> List[float]:
-        """Score a batch of query-document pairs."""
-        if not self.is_loaded:
-            return [0.5] * len(pairs)
+        if not documents:
+            return []
 
         try:
-            # Tokenize pairs
-            encoded = self.tokenizer(
-                pairs,
-                truncation=True,
-                padding=True,
-                max_length=self.max_length,
-                return_tensors="pt",
+            # Create query-document pairs
+            doc_contents = [doc.content for doc in documents]
+            pairs = create_query_document_pairs(query, doc_contents)
+
+            # Calculate relevance scores
+            scores = self.score_calculator.calculate_scores(
+                query_document_pairs=pairs, batch_size=self.config.batch_size
             )
 
-            # Move to device
-            encoded = {k: v.to(self.device) for k, v in encoded.items()}
+            # Normalize scores if requested
+            if self.config.normalize_scores:
+                scores = normalize_scores_to_range(scores, 0.0, 1.0)
 
-            # Get scores
-            with torch.no_grad():
-                outputs = self.model(**encoded)
-                scores = torch.nn.functional.sigmoid(outputs.logits).squeeze(-1)
+            # Sort by scores to get new ranking
+            sorted_docs, sorted_scores, original_indices = sort_by_scores(
+                items=documents, scores=scores, descending=True
+            )
 
-                # Convert to numpy
-                if self.device == "cuda":
-                    scores = scores.cpu()
-                scores = scores.numpy()
+            # Create reranking results
+            results = []
+            for new_rank, (doc, score, orig_idx) in enumerate(
+                zip(sorted_docs, sorted_scores, original_indices)
+            ):
+                # Apply score threshold filter
+                if score >= self.config.score_threshold:
+                    result = RerankingResult(
+                        content=doc.content,
+                        score=score,
+                        original_rank=orig_idx,
+                        new_rank=new_rank,
+                        rank_change=orig_idx - new_rank,
+                        metadata=doc.metadata.copy(),
+                    )
+                    results.append(result)
 
-                # Ensure it's a list of floats
-                if scores.ndim == 0:
-                    scores = [float(scores)]
-                else:
-                    scores = scores.tolist()
+            # Apply top_k limit
+            if top_k is not None:
+                results = results[:top_k]
+
+            self.logger.debug(
+                f"Reranked {len(documents)} documents, returning {len(results)} results"
+            )
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Failed to rerank documents: {e}")
+            raise
+
+    def calculate_reranking_quality(
+        self, results: List[RerankingResult]
+    ) -> Dict[str, float]:
+        """
+        Calculate quality metrics for reranking.
+
+        Args:
+            results: List of reranking results
+
+        Returns:
+            Dictionary with quality metrics
+        """
+        if not results:
+            return {}
+
+        try:
+            original_ranks = [result.original_rank for result in results]
+            new_ranks = [result.new_rank for result in results]
+
+            metrics = calculate_reranking_metrics(original_ranks, new_ranks)
+
+            # Add score-based metrics
+            scores = [result.score for result in results]
+            metrics.update(
+                {
+                    "mean_score": sum(scores) / len(scores),
+                    "min_score": min(scores),
+                    "max_score": max(scores),
+                    "score_std": np.std(scores) if len(scores) > 1 else 0.0,
+                }
+            )
+
+            return metrics
+
+        except Exception as e:
+            self.logger.error(f"Failed to calculate reranking quality: {e}")
+            return {}
+
+    def explain_reranking(self, results: List[RerankingResult]) -> str:
+        """
+        Generate explanation of reranking results.
+
+        Args:
+            results: List of reranking results
+
+        Returns:
+            Formatted explanation string
+        """
+        if not results:
+            return "No reranking results to explain."
+
+        explanation = ["🎯 Reranking Explanation:"]
+        explanation.append(f"Model: {self.config.model_name}")
+        explanation.append(f"Device: {self.config.device}")
+        explanation.append(f"Total documents reranked: {len(results)}")
+        explanation.append("")
+
+        for i, result in enumerate(results[:10]):  # Show top 10
+            rank_change = result.rank_change
+
+            if rank_change > 0:
+                change_indicator = f"📈 +{rank_change}"
+            elif rank_change < 0:
+                change_indicator = f"📉 {rank_change}"
+            else:
+                change_indicator = "➡️ No change"
+
+            explanation.append(f"{i+1}. Score: {result.score:.4f} {change_indicator}")
+            explanation.append(f"    Original rank: {result.original_rank + 1}")
+
+            # Content preview
+            content_preview = result.content[:80].replace("\n", " ")
+            if len(result.content) > 80:
+                content_preview += "..."
+            explanation.append(f"    Content: {content_preview}")
+            explanation.append("")
+
+        if len(results) > 10:
+            explanation.append(f"... and {len(results) - 10} more results")
+
+        return "\n".join(explanation)
+
+
+# ===== FACTORY FUNCTIONS =====
+
+
+def create_multilingual_reranker(
+    model_loader: ModelLoader,
+    score_calculator: ScoreCalculator,
+    model_name: str = "BAAI/bge-reranker-v2-m3",
+    device: str = "cpu",
+    batch_size: int = 4,
+) -> MultilingualReranker:
+    """
+    Factory function to create multilingual reranker.
+
+    Args:
+        model_loader: Model loading interface
+        score_calculator: Score calculation interface
+        model_name: HuggingFace model name
+        device: Device to run on
+        batch_size: Batch size for processing
+
+    Returns:
+        Configured MultilingualReranker instance
+    """
+    config = RerankerConfig(model_name=model_name, device=device, batch_size=batch_size)
+
+    return MultilingualReranker(model_loader, score_calculator, config)
+
+
+def create_mock_model_loader(
+    should_load_successfully: bool = True, is_loaded: bool = True
+) -> ModelLoader:
+    """
+    Factory function to create mock model loader.
+
+    Args:
+        should_load_successfully: Whether load_model should succeed
+        is_loaded: Whether model should report as loaded
+
+    Returns:
+        Mock ModelLoader
+    """
+
+    class MockModelLoader:
+        def __init__(self):
+            self._is_loaded = False
+            self._should_succeed = should_load_successfully
+            self._target_loaded_state = is_loaded
+
+        def load_model(self, model_name: str, device: str) -> Any:
+            if not self._should_succeed:
+                raise ValueError(f"Mock failure loading {model_name}")
+            self._is_loaded = self._target_loaded_state
+            return "mock_model"
+
+        def is_model_loaded(self) -> bool:
+            return self._is_loaded
+
+    return MockModelLoader()
+
+
+def create_mock_score_calculator(
+    base_scores: Optional[List[float]] = None, add_noise: bool = False
+) -> ScoreCalculator:
+    """
+    Factory function to create mock score calculator.
+
+    Args:
+        base_scores: Base scores to return (generates if None)
+        add_noise: Whether to add random noise to scores
+
+    Returns:
+        Mock ScoreCalculator
+    """
+
+    class MockScoreCalculator:
+        def __init__(self):
+            self.base_scores = base_scores
+            self.add_noise = add_noise
+
+        def calculate_scores(
+            self, query_document_pairs: List[Tuple[str, str]], batch_size: int
+        ) -> List[float]:
+            n_pairs = len(query_document_pairs)
+
+            if self.base_scores:
+                # Use provided scores, cycling if necessary
+                scores = [
+                    self.base_scores[i % len(self.base_scores)] for i in range(n_pairs)
+                ]
+            else:
+                # Generate mock scores based on query-document similarity
+                scores = []
+                for query, doc in query_document_pairs:
+                    # Simple mock scoring based on common words
+                    query_words = set(query.lower().split())
+                    doc_words = set(doc.lower().split())
+
+                    if query_words and doc_words:
+                        overlap = len(query_words & doc_words)
+                        total_unique = len(query_words | doc_words)
+                        score = overlap / total_unique if total_unique > 0 else 0.0
+                    else:
+                        score = 0.0
+
+                    scores.append(score)
+
+            # Add noise if requested
+            if self.add_noise:
+                import random
+
+                scores = [
+                    max(0.0, min(1.0, score + random.uniform(-0.1, 0.1)))
+                    for score in scores
+                ]
 
             return scores
 
-        except Exception as e:
-            print(f"❌ Reranker scoring error: {e}")
-            return [0.5] * len(pairs)
-
-    def explain_reranking(self, results: List[RerankerResult]) -> str:
-        """Generate explanation of reranking for debugging."""
-        explanation = "🎯 Reranking Results:\n"
-        explanation += f"Model: {self.model_name}\n"
-        explanation += f"Device: {self.device}\n\n"
-
-        for result in results:
-            rank_change = result.original_rank - result.new_rank
-            change_symbol = "📈" if rank_change > 0 else "📉" if rank_change < 0 else "➡️"
-
-            explanation += f"Rank {result.new_rank + 1}: Score {result.score:.3f} {change_symbol}\n"
-            explanation += f"  Original rank: {result.original_rank + 1}\n"
-            explanation += f"  Content: {result.content[:100]}...\n\n"
-
-        return explanation
-
-
-def create_lightweight_reranker() -> MultilingualReranker:
-    """Create a CPU-friendly reranker instance."""
-    return MultilingualReranker(
-        model_name="BAAI/bge-reranker-v2-m3",
-        device="cpu",
-        max_length=512,
-        batch_size=4,  # Small batch for CPU
-    )
+    return MockScoreCalculator()

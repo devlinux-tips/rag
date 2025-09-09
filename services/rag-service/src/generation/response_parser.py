@@ -1,15 +1,404 @@
 """
-Response parser for processing LLM outputs in multilingual RAG system.
-Handles post-processing, validation, and formatting of generated responses.
+100% testable response parser for processing LLM outputs in multilingual RAG system.
+Clean architecture with dependency injection and pure functions.
 """
 
 import logging
 import re
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+import unicodedata
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-from ..utils.config_loader import get_language_specific_config, get_response_parsing_config
-from ..utils.error_handler import handle_config_error
+logger = logging.getLogger(__name__)
+
+
+# ===== PURE FUNCTIONS =====
+
+
+def normalize_whitespace(text: str) -> str:
+    """
+    Normalize whitespace in text.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Input text
+
+    Returns:
+        Text with normalized whitespace
+
+    Raises:
+        ValueError: If text is not string
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    # Replace multiple whitespace with single space
+    normalized = re.sub(r"\s+", " ", text.strip())
+    return normalized
+
+
+def remove_prefixes(text: str, prefixes: List[str]) -> str:
+    """
+    Remove specified prefixes from text.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Input text
+        prefixes: List of regex patterns to remove
+
+    Returns:
+        Text with prefixes removed
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    if not isinstance(prefixes, list):
+        raise ValueError(f"Prefixes must be list, got {type(prefixes)}")
+
+    result = text
+
+    for pattern in prefixes:
+        if not isinstance(pattern, str):
+            continue  # Skip invalid patterns
+
+        try:
+            result = re.sub(pattern, "", result, flags=re.IGNORECASE)
+        except re.error:
+            # Skip invalid regex patterns
+            continue
+
+    return result
+
+
+def fix_punctuation_spacing(text: str) -> str:
+    """
+    Fix common punctuation spacing issues.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Input text
+
+    Returns:
+        Text with fixed punctuation spacing
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    # Remove spaces before punctuation
+    fixed = re.sub(r"\s+([,.!?;:])", r"\1", text)
+
+    # Add space after sentence-ending punctuation followed by capital letter
+    fixed = re.sub(r"([.!?])\s*([A-ZČĆŠŽĐ])", r"\1 \2", fixed)
+
+    return fixed
+
+
+def clean_response_text(text: str, prefixes_to_remove: List[str] = None) -> str:
+    """
+    Clean and normalize response text.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Raw response text
+        prefixes_to_remove: Regex patterns to remove
+
+    Returns:
+        Cleaned response text
+
+    Raises:
+        ValueError: If text is invalid
+    """
+    if not text:
+        raise ValueError("Text cannot be empty")
+
+    prefixes_to_remove = prefixes_to_remove or []
+
+    # Apply cleaning steps
+    cleaned = normalize_whitespace(text)
+    cleaned = remove_prefixes(cleaned, prefixes_to_remove)
+    cleaned = fix_punctuation_spacing(cleaned)
+
+    return cleaned.strip()
+
+
+def check_no_answer_patterns(text: str, no_answer_patterns: List[str]) -> bool:
+    """
+    Check if text contains patterns indicating no answer.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Text to check
+        no_answer_patterns: List of regex patterns indicating no answer
+
+    Returns:
+        True if text indicates no answer available
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    if not isinstance(no_answer_patterns, list):
+        raise ValueError(
+            f"No answer patterns must be list, got {type(no_answer_patterns)}"
+        )
+
+    text_lower = text.lower()
+
+    for pattern in no_answer_patterns:
+        if not isinstance(pattern, str):
+            continue  # Skip invalid patterns
+
+        try:
+            if re.search(pattern, text_lower):
+                return True
+        except re.error:
+            # Skip invalid regex patterns
+            continue
+
+    return False
+
+
+def extract_source_references(text: str, source_patterns: List[str]) -> List[str]:
+    """
+    Extract source references from text.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Text to search for sources
+        source_patterns: List of regex patterns for source matching
+
+    Returns:
+        List of unique source references found
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    if not isinstance(source_patterns, list):
+        raise ValueError(f"Source patterns must be list, got {type(source_patterns)}")
+
+    sources = []
+
+    for pattern in source_patterns:
+        if not isinstance(pattern, str):
+            continue  # Skip invalid patterns
+
+        try:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                sources.append(match.group())
+        except re.error:
+            # Skip invalid regex patterns
+            continue
+
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(sources))
+
+
+def calculate_confidence_score(
+    text: str, confidence_indicators: Dict[str, List[str]]
+) -> float:
+    """
+    Calculate confidence score based on language indicators.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Text to analyze
+        confidence_indicators: Dict mapping confidence levels to patterns
+
+    Returns:
+        Confidence score between 0.0 and 1.0
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    if not isinstance(confidence_indicators, dict):
+        raise ValueError(
+            f"Confidence indicators must be dict, got {type(confidence_indicators)}"
+        )
+
+    text_lower = text.lower()
+
+    # Count indicators for each confidence level
+    indicator_counts = {}
+
+    for level, patterns in confidence_indicators.items():
+        if not isinstance(patterns, list):
+            continue
+
+        count = 0
+        for pattern in patterns:
+            if not isinstance(pattern, str):
+                continue
+
+            try:
+                if re.search(pattern, text_lower):
+                    count += 1
+            except re.error:
+                continue  # Skip invalid patterns
+
+        indicator_counts[level] = count
+
+    # Calculate weighted score
+    high_count = indicator_counts.get("high", 0)
+    medium_count = indicator_counts.get("medium", 0)
+    low_count = indicator_counts.get("low", 0)
+
+    total_indicators = high_count + medium_count + low_count
+
+    if total_indicators == 0:
+        return 0.5  # Neutral confidence
+
+    # Weight: high=1.0, medium=0.6, low=0.2
+    weighted_score = (
+        high_count * 1.0 + medium_count * 0.6 + low_count * 0.2
+    ) / total_indicators
+
+    return min(max(weighted_score, 0.0), 1.0)
+
+
+def detect_language_by_patterns(
+    text: str,
+    language_patterns: Dict[str, List[str]],
+    default_language: str = "unknown",
+) -> str:
+    """
+    Detect language based on word and character patterns.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        text: Text to analyze
+        language_patterns: Dict mapping language codes to word lists
+        default_language: Default language if no patterns match
+
+    Returns:
+        Detected language code
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError(f"Text must be string, got {type(text)}")
+
+    if not isinstance(language_patterns, dict):
+        raise ValueError(
+            f"Language patterns must be dict, got {type(language_patterns)}"
+        )
+
+    text_lower = text.lower()
+
+    # Count diacritics (Unicode-based detection)
+    diacritic_count = sum(
+        1 for char in text if unicodedata.normalize("NFD", char) != char
+    )
+
+    # Score each language
+    language_scores = {}
+
+    for lang_code, word_patterns in language_patterns.items():
+        if not isinstance(word_patterns, list):
+            continue
+
+        word_score = sum(
+            1
+            for pattern in word_patterns
+            if isinstance(pattern, str) and pattern.lower() in text_lower
+        )
+
+        language_scores[lang_code] = word_score
+
+    # Find best match
+    if language_scores:
+        best_language = max(language_scores.items(), key=lambda x: x[1])
+
+        # Require minimum score (words + diacritics)
+        total_score = best_language[1] + (diacritic_count / 10)  # Weighted diacritics
+
+        if total_score > 0.5:  # Minimum threshold
+            return best_language[0]
+
+    return default_language
+
+
+def format_display_text(
+    content: str,
+    confidence: Optional[float] = None,
+    sources: Optional[List[str]] = None,
+    confidence_labels: Optional[Dict[str, str]] = None,
+    sources_prefix: str = "Sources",
+) -> str:
+    """
+    Format response content for display.
+    Pure function - no side effects, deterministic output.
+
+    Args:
+        content: Main response content
+        confidence: Confidence score (0.0-1.0)
+        sources: List of source references
+        confidence_labels: Labels for confidence levels
+        sources_prefix: Prefix for sources section
+
+    Returns:
+        Formatted display text
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
+    if not isinstance(content, str):
+        raise ValueError(f"Content must be string, got {type(content)}")
+
+    result_parts = [content]
+
+    # Add confidence indicator
+    if confidence is not None:
+        if not isinstance(confidence, (int, float)):
+            raise ValueError(f"Confidence must be numeric, got {type(confidence)}")
+
+        if confidence < 0.0 or confidence > 1.0:
+            raise ValueError(
+                f"Confidence must be between 0.0 and 1.0, got {confidence}"
+            )
+
+        confidence_labels = confidence_labels or {
+            "high": "High Confidence",
+            "medium": "Medium Confidence",
+            "low": "Low Confidence",
+        }
+
+        if confidence >= 0.8:
+            label = confidence_labels.get("high", "High Confidence")
+        elif confidence >= 0.5:
+            label = confidence_labels.get("medium", "Medium Confidence")
+        else:
+            label = confidence_labels.get("low", "Low Confidence")
+
+        result_parts.append(f"\n\n[{label}]")
+
+    # Add sources
+    if sources:
+        if not isinstance(sources, list):
+            raise ValueError(f"Sources must be list, got {type(sources)}")
+
+        valid_sources = [s for s in sources if isinstance(s, str) and s.strip()]
+
+        if valid_sources:
+            sources_text = f"\n\n{sources_prefix}: {', '.join(valid_sources)}"
+            result_parts.append(sources_text)
+
+    return "".join(result_parts)
+
+
+# ===== DATA STRUCTURES =====
 
 
 @dataclass
@@ -18,63 +407,102 @@ class ParsedResponse:
 
     content: str
     confidence: Optional[float] = None
-    sources_mentioned: List[str] = None
+    sources_mentioned: List[str] = field(default_factory=list)
     has_answer: bool = True
-    language: str = "hr"
-    metadata: Dict[str, Any] = None
+    language: str = "unknown"
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if self.sources_mentioned is None:
-            self.sources_mentioned = []
-        if self.metadata is None:
-            self.metadata = {}
+        """Validate fields after initialization."""
+        if not isinstance(self.content, str):
+            raise ValueError("Content must be string")
+
+        if self.confidence is not None:
+            if not isinstance(self.confidence, (int, float)):
+                raise ValueError("Confidence must be numeric or None")
+            if not (0.0 <= self.confidence <= 1.0):
+                raise ValueError("Confidence must be between 0.0 and 1.0")
+
+        if not isinstance(self.sources_mentioned, list):
+            raise ValueError("Sources mentioned must be list")
+
+        if not isinstance(self.has_answer, bool):
+            raise ValueError("Has answer must be boolean")
+
+        if not isinstance(self.language, str):
+            raise ValueError("Language must be string")
+
+        if not isinstance(self.metadata, dict):
+            raise ValueError("Metadata must be dict")
+
+
+@dataclass
+class ParsingConfig:
+    """Configuration for response parsing."""
+
+    no_answer_patterns: List[str] = field(default_factory=list)
+    source_patterns: List[str] = field(default_factory=list)
+    confidence_indicators: Dict[str, List[str]] = field(default_factory=dict)
+    language_patterns: Dict[str, List[str]] = field(default_factory=dict)
+    cleaning_prefixes: List[str] = field(default_factory=list)
+    display_settings: Dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if not isinstance(self.no_answer_patterns, list):
+            raise ValueError("No answer patterns must be list")
+
+        if not isinstance(self.source_patterns, list):
+            raise ValueError("Source patterns must be list")
+
+        if not isinstance(self.confidence_indicators, dict):
+            raise ValueError("Confidence indicators must be dict")
+
+        if not isinstance(self.language_patterns, dict):
+            raise ValueError("Language patterns must be dict")
+
+        if not isinstance(self.cleaning_prefixes, list):
+            raise ValueError("Cleaning prefixes must be list")
+
+        if not isinstance(self.display_settings, dict):
+            raise ValueError("Display settings must be dict")
+
+
+# ===== PROTOCOLS =====
+
+
+class ConfigProvider(Protocol):
+    """Protocol for parsing configuration providers."""
+
+    def get_parsing_config(self, language: str) -> ParsingConfig:
+        """Get parsing configuration for language."""
+        ...
+
+
+# ===== CORE CLASSES =====
 
 
 class MultilingualResponseParser:
     """Parser for multilingual LLM responses with language-specific behavior."""
 
-    def __init__(self, language: str = "hr"):
+    def __init__(self, config_provider: ConfigProvider, language: str = "hr"):
+        """
+        Initialize parser with dependency injection.
+
+        Args:
+            config_provider: Provider for parsing configuration
+            language: Language code
+        """
         self.language = language
+        self.config_provider = config_provider
         self.logger = logging.getLogger(__name__)
 
-        # Load language-specific configuration first, fall back to general config
-        language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("response_parsing", self.language),
-            fallback_value={},
-            config_file=f"config/{self.language}.toml",
-            section="[response_parsing]",
-        )
-
-        # Load general configuration as fallback
-        general_config = handle_config_error(
-            operation=lambda: get_response_parsing_config(),
-            fallback_value={
-                "no_answer_patterns": ["ne znam", "ne mogu", "nema podataka"],
-                "source_patterns": ["izvor:", "prema:", "dokumentu:"],
-                "confidence_indicators": {
-                    "high": ["sigurno"],
-                    "medium": ["možda"],
-                    "low": ["nisam siguran"],
-                },
-            },
-            config_file="config/config.toml",
-            section="[response_parsing]",
-        )
-
-        # Merge language config with general config (language-specific takes priority)
-        self._config = {**general_config, **language_config}
-
-        # Load patterns from merged config
-        self.no_answer_patterns = self._config.get(
-            "no_answer_patterns", ["ne znam", "ne mogu", "nema podataka"]
-        )
-        self.source_patterns = self._config.get(
-            "source_patterns", ["izvor:", "prema:", "dokumentu:"]
-        )
-        self.confidence_indicators = self._config.get(
-            "confidence_indicators",
-            {"high": ["sigurno"], "medium": ["možda"], "low": ["nisam siguran"]},
-        )
+        try:
+            self._config = config_provider.get_parsing_config(language)
+            self.logger.debug(f"Initialized parser for language: {language}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize parser for {language}: {e}")
+            raise
 
     def parse_response(
         self,
@@ -92,184 +520,75 @@ class MultilingualResponseParser:
 
         Returns:
             ParsedResponse object with analyzed content
+
+        Raises:
+            ValueError: If raw_response is invalid
         """
-        if not raw_response or not raw_response.strip():
-            return ParsedResponse(
-                content=self._config["display"]["no_answer_message"],
-                has_answer=False,
-                confidence=0.0,
+        try:
+            # Handle empty response
+            if not raw_response or not raw_response.strip():
+                no_answer_message = self._config.display_settings.get(
+                    "no_answer_message", "No answer available."
+                )
+                return ParsedResponse(
+                    content=no_answer_message,
+                    has_answer=False,
+                    confidence=0.0,
+                    language=self.language,
+                )
+
+            # Clean response text
+            cleaned_content = clean_response_text(
+                raw_response, prefixes_to_remove=self._config.cleaning_prefixes
             )
 
-        # Clean and normalize response
-        cleaned_response = self._clean_response(raw_response)
+            # Analyze response characteristics
+            has_answer = not check_no_answer_patterns(
+                cleaned_content, self._config.no_answer_patterns
+            )
 
-        # Check if response indicates no answer found
-        has_answer = not self._indicates_no_answer(cleaned_response)
+            sources = extract_source_references(
+                cleaned_content, self._config.source_patterns
+            )
 
-        # Extract source mentions
-        sources = self._extract_source_mentions(cleaned_response)
+            confidence = calculate_confidence_score(
+                cleaned_content, self._config.confidence_indicators
+            )
 
-        # Estimate confidence
-        confidence = self._estimate_confidence(cleaned_response)
+            detected_language = detect_language_by_patterns(
+                cleaned_content,
+                self._config.language_patterns,
+                default_language=self.language,
+            )
 
-        # Detect language
-        language = self._detect_language(cleaned_response)
+            # Build metadata
+            metadata = {
+                "original_length": len(raw_response),
+                "cleaned_length": len(cleaned_content),
+                "query_length": len(query),
+                "context_chunks_count": len(context_chunks) if context_chunks else 0,
+                "processing_language": self.language,
+            }
 
-        # Build metadata
-        metadata = {
-            "original_length": len(raw_response),
-            "cleaned_length": len(cleaned_response),
-            "query_length": len(query),
-            "context_chunks_count": len(context_chunks) if context_chunks else 0,
-        }
+            return ParsedResponse(
+                content=cleaned_content,
+                confidence=confidence,
+                sources_mentioned=sources,
+                has_answer=has_answer,
+                language=detected_language,
+                metadata=metadata,
+            )
 
-        return ParsedResponse(
-            content=cleaned_response,
-            confidence=confidence,
-            sources_mentioned=sources,
-            has_answer=has_answer,
-            language=language,
-            metadata=metadata,
-        )
-
-    def _clean_response(self, response: str) -> str:
-        """
-        Clean and normalize response text.
-
-        Args:
-            response: Raw response text
-
-        Returns:
-            Cleaned response text
-        """
-        # Remove extra whitespace
-        cleaned = re.sub(r"\s+", " ", response.strip())
-
-        # Remove common prefixes that models might add
-        prefixes_to_remove = self._config["cleaning"]["prefixes_to_remove"]
-
-        for pattern in prefixes_to_remove:
-            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
-
-        # Fix common punctuation issues
-        cleaned = re.sub(r"\s+([,.!?;:])", r"\1", cleaned)
-        cleaned = re.sub(r"([.!?])\s*([A-ZČĆŠŽĐ])", r"\1 \2", cleaned)
-
-        return cleaned.strip()
-
-    def _indicates_no_answer(self, response: str) -> bool:
-        """
-        Check if response indicates no answer was found.
-
-        Args:
-            response: Response text to check
-
-        Returns:
-            True if response indicates no answer available
-        """
-        response_lower = response.lower()
-        return any(re.search(pattern, response_lower) for pattern in self.no_answer_patterns)
-
-    def _extract_source_mentions(self, response: str) -> List[str]:
-        """
-        Extract source references from response.
-
-        Args:
-            response: Response text
-
-        Returns:
-            List of source references found
-        """
-        sources = []
-
-        for pattern in self.source_patterns:
-            matches = re.finditer(pattern, response, re.IGNORECASE)
-            for match in matches:
-                sources.append(match.group())
-
-        # Remove duplicates while preserving order
-        return list(dict.fromkeys(sources))
-
-    def _estimate_confidence(self, response: str) -> float:
-        """
-        Estimate confidence level based on language indicators.
-
-        Args:
-            response: Response text
-
-        Returns:
-            Confidence score between 0.0 and 1.0
-        """
-        response_lower = response.lower()
-
-        # Count confidence indicators
-        high_count = sum(
-            1
-            for pattern in self.confidence_indicators["high"]
-            if re.search(pattern, response_lower)
-        )
-
-        medium_count = sum(
-            1
-            for pattern in self.confidence_indicators["medium"]
-            if re.search(pattern, response_lower)
-        )
-
-        low_count = sum(
-            1 for pattern in self.confidence_indicators["low"] if re.search(pattern, response_lower)
-        )
-
-        # Calculate weighted confidence score
-        total_indicators = high_count + medium_count + low_count
-
-        if total_indicators == 0:
-            return 0.5  # Neutral confidence
-
-        weighted_score = (
-            high_count * 1.0 + medium_count * 0.6 + low_count * 0.2
-        ) / total_indicators
-
-        return min(max(weighted_score, 0.0), 1.0)
-
-    def _detect_language(self, response: str) -> str:
-        """
-        Detect response language.
-
-        Args:
-            response: Response text
-
-        Returns:
-            Language code ('hr' for Croatian, 'en' for English, etc.)
-        """
-        # Use language-agnostic detection based on configured patterns
-        shared_config = handle_config_error(
-            operation=lambda: get_language_specific_config("shared", self.language),
-            fallback_value={"language_chars": {"lowercase_diacritics": ["ć", "č", "š", "ž", "đ"]}},
-            config_file=f"config/{self.language}.toml",
-            section="[shared]",
-        )
-
-        language_chars = shared_config.get("language_chars", {}).get("lowercase_diacritics", [])
-        language_words = self._config.get("language_detection", {}).get(
-            f"{self.language}_words", []
-        )
-
-        # Count language-specific indicators
-        char_score = sum(1 for char in response if char in language_chars)
-        word_score = sum(1 for word in language_words if word in response.lower())
-
-        total_score = char_score + word_score
-
-        # Return configured language if indicators are found, otherwise try to detect
-        if total_score > 2:
-            return self.language
-        elif any(
-            word in response.lower()
-            for word in self._config.get("language_detection", {}).get("english_words", [])
-        ):
-            return "en"
-        else:
-            return "unknown"
+        except Exception as e:
+            self.logger.error(f"Failed to parse response: {e}")
+            # Return error response instead of raising
+            return ParsedResponse(
+                content="Error processing response.",
+                has_answer=False,
+                confidence=0.0,
+                language=self.language,
+                metadata={"error": str(e)},
+            )
 
     def format_for_display(self, parsed_response: ParsedResponse) -> str:
         """
@@ -280,37 +599,135 @@ class MultilingualResponseParser:
 
         Returns:
             Formatted response text
+
+        Raises:
+            ValueError: If parsed_response is invalid
         """
-        formatted = parsed_response.content
+        try:
+            confidence_labels = {
+                "high": self._config.display_settings.get(
+                    "high_confidence_label", "High Confidence"
+                ),
+                "medium": self._config.display_settings.get(
+                    "medium_confidence_label", "Medium Confidence"
+                ),
+                "low": self._config.display_settings.get(
+                    "low_confidence_label", "Low Confidence"
+                ),
+            }
 
-        # Add confidence indicator if available
-        if parsed_response.confidence is not None:
-            display_config = self._config["display"]
-            if parsed_response.confidence >= 0.8:
-                confidence_label = display_config["high_confidence_label"]
-            elif parsed_response.confidence >= 0.5:
-                confidence_label = display_config["medium_confidence_label"]
-            else:
-                confidence_label = display_config["low_confidence_label"]
+            sources_prefix = self._config.display_settings.get(
+                "sources_prefix", "Sources"
+            )
 
-            formatted += f"\n\n[{confidence_label}]"
+            return format_display_text(
+                content=parsed_response.content,
+                confidence=parsed_response.confidence,
+                sources=parsed_response.sources_mentioned,
+                confidence_labels=confidence_labels,
+                sources_prefix=sources_prefix,
+            )
 
-        # Add source information if available
-        if parsed_response.sources_mentioned:
-            sources_prefix = self._config["display"]["sources_prefix"]
-            formatted += f"\n\n{sources_prefix}: {', '.join(parsed_response.sources_mentioned)}"
-
-        return formatted
+        except Exception as e:
+            self.logger.error(f"Failed to format response for display: {e}")
+            # Return original content as fallback
+            return parsed_response.content
 
 
-def create_response_parser(language: str = "hr") -> MultilingualResponseParser:
+# ===== FACTORY FUNCTIONS =====
+
+
+def create_response_parser(
+    config_provider: ConfigProvider, language: str = "hr"
+) -> MultilingualResponseParser:
     """
     Factory function to create multilingual response parser.
 
     Args:
+        config_provider: Configuration provider
         language: Language code for language-specific behavior
 
     Returns:
         Configured MultilingualResponseParser instance
     """
-    return MultilingualResponseParser(language=language)
+    return MultilingualResponseParser(config_provider, language)
+
+
+def create_mock_config_provider(
+    no_answer_patterns: Optional[List[str]] = None,
+    source_patterns: Optional[List[str]] = None,
+    confidence_indicators: Optional[Dict[str, List[str]]] = None,
+    language_patterns: Optional[Dict[str, List[str]]] = None,
+    cleaning_prefixes: Optional[List[str]] = None,
+    display_settings: Optional[Dict[str, str]] = None,
+) -> ConfigProvider:
+    """
+    Factory function to create mock configuration provider.
+
+    Args:
+        no_answer_patterns: Custom no-answer patterns
+        source_patterns: Custom source patterns
+        confidence_indicators: Custom confidence indicators
+        language_patterns: Custom language patterns
+        cleaning_prefixes: Custom cleaning prefixes
+        display_settings: Custom display settings
+
+    Returns:
+        Mock ConfigProvider
+    """
+
+    class MockConfigProvider:
+        def get_parsing_config(self, language: str) -> ParsingConfig:
+            default_no_answer = [
+                "ne znam",
+                "ne mogu",
+                "nema podataka",
+                "don't know",
+                "no information",
+            ]
+            default_source = [
+                r"izvor:",
+                r"prema:",
+                r"dokumentu:",
+                r"source:",
+                r"according to:",
+            ]
+            default_confidence = {
+                "high": ["sigurno", "certainly", "definitive"],
+                "medium": ["možda", "probably", "likely"],
+                "low": ["nisam siguran", "not sure", "uncertain"],
+            }
+            default_language = {
+                "hr": ["je", "su", "ima", "biti", "kao", "da", "se", "i", "u", "na"],
+                "en": [
+                    "is",
+                    "are",
+                    "the",
+                    "and",
+                    "of",
+                    "to",
+                    "in",
+                    "that",
+                    "have",
+                    "for",
+                ],
+            }
+            default_prefixes = [r"^(odgovor|answer):\s*", r"^(pitanje|question):\s*"]
+            default_display = {
+                "no_answer_message": "No answer available.",
+                "high_confidence_label": "High Confidence",
+                "medium_confidence_label": "Medium Confidence",
+                "low_confidence_label": "Low Confidence",
+                "sources_prefix": "Sources",
+            }
+
+            return ParsingConfig(
+                no_answer_patterns=no_answer_patterns or default_no_answer,
+                source_patterns=source_patterns or default_source,
+                confidence_indicators=confidence_indicators or default_confidence,
+                language_patterns=language_patterns or default_language,
+                cleaning_prefixes=cleaning_prefixes or default_prefixes,
+                display_settings=display_settings or default_display,
+            )
+
+    return MockConfigProvider()

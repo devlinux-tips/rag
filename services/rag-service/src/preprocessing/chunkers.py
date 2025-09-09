@@ -1,26 +1,343 @@
 """
-Document chunking strategies for multilingual text.
-Implements various chunking approaches optimized for RAG retrieval.
+Fully testable document chunking with dependency injection.
+Clean slate recreation with 100% mockable architecture for reliable testing.
 """
 
 import logging
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
-from ..utils.config_loader import (
-    get_chunking_config,
-    get_language_specific_config,
-    get_shared_config,
-)
-from ..utils.error_handler import create_config_loader, handle_config_error
+if TYPE_CHECKING:
+    from ..utils.config_protocol import ConfigProvider
 
-# Create specialized config loaders
-load_preprocessing_config = create_config_loader("config/config.toml", __name__)
-from .cleaners import MultilingualTextCleaner
+# Pure function algorithms that can be tested in complete isolation
 
-logger = logging.getLogger(__name__)
+
+def sliding_window_chunk_positions(
+    text_length: int,
+    chunk_size: int,
+    overlap: int,
+    sentence_boundaries: Optional[List[int]] = None,
+    respect_sentences: bool = True,
+) -> List[tuple[int, int]]:
+    """
+    Calculate chunk positions for sliding window strategy (pure function).
+
+    Args:
+        text_length: Length of text to chunk
+        chunk_size: Target chunk size in characters
+        overlap: Overlap between chunks in characters
+        sentence_boundaries: List of sentence boundary positions
+        respect_sentences: Whether to adjust positions to sentence boundaries
+
+    Returns:
+        List of (start, end) positions
+    """
+    if text_length == 0:
+        return []
+
+    positions = []
+    start = 0
+
+    while start < text_length:
+        end = min(start + chunk_size, text_length)
+
+        # Adjust to sentence boundary if requested and boundaries available
+        if (
+            end < text_length
+            and respect_sentences
+            and sentence_boundaries
+            and sentence_boundaries
+        ):
+            # Find nearest sentence boundary within reasonable range
+            search_range = min(200, text_length - end)  # Configurable range
+            best_end = end
+
+            for boundary in sentence_boundaries:
+                if end <= boundary <= end + search_range:
+                    best_end = boundary
+                    break
+
+            end = best_end
+
+        if start < end:  # Ensure valid chunk
+            positions.append((start, end))
+
+        # If we've reached the end, stop
+        if end >= text_length:
+            break
+
+        # Calculate next start with overlap
+        next_start = end - overlap
+        if next_start <= start:  # Prevent infinite loop - ensure progress
+            next_start = start + 1
+
+        start = next_start
+
+    return positions
+
+
+def sentence_chunk_positions(
+    sentences: List[str], chunk_size: int, overlap: int, min_chunk_size: int
+) -> List[tuple[int, int, List[str]]]:
+    """
+    Calculate chunk positions for sentence-based strategy (pure function).
+
+    Args:
+        sentences: List of sentences
+        chunk_size: Target chunk size in characters
+        overlap: Overlap between chunks in characters
+        min_chunk_size: Minimum chunk size
+
+    Returns:
+        List of (start_idx, end_idx, sentence_group) tuples
+    """
+    if not sentences:
+        return []
+
+    chunks = []
+    current_sentences = []
+    current_length = 0
+    start_idx = 0
+
+    for i, sentence in enumerate(sentences):
+        sentence_length = len(sentence)
+
+        # Check if we should create a chunk
+        should_chunk = (
+            current_length + sentence_length > chunk_size
+            and current_sentences
+            and current_length >= min_chunk_size
+        )
+
+        if should_chunk:
+            chunks.append((start_idx, i, current_sentences.copy()))
+
+            # Handle overlap
+            if overlap > 0 and current_sentences:
+                overlap_sentences = []
+                overlap_length = 0
+
+                for sent in reversed(current_sentences):
+                    if overlap_length + len(sent) <= overlap:
+                        overlap_sentences.insert(0, sent)
+                        overlap_length += len(sent)
+                    else:
+                        break
+
+                current_sentences = overlap_sentences
+                current_length = overlap_length
+                start_idx = i - len(overlap_sentences)
+            else:
+                current_sentences = []
+                current_length = 0
+                start_idx = i
+
+        current_sentences.append(sentence)
+        current_length += sentence_length
+
+    # Handle remaining sentences
+    if current_sentences:
+        chunks.append((start_idx, len(sentences), current_sentences))
+
+    return chunks
+
+
+def paragraph_chunk_positions(
+    paragraphs: List[str], chunk_size: int, overlap: int, min_chunk_size: int
+) -> List[tuple[int, int, List[str]]]:
+    """
+    Calculate chunk positions for paragraph-based strategy (pure function).
+
+    Args:
+        paragraphs: List of paragraphs
+        chunk_size: Target chunk size in characters
+        overlap: Overlap between chunks in characters
+        min_chunk_size: Minimum chunk size
+
+    Returns:
+        List of (start_idx, end_idx, paragraph_group) tuples
+    """
+    if not paragraphs:
+        return []
+
+    chunks = []
+    current_paragraphs = []
+    current_length = 0
+    start_idx = 0
+
+    for i, paragraph in enumerate(paragraphs):
+        paragraph_length = len(paragraph)
+
+        # Handle oversized paragraphs by marking them for splitting
+        if paragraph_length > chunk_size * 1.5:
+            # Finalize current chunk first
+            if current_paragraphs:
+                chunks.append((start_idx, i, current_paragraphs.copy()))
+                current_paragraphs = []
+                current_length = 0
+
+            # Mark oversized paragraph for sliding window treatment
+            chunks.append((i, i + 1, [paragraph]))
+            start_idx = i + 1
+            continue
+
+        # Check if we should create a chunk
+        should_chunk = (
+            current_length + paragraph_length > chunk_size
+            and current_paragraphs
+            and current_length >= min_chunk_size
+        )
+
+        if should_chunk:
+            chunks.append((start_idx, i, current_paragraphs.copy()))
+
+            # Handle overlap
+            if overlap > 0 and current_paragraphs:
+                last_para_len = len(current_paragraphs[-1])
+                if last_para_len <= overlap:
+                    current_paragraphs = [current_paragraphs[-1]]
+                    current_length = last_para_len
+                    start_idx = i - 1
+                else:
+                    current_paragraphs = []
+                    current_length = 0
+                    start_idx = i
+            else:
+                current_paragraphs = []
+                current_length = 0
+                start_idx = i
+
+        current_paragraphs.append(paragraph)
+        current_length += paragraph_length + 2  # +2 for paragraph separator
+
+    # Handle remaining paragraphs
+    if current_paragraphs:
+        chunks.append((start_idx, len(paragraphs), current_paragraphs))
+
+    return chunks
+
+
+def find_sentence_boundaries(
+    text: str, language_patterns: Optional[Dict[str, Any]] = None
+) -> List[int]:
+    """
+    Find sentence boundaries in text (pure function).
+
+    Args:
+        text: Text to analyze
+        language_patterns: Language-specific sentence patterns
+
+    Returns:
+        List of sentence boundary positions
+    """
+    if not text:
+        return []
+
+    boundaries = []
+
+    # Default sentence endings - works for most languages
+    sentence_endings = ".!?"
+
+    # Add language-specific patterns if provided
+    if language_patterns and "sentence_endings" in language_patterns:
+        sentence_endings = language_patterns["sentence_endings"]
+
+    for i, char in enumerate(text):
+        if char in sentence_endings:
+            # Check if next character (after optional spaces) is uppercase
+            next_pos = i + 1
+            while next_pos < len(text) and text[next_pos].isspace():
+                next_pos += 1
+
+            if next_pos >= len(text) or text[next_pos].isupper():
+                boundaries.append(i + 1)
+
+    return boundaries
+
+
+def extract_paragraphs(text: str) -> List[str]:
+    """Extract paragraphs from text (pure function)."""
+    if not text:
+        return []
+
+    # Split by double line breaks
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    return paragraphs
+
+
+def calculate_chunk_metadata(content: str) -> Dict[str, int]:
+    """Calculate chunk metadata (pure function)."""
+    words = content.split()
+    return {
+        "word_count": len(words),
+        "char_count": len(content),
+        "line_count": content.count("\n") + 1,
+    }
+
+
+# Configuration and protocols for dependency injection
+
+
+class ChunkingStrategy(Enum):
+    """Available chunking strategies."""
+
+    SLIDING_WINDOW = "sliding_window"
+    SENTENCE = "sentence"
+    PARAGRAPH = "paragraph"
+
+
+@dataclass
+class ChunkingConfig:
+    """Configuration for document chunking."""
+
+    chunk_size: int
+    overlap: int
+    min_chunk_size: int
+    respect_sentences: bool
+    sentence_search_range: int
+    strategy: ChunkingStrategy
+
+    @classmethod
+    def from_config(
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        config_provider: Optional["ConfigProvider"] = None,
+    ) -> "ChunkingConfig":
+        """Create config from dictionary or provider with DRY error handling."""
+        if config_dict:
+            chunking_config = config_dict.get("chunking", config_dict)
+            shared_config = config_dict.get("shared", {})
+        else:
+            # Use dependency injection
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
+
+                config_provider = get_config_provider()
+
+            full_config = config_provider.load_config("config")
+            chunking_config = full_config["chunking"]
+            shared_config = config_provider.get_shared_config()
+
+        return cls(
+            chunk_size=chunking_config.get(
+                "chunk_size", shared_config.get("default_chunk_size", 1000)
+            ),
+            overlap=chunking_config.get(
+                "overlap_size", shared_config.get("default_chunk_overlap", 100)
+            ),
+            min_chunk_size=chunking_config.get(
+                "min_chunk_size", shared_config.get("min_chunk_size", 100)
+            ),
+            respect_sentences=chunking_config.get("preserve_sentence_boundaries", True),
+            sentence_search_range=chunking_config.get("sentence_search_range", 200),
+            strategy=ChunkingStrategy(
+                chunking_config.get("strategy", "sliding_window")
+            ),
+        )
 
 
 @dataclass
@@ -35,91 +352,69 @@ class TextChunk:
     chunk_index: int
     word_count: int
     char_count: int
+    metadata: Dict[str, Any]
+
+
+class TextCleaner(Protocol):
+    """Protocol for text cleaning dependencies."""
+
+    def clean_text(self, text: str, preserve_structure: bool = True) -> str:
+        """Clean text while optionally preserving structure."""
+        ...
+
+    def extract_sentences(self, text: str) -> List[str]:
+        """Extract sentences from text."""
+        ...
+
+
+class SentenceExtractor(Protocol):
+    """Protocol for sentence extraction dependencies."""
+
+    def extract_sentences(self, text: str) -> List[str]:
+        """Extract sentences from text."""
+        ...
+
+
+# Main testable chunker class with full dependency injection
 
 
 class DocumentChunker:
-    """Chunk multilingual documents for optimal RAG retrieval."""
+    """Fully testable document chunker with dependency injection."""
 
     def __init__(
         self,
-        chunk_size: int = None,
-        overlap: int = None,
-        min_chunk_size: int = None,
-        respect_sentences: bool = None,
-        language: str = "hr",
+        config: ChunkingConfig,
+        text_cleaner: Optional[TextCleaner] = None,
+        sentence_extractor: Optional[SentenceExtractor] = None,
+        language_patterns: Optional[Dict[str, Any]] = None,
+        logger: Optional[logging.Logger] = None,
     ):
         """
-        Initialize document chunker.
+        Initialize document chunker with injectable dependencies.
 
         Args:
-            chunk_size: Target chunk size in characters (uses config if None)
-            overlap: Overlap between chunks in characters (uses config if None)
-            min_chunk_size: Minimum chunk size to keep (uses config if None)
-            respect_sentences: Whether to try to keep sentences intact (uses config if None)
-            language: Language code for language-specific behavior
+            config: Chunking configuration
+            text_cleaner: Text cleaning service (optional)
+            sentence_extractor: Sentence extraction service (optional)
+            language_patterns: Language-specific patterns (optional)
+            logger: Logger instance (optional)
         """
-        self.language = language
-        self._chunking_config = handle_config_error(
-            operation=lambda: get_chunking_config(),
-            fallback_value={
-                "chunk_size": 512,
-                "overlap_size": 50,
-                "min_chunk_size": 100,
-                "preserve_sentence_boundaries": True,
-                "sentence_search_range": 100,
-            },
-            config_file="config/config.toml",
-            section="[chunking]",
-        )
-        self._language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("text_processing", self.language),
-            fallback_value={
-                "sentence_endings": [".", "!", "?"],
-                "preserve_diacritics": True,
-                "language_uppercase_chars": ["Č", "Ć", "Ž", "Š", "Đ"],
-            },
-            config_file=f"config/{self.language}.toml",
-            section="[text_processing]",
-        )
-
-        # Load shared config for chunk size defaults
-        shared_config = handle_config_error(
-            operation=lambda: get_shared_config(),
-            fallback_value={
-                "default_chunk_size": 512,
-                "default_chunk_overlap": 50,
-                "min_chunk_size": 100,
-            },
-            config_file="config/config.toml",
-            section="[shared]",
-        )
-
-        self.chunk_size = chunk_size or self._chunking_config.get(
-            "chunk_size", shared_config["default_chunk_size"]
-        )
-        self.overlap = overlap or self._chunking_config.get(
-            "overlap_size", shared_config["default_chunk_overlap"]
-        )
-        self.min_chunk_size = min_chunk_size or shared_config["min_chunk_size"]
-        self.respect_sentences = (
-            respect_sentences
-            if respect_sentences is not None
-            else self._chunking_config["preserve_sentence_boundaries"]
-        )
-        self.cleaner = MultilingualTextCleaner(language=self.language)
-
-        logger.info(f"Initialized chunker: size={chunk_size}, overlap={overlap}")
+        self.config = config
+        self.text_cleaner = text_cleaner
+        self.sentence_extractor = sentence_extractor
+        self.language_patterns = language_patterns or {}
+        self.logger = logger or logging.getLogger(__name__)
 
     def chunk_document(
-        self, text: str, source_file: str, strategy: str = "sliding_window"
+        self, text: str, source_file: str, strategy: Optional[ChunkingStrategy] = None
     ) -> List[TextChunk]:
         """
-        Chunk a document using specified strategy.
+        Chunk document using specified strategy.
 
         Args:
             text: Document text to chunk
             source_file: Source file path
-            strategy: Chunking strategy ('sliding_window', 'sentence', 'paragraph')
+            strategy: Chunking strategy (uses config default if None)
 
         Returns:
             List of text chunks
@@ -127,255 +422,168 @@ class DocumentChunker:
         if not text or not text.strip():
             return []
 
-        logger.info(f"Chunking document {source_file} with strategy '{strategy}'")
+        strategy = strategy or self.config.strategy
+        self.logger.info(
+            f"Chunking document {source_file} with strategy '{strategy.value}'"
+        )
 
-        # Clean text first
-        cleaned_text = self.cleaner.clean_text(text, preserve_structure=True)
+        # Clean text if cleaner available
+        cleaned_text = text
+        if self.text_cleaner:
+            cleaned_text = self.text_cleaner.clean_text(text, preserve_structure=True)
 
-        if strategy == "sliding_window":
+        # Execute strategy
+        if strategy == ChunkingStrategy.SLIDING_WINDOW:
             chunks = self._sliding_window_chunking(cleaned_text, source_file)
-        elif strategy == "sentence":
+        elif strategy == ChunkingStrategy.SENTENCE:
             chunks = self._sentence_based_chunking(cleaned_text, source_file)
-        elif strategy == "paragraph":
+        elif strategy == ChunkingStrategy.PARAGRAPH:
             chunks = self._paragraph_based_chunking(cleaned_text, source_file)
         else:
             raise ValueError(f"Unknown chunking strategy: {strategy}")
 
-        # Filter out chunks that are too small or not meaningful
-        meaningful_chunks = []
-        for chunk in chunks:
-            # Simple check - just verify minimum size for now
-            if len(chunk.content.strip()) >= self.min_chunk_size:
-                meaningful_chunks.append(chunk)
+        # Filter meaningful chunks
+        meaningful_chunks = self._filter_meaningful_chunks(chunks)
 
-        logger.info(f"Created {len(meaningful_chunks)} meaningful chunks from {len(chunks)} total")
+        self.logger.info(
+            f"Created {len(meaningful_chunks)} meaningful chunks from {len(chunks)} total"
+        )
         return meaningful_chunks
 
     def _sliding_window_chunking(self, text: str, source_file: str) -> List[TextChunk]:
-        """Implement sliding window chunking with language-specific text awareness."""
+        """Execute sliding window chunking using pure functions."""
+        # Get sentence boundaries if needed
+        sentence_boundaries = None
+        if self.config.respect_sentences:
+            sentence_boundaries = find_sentence_boundaries(text, self.language_patterns)
+
+        # Calculate positions using pure function
+        positions = sliding_window_chunk_positions(
+            text_length=len(text),
+            chunk_size=self.config.chunk_size,
+            overlap=self.config.overlap,
+            sentence_boundaries=sentence_boundaries,
+            respect_sentences=self.config.respect_sentences,
+        )
+
+        # Create chunks from positions
         chunks = []
-        start = 0
-        chunk_index = 0
-
-        while start < len(text):
-            # Calculate end position
-            end = min(start + self.chunk_size, len(text))
-
-            # If we're not at the end and respect_sentences is True, try to end at sentence boundary
-            if end < len(text) and self.respect_sentences:
-                end = self._find_sentence_boundary(text, end, start)
-
+        for i, (start, end) in enumerate(positions):
             chunk_text = text[start:end].strip()
-
             if chunk_text:
                 chunk = self._create_chunk(
                     content=chunk_text,
                     source_file=source_file,
                     start_char=start,
                     end_char=end,
-                    chunk_index=chunk_index,
+                    chunk_index=i,
                 )
                 chunks.append(chunk)
-                chunk_index += 1
-
-            # Move start position with overlap
-            start = max(end - self.overlap, start + 1)
-
-            # Prevent infinite loop
-            if start >= end:
-                break
 
         return chunks
 
     def _sentence_based_chunking(self, text: str, source_file: str) -> List[TextChunk]:
-        """Chunk by sentences, grouping sentences to reach target size."""
-        sentences = self.cleaner.extract_sentences(text)
+        """Execute sentence-based chunking using pure functions."""
+        # Extract sentences
+        if self.sentence_extractor:
+            sentences = self.sentence_extractor.extract_sentences(text)
+        elif self.text_cleaner:
+            sentences = self.text_cleaner.extract_sentences(text)
+        else:
+            # Fallback: simple sentence splitting
+            sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
 
+        # Calculate chunk positions using pure function
+        chunk_positions = sentence_chunk_positions(
+            sentences=sentences,
+            chunk_size=self.config.chunk_size,
+            overlap=self.config.overlap,
+            min_chunk_size=self.config.min_chunk_size,
+        )
+
+        # Create chunks
         chunks = []
-        current_chunk = []
-        current_length = 0
-        start_char = 0
-        chunk_index = 0
+        char_offset = 0
 
-        for sentence in sentences:
-            sentence_length = len(sentence)
+        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(
+            chunk_positions
+        ):
+            chunk_text = " ".join(sentence_group).strip()
+            start_char = char_offset
+            end_char = char_offset + len(chunk_text)
 
-            # If adding this sentence would exceed chunk size, create current chunk
-            if (
-                current_length + sentence_length > self.chunk_size
-                and current_chunk
-                and current_length >= self.min_chunk_size
-            ):
-                chunk_text = " ".join(current_chunk).strip()
-                end_char = start_char + len(chunk_text)
-
+            if chunk_text:
                 chunk = self._create_chunk(
                     content=chunk_text,
                     source_file=source_file,
                     start_char=start_char,
                     end_char=end_char,
-                    chunk_index=chunk_index,
+                    chunk_index=chunk_idx,
                 )
                 chunks.append(chunk)
-                chunk_index += 1
 
-                # Handle overlap - keep last sentence if overlap is enabled
-                if self.overlap > 0 and current_chunk:
-                    overlap_sentences = []
-                    overlap_length = 0
-                    for sent in reversed(current_chunk):
-                        if overlap_length + len(sent) <= self.overlap:
-                            overlap_sentences.insert(0, sent)
-                            overlap_length += len(sent)
-                        else:
-                            break
-                    current_chunk = overlap_sentences
-                    current_length = overlap_length
-                    start_char = end_char - overlap_length
-                else:
-                    current_chunk = []
-                    current_length = 0
-                    start_char = end_char
-
-            current_chunk.append(sentence)
-            current_length += sentence_length
-
-        # Handle remaining sentences
-        if current_chunk:
-            chunk_text = " ".join(current_chunk).strip()
-            end_char = start_char + len(chunk_text)
-
-            chunk = self._create_chunk(
-                content=chunk_text,
-                source_file=source_file,
-                start_char=start_char,
-                end_char=end_char,
-                chunk_index=chunk_index,
-            )
-            chunks.append(chunk)
+            char_offset = end_char
 
         return chunks
 
     def _paragraph_based_chunking(self, text: str, source_file: str) -> List[TextChunk]:
-        """Chunk by paragraphs, combining paragraphs to reach target size."""
-        # Split by double line breaks to get paragraphs
-        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        """Execute paragraph-based chunking using pure functions."""
+        paragraphs = extract_paragraphs(text)
 
+        # Calculate chunk positions using pure function
+        chunk_positions = paragraph_chunk_positions(
+            paragraphs=paragraphs,
+            chunk_size=self.config.chunk_size,
+            overlap=self.config.overlap,
+            min_chunk_size=self.config.min_chunk_size,
+        )
+
+        # Create chunks
         chunks = []
-        current_chunk = []
-        current_length = 0
-        start_char = 0
-        chunk_index = 0
+        char_offset = 0
 
-        for paragraph in paragraphs:
-            paragraph_length = len(paragraph)
-
-            # If this paragraph alone exceeds chunk size, split it
-            if paragraph_length > self.chunk_size * 1.5:
-                # First, finalize current chunk if it has content
-                if current_chunk:
-                    chunk_text = "\n\n".join(current_chunk).strip()
-                    end_char = start_char + len(chunk_text)
-
-                    chunk = self._create_chunk(
-                        content=chunk_text,
-                        source_file=source_file,
-                        start_char=start_char,
-                        end_char=end_char,
-                        chunk_index=chunk_index,
-                    )
-                    chunks.append(chunk)
-                    chunk_index += 1
-                    start_char = end_char
-                    current_chunk = []
-                    current_length = 0
-
-                # Split the large paragraph using sliding window
-                paragraph_chunks = self._sliding_window_chunking(paragraph, source_file)
-                for para_chunk in paragraph_chunks:
-                    para_chunk.chunk_index = chunk_index
+        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(
+            chunk_positions
+        ):
+            # Handle oversized paragraph (needs sliding window)
+            if (
+                len(paragraph_group) == 1
+                and len(paragraph_group[0]) > self.config.chunk_size * 1.5
+            ):
+                # Use sliding window for this paragraph
+                para_chunks = self._sliding_window_chunking(
+                    paragraph_group[0], source_file
+                )
+                for para_chunk in para_chunks:
+                    para_chunk.chunk_index = len(chunks)
                     chunks.append(para_chunk)
-                    chunk_index += 1
-
                 continue
 
-            # If adding this paragraph would exceed chunk size, create current chunk
-            if (
-                current_length + paragraph_length > self.chunk_size
-                and current_chunk
-                and current_length >= self.min_chunk_size
-            ):
-                chunk_text = "\n\n".join(current_chunk).strip()
-                end_char = start_char + len(chunk_text)
+            chunk_text = "\n\n".join(paragraph_group).strip()
+            start_char = char_offset
+            end_char = char_offset + len(chunk_text)
 
+            if chunk_text:
                 chunk = self._create_chunk(
                     content=chunk_text,
                     source_file=source_file,
                     start_char=start_char,
                     end_char=end_char,
-                    chunk_index=chunk_index,
+                    chunk_index=chunk_idx,
                 )
                 chunks.append(chunk)
-                chunk_index += 1
 
-                # Handle overlap
-                if self.overlap > 0 and current_chunk:
-                    # Keep last paragraph if it fits in overlap
-                    last_para_len = len(current_chunk[-1])
-                    if last_para_len <= self.overlap:
-                        current_chunk = [current_chunk[-1]]
-                        current_length = last_para_len
-                        start_char = end_char - last_para_len
-                    else:
-                        current_chunk = []
-                        current_length = 0
-                        start_char = end_char
-                else:
-                    current_chunk = []
-                    current_length = 0
-                    start_char = end_char
-
-            current_chunk.append(paragraph)
-            current_length += paragraph_length + 2  # +2 for paragraph separator
-
-        # Handle remaining paragraphs
-        if current_chunk:
-            chunk_text = "\n\n".join(current_chunk).strip()
-            end_char = start_char + len(chunk_text)
-
-            chunk = self._create_chunk(
-                content=chunk_text,
-                source_file=source_file,
-                start_char=start_char,
-                end_char=end_char,
-                chunk_index=chunk_index,
-            )
-            chunks.append(chunk)
+            char_offset = end_char
 
         return chunks
 
-    def _find_sentence_boundary(self, text: str, target_pos: int, min_pos: int) -> int:
-        """Find the nearest sentence boundary near target position."""
-        # Look for sentence endings within a reasonable range
-        search_range = min(self._chunking_config["sentence_search_range"], len(text) - target_pos)
-
-        # Search forward for sentence ending
-        for i in range(target_pos, min(target_pos + search_range, len(text))):
-            if text[i] in ".!?" and (i + 1 >= len(text) or text[i + 1].isspace()):
-                # Check if next character (after space) is uppercase
-                next_char_pos = i + 1
-                while next_char_pos < len(text) and text[next_char_pos].isspace():
-                    next_char_pos += 1
-
-                if (
-                    next_char_pos >= len(text)
-                    or text[next_char_pos].isupper()
-                    or text[next_char_pos] in self._language_config["language_uppercase_chars"]
-                ):
-                    return i + 1
-
-        # If no sentence boundary found, return original position
-        return target_pos
+    def _filter_meaningful_chunks(self, chunks: List[TextChunk]) -> List[TextChunk]:
+        """Filter chunks to keep only meaningful ones."""
+        meaningful_chunks = []
+        for chunk in chunks:
+            if len(chunk.content.strip()) >= self.config.min_chunk_size:
+                meaningful_chunks.append(chunk)
+        return meaningful_chunks
 
     def _create_chunk(
         self,
@@ -385,9 +593,8 @@ class DocumentChunker:
         end_char: int,
         chunk_index: int,
     ) -> TextChunk:
-        """Create a TextChunk object with metadata."""
-        words = content.split()
-
+        """Create a TextChunk with metadata using pure functions."""
+        metadata = calculate_chunk_metadata(content)
         chunk_id = f"{Path(source_file).stem}_{chunk_index:04d}"
 
         return TextChunk(
@@ -397,35 +604,109 @@ class DocumentChunker:
             start_char=start_char,
             end_char=end_char,
             chunk_index=chunk_index,
-            word_count=len(words),
-            char_count=len(content),
+            word_count=metadata["word_count"],
+            char_count=metadata["char_count"],
+            metadata=metadata,
         )
+
+
+# Factory function for convenient creation
+
+
+def create_document_chunker(
+    config_dict: Optional[Dict[str, Any]] = None,
+    config_provider: Optional["ConfigProvider"] = None,
+    language: str = "hr",
+) -> DocumentChunker:
+    """
+    Create a DocumentChunker with default dependencies.
+
+    Args:
+        config_dict: Configuration dictionary (optional)
+        config_provider: Configuration provider (optional)
+        language: Language code for language-specific behavior
+
+    Returns:
+        Configured DocumentChunker instance
+    """
+    # Create configuration
+    config = ChunkingConfig.from_config(config_dict, config_provider)
+
+    # Create dependencies (can be mocked in tests)
+    text_cleaner = None
+    try:
+        from .cleaners import MultilingualTextCleaner
+
+        text_cleaner = MultilingualTextCleaner(language=language)
+    except ImportError:
+        # In tests, cleaner might not be available
+        pass
+
+    # Get language patterns if available
+    language_patterns = None
+    if config_provider:
+        try:
+            language_config = config_provider.get_language_specific_config(
+                "text_processing", language
+            )
+            language_patterns = language_config.get("patterns", {})
+        except (KeyError, AttributeError):
+            pass
+    elif config_dict and "language_specific" in config_dict:
+        language_patterns = config_dict["language_specific"].get("patterns", {})
+
+    return DocumentChunker(
+        config=config,
+        text_cleaner=text_cleaner,
+        sentence_extractor=text_cleaner,  # Same object implements both protocols
+        language_patterns=language_patterns,
+    )
+
+
+# Convenience function for backward compatibility
 
 
 def chunk_document(
     text: str,
     source_file: str,
-    chunk_size: int = None,
-    overlap: int = None,
-    strategy: str = None,
+    chunk_size: Optional[int] = None,
+    overlap: Optional[int] = None,
+    strategy: Optional[str] = None,
     language: str = "hr",
 ) -> List[TextChunk]:
     """
-    Chunk documents for optimal RAG retrieval with language support.
+    Chunk document with backward compatibility.
 
     Args:
         text: Document text
         source_file: Source file path
-        chunk_size: Target chunk size in characters (uses config if None)
-        overlap: Overlap between chunks (uses config if None)
-        strategy: Chunking strategy (uses config if None)
-        language: Language code for language-specific behavior
+        chunk_size: Target chunk size in characters
+        overlap: Overlap between chunks
+        strategy: Chunking strategy
+        language: Language code
 
     Returns:
         List of text chunks
     """
-    if strategy is None:
-        strategy = "sentence_aware"  # Default strategy
+    # Create config from parameters
+    config_dict = {}
+    if chunk_size is not None:
+        config_dict["chunk_size"] = chunk_size
+    if overlap is not None:
+        config_dict["overlap_size"] = overlap
+    if strategy is not None:
+        config_dict["strategy"] = strategy
 
-    chunker = DocumentChunker(chunk_size=chunk_size, overlap=overlap, language=language)
-    return chunker.chunk_document(text, source_file, strategy)
+    chunker = create_document_chunker(
+        config_dict={"chunking": config_dict}, language=language
+    )
+
+    strategy_enum = None
+    if strategy:
+        try:
+            strategy_enum = ChunkingStrategy(strategy)
+        except ValueError:
+            # Use default
+            pass
+
+    return chunker.chunk_document(text, source_file, strategy_enum)

@@ -1,61 +1,314 @@
 """
-Multilingual query preprocessing for intelligent document retrieval.
-Handles query analysis, expansion, and language-specific processing for Croatian and English.
+Fully testable query processing with dependency injection.
+Clean slate recreation with 100% mockable architecture for reliable testing.
 """
 
 import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Set
 
-from ..utils.config_loader import (
-    get_language_shared,
-    get_language_specific_config,
-    get_query_processing_config,
-)
-from ..utils.error_handler import create_config_loader, handle_config_error
+if TYPE_CHECKING:
+    from ..utils.config_protocol import ConfigProvider
+
+# Pure function algorithms for query processing
+
+
+def normalize_text(
+    text: str,
+    normalize_case: bool = True,
+    normalize_quotes: bool = True,
+    normalize_punctuation: bool = True,
+) -> str:
+    """
+    Normalize text using pure transformations (pure function).
+
+    Args:
+        text: Text to normalize
+        normalize_case: Convert to lowercase
+        normalize_quotes: Normalize quote characters
+        normalize_punctuation: Clean excessive punctuation
+
+    Returns:
+        Normalized text
+    """
+    if not text:
+        return ""
+
+    # Remove extra whitespace
+    result = re.sub(r"\s+", " ", text.strip())
+
+    # Normalize case if requested
+    if normalize_case:
+        result = result.lower()
+
+    # Normalize quotation marks if requested
+    if normalize_quotes:
+        result = result.replace("„", '"').replace('"', '"')
+        result = result.replace(""", "'").replace(""", "'")
+
+    # Remove excessive punctuation if requested
+    if normalize_punctuation:
+        result = re.sub(r"[!]{2,}", "!", result)
+        result = re.sub(r"[?]{2,}", "?", result)
+
+    return result
+
+
+def classify_query_by_patterns(query: str, pattern_config: Dict[str, List[str]]) -> str:
+    """
+    Classify query type based on pattern matching (pure function).
+
+    Args:
+        query: Query text to classify
+        pattern_config: Dictionary mapping query types to regex patterns
+
+    Returns:
+        Query type string ("factual", "explanatory", "comparison", etc.)
+    """
+    if not query or not pattern_config:
+        return "general"
+
+    query_lower = query.lower()
+
+    # Check each query type pattern
+    for query_type, patterns in pattern_config.items():
+        for pattern in patterns:
+            try:
+                if re.search(pattern, query_lower, re.IGNORECASE):
+                    return query_type
+            except re.error:
+                # Skip invalid regex patterns
+                continue
+
+    return "general"
+
+
+def extract_keywords_from_text(
+    text: str,
+    stop_words: Set[str] = None,
+    min_word_length: int = 2,
+    remove_stopwords: bool = True,
+) -> List[str]:
+    """
+    Extract keywords from text (pure function).
+
+    Args:
+        text: Text to extract keywords from
+        stop_words: Set of stop words to filter out
+        min_word_length: Minimum length for keywords
+        remove_stopwords: Whether to remove stop words
+
+    Returns:
+        List of extracted keywords
+    """
+    if not text:
+        return []
+
+    stop_words = stop_words or set()
+
+    # Extract words using regex
+    words = re.findall(r"\b\w+\b", text.lower())
+
+    # Remove stop words if configured
+    if remove_stopwords:
+        words = [word for word in words if word not in stop_words]
+
+    # Remove short words
+    words = [word for word in words if len(word) >= min_word_length]
+
+    # Remove duplicates while preserving order
+    keywords = []
+    seen = set()
+    for word in words:
+        if word not in seen:
+            keywords.append(word)
+            seen.add(word)
+
+    return keywords
+
+
+def expand_terms_with_synonyms(
+    keywords: List[str],
+    synonym_groups: Dict[str, List[str]],
+    max_expanded_terms: int = 10,
+) -> List[str]:
+    """
+    Expand keywords with synonyms (pure function).
+
+    Args:
+        keywords: Original keywords
+        synonym_groups: Dictionary mapping words to synonym lists
+        max_expanded_terms: Maximum number of expanded terms to return
+
+    Returns:
+        List of expanded terms including synonyms
+    """
+    if not keywords or not synonym_groups:
+        return keywords
+
+    expanded = []
+
+    for keyword in keywords:
+        # Add original keyword
+        if keyword not in expanded:
+            expanded.append(keyword)
+
+        # Add synonyms if available
+        if keyword in synonym_groups:
+            for synonym in synonym_groups[keyword]:
+                if synonym not in expanded and len(expanded) < max_expanded_terms:
+                    expanded.append(synonym)
+
+    return expanded[:max_expanded_terms]
+
+
+def calculate_query_confidence(
+    original_query: str,
+    processed_query: str,
+    keywords: List[str],
+    query_type: str,
+    patterns_matched: int = 0,
+) -> float:
+    """
+    Calculate confidence score for query processing (pure function).
+
+    Args:
+        original_query: Original query text
+        processed_query: Processed query text
+        keywords: Extracted keywords
+        query_type: Detected query type
+        patterns_matched: Number of patterns matched
+
+    Returns:
+        Confidence score between 0.0 and 1.0
+    """
+    if not original_query:
+        return 0.0
+
+    confidence = 0.5  # Base confidence
+
+    # Boost for having keywords
+    if keywords:
+        confidence += min(len(keywords) * 0.1, 0.3)
+
+    # Boost for specific query type
+    if query_type != "general":
+        confidence += 0.2
+
+    # Boost for pattern matches
+    confidence += min(patterns_matched * 0.05, 0.1)
+
+    # Penalty for very short queries
+    if len(original_query.split()) < 3:
+        confidence -= 0.2
+
+    # Clamp to valid range
+    return max(0.0, min(1.0, confidence))
+
+
+def generate_query_filters(
+    query: str, context: Dict[str, Any], filter_config: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Generate retrieval filters from query and context (pure function).
+
+    Args:
+        query: Processed query text
+        context: Additional context information
+        filter_config: Configuration for filter generation
+
+    Returns:
+        Dictionary of filters
+    """
+    filters = {}
+    filter_config = filter_config or {}
+
+    # Language filter from context
+    if "language" in context:
+        filters["language"] = context["language"]
+
+    # Date range filters
+    if "date_range" in context:
+        filters["date_range"] = context["date_range"]
+
+    # Document type filters
+    if "document_types" in context:
+        filters["document_types"] = context["document_types"]
+
+    # Topic filters based on keywords
+    topic_patterns = filter_config.get("topic_patterns", {})
+    query_lower = query.lower()
+
+    for topic, patterns in topic_patterns.items():
+        for pattern in patterns:
+            try:
+                if re.search(pattern, query_lower):
+                    filters.setdefault("topics", []).append(topic)
+                    break
+            except re.error:
+                continue
+
+    return filters
+
+
+# Configuration and data classes
 
 
 class QueryType(Enum):
     """Types of queries the system can handle."""
 
-    FACTUAL = "factual"  # Who, what, when, where
-    EXPLANATORY = "explanatory"  # How, why, explain
-    COMPARISON = "comparison"  # Compare, difference, similar
-    SUMMARIZATION = "summarization"  # Summarize, overview
-    GENERAL = "general"  # General questions
+    FACTUAL = "factual"
+    EXPLANATORY = "explanatory"
+    COMPARISON = "comparison"
+    SUMMARIZATION = "summarization"
+    GENERAL = "general"
 
 
 @dataclass
 class QueryProcessingConfig:
-    """Configuration for query processing."""
+    """Configuration for query processing with dependency injection."""
 
-    language: str = "hr"
-    expand_synonyms: bool = True
-    normalize_case: bool = True
-    remove_stopwords: bool = True
-    min_query_length: int = 3
-    max_expanded_terms: int = 10
-    enable_spell_check: bool = False  # Could add later
+    language: str
+    expand_synonyms: bool
+    normalize_case: bool
+    remove_stopwords: bool
+    min_query_length: int
+    max_expanded_terms: int
+    enable_spell_check: bool
+    min_word_length: int
 
     @classmethod
-    def from_config(cls) -> "QueryProcessingConfig":
-        """Load configuration from TOML files."""
-        return handle_config_error(
-            operation=lambda: cls(
-                language=get_query_processing_config()["language"],
-                expand_synonyms=get_query_processing_config()["expand_synonyms"],
-                normalize_case=get_query_processing_config()["normalize_case"],
-                remove_stopwords=get_query_processing_config()["remove_stopwords"],
-                min_query_length=get_query_processing_config()["min_query_length"],
-                max_expanded_terms=get_query_processing_config()["max_expanded_terms"],
-                enable_spell_check=get_query_processing_config()["enable_spell_check"],
-            ),
-            fallback_value=cls(),  # Default constructor
-            config_file="config/config.toml",
-            section="[query_processing]",
-            error_level="error",
+    def from_config(
+        cls,
+        config_dict: Optional[Dict[str, Any]] = None,
+        config_provider: Optional["ConfigProvider"] = None,
+        language: str = "hr",
+    ) -> "QueryProcessingConfig":
+        """Create config from dictionary or provider with DRY error handling."""
+        if config_dict:
+            # Direct config provided
+            query_config = config_dict.get("query_processing", config_dict)
+        else:
+            # Use dependency injection
+            if config_provider is None:
+                from ..utils.config_protocol import get_config_provider
+
+                config_provider = get_config_provider()
+
+            full_config = config_provider.load_config("config")
+            query_config = full_config.get("query_processing", {})
+
+        return cls(
+            language=language,  # Use provided language parameter
+            expand_synonyms=query_config.get("expand_synonyms", True),
+            normalize_case=query_config.get("normalize_case", True),
+            remove_stopwords=query_config.get("remove_stopwords", True),
+            min_query_length=query_config.get("min_query_length", 3),
+            max_expanded_terms=query_config.get("max_expanded_terms", 10),
+            enable_spell_check=query_config.get("enable_spell_check", False),
+            min_word_length=query_config.get("min_word_length", 2),
         )
 
 
@@ -73,175 +326,147 @@ class ProcessedQuery:
     metadata: Dict[str, Any]
 
 
-class MultilingualQueryProcessor:
-    """Preprocessor for multilingual queries."""
+# Protocol definitions for dependency injection
 
-    def __init__(self, language: str = "hr", config: QueryProcessingConfig = None):
+
+class LanguageDataProvider(Protocol):
+    """Protocol for language-specific data providers."""
+
+    def get_stop_words(self, language: str) -> Set[str]:
+        """Get stop words for language."""
+        ...
+
+    def get_question_patterns(self, language: str) -> Dict[str, List[str]]:
+        """Get question classification patterns for language."""
+        ...
+
+    def get_synonym_groups(self, language: str) -> Dict[str, List[str]]:
+        """Get synonym groups for language."""
+        ...
+
+    def get_morphological_patterns(self, language: str) -> Dict[str, Any]:
+        """Get morphological patterns for language."""
+        ...
+
+
+class SpellChecker(Protocol):
+    """Protocol for spell checking services."""
+
+    def check_and_correct(self, text: str, language: str) -> str:
+        """Check and correct spelling in text."""
+        ...
+
+
+# Main testable query processor class
+
+
+class MultilingualQueryProcessor:
+    """Fully testable query processor with dependency injection."""
+
+    def __init__(
+        self,
+        config: QueryProcessingConfig,
+        language_data_provider: Optional[LanguageDataProvider] = None,
+        spell_checker: Optional[SpellChecker] = None,
+        filter_config: Optional[Dict[str, Any]] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
         """
-        Initialize multilingual query processor.
+        Initialize query processor with injectable dependencies.
 
         Args:
-            language: Language code ('hr' for Croatian, 'en' for English)
             config: Query processing configuration
+            language_data_provider: Language-specific data provider (optional)
+            spell_checker: Spell checking service (optional)
+            filter_config: Filter generation configuration (optional)
+            logger: Logger instance (optional)
         """
-        self.language = language
-        self.config = config or QueryProcessingConfig.from_config()
-        self.logger = logging.getLogger(__name__)
+        self.config = config
+        self.language_data_provider = language_data_provider
+        self.spell_checker = spell_checker
+        self.filter_config = filter_config or {}
+        self.logger = logger or logging.getLogger(__name__)
 
-        # Language-specific stop words from shared config
-        shared_config = handle_config_error(
-            operation=lambda: get_language_shared(self.language),
-            fallback_value={
-                "stopwords": {
-                    "words": (
-                        ["i", "u", "na", "za", "se", "je"]
-                        if language == "hr"
-                        else ["the", "a", "an", "and", "or", "but"]
-                    )
-                }
-            },
-            config_file=f"config/{self.language}.toml",
-            section="[shared]",
-        )
-        self.stop_words = set(shared_config["stopwords"]["words"])
+        # Cache language data if provider available
+        self._stop_words = None
+        self._question_patterns = None
+        self._synonym_groups = None
+        self._morphological_patterns = None
 
-        # Language-specific question words and their types from shared config
-        shared_config_question = handle_config_error(
-            operation=lambda: get_language_shared(self.language),
-            fallback_value={
-                "question_patterns": {
-                    "factual": (
-                        ["tko", "što", "kada", "gdje", "koji", "koja", "koje"]
-                        if language == "hr"
-                        else ["who", "what", "when", "where", "which", "how many"]
-                    ),
-                    "explanatory": (
-                        ["kako", "zašto", "objasni", "razloži"]
-                        if language == "hr"
-                        else ["how", "why", "explain", "describe"]
-                    ),
-                    "comparison": (
-                        ["razlika", "usporedi", "slično", "različito"]
-                        if language == "hr"
-                        else ["difference", "compare", "similar", "different"]
-                    ),
-                    "summarization": (
-                        ["sažmi", "pregled", "ukratko", "glavno"]
-                        if language == "hr"
-                        else ["summary", "overview", "briefly", "main"]
-                    ),
-                }
-            },
-            config_file=f"config/{self.language}.toml",
-            section="[shared.question_patterns]",
-        )
-
-        question_words = shared_config_question.get("question_patterns", {})
-
-        # Convert config words to regex patterns
-        self.question_patterns = {
-            QueryType.FACTUAL: [rf"\b({'|'.join(question_words.get('factual', []))})\b"],
-            QueryType.EXPLANATORY: [rf"\b({'|'.join(question_words.get('explanatory', []))})\b"],
-            QueryType.COMPARISON: [rf"\b({'|'.join(question_words.get('comparison', []))})\b"],
-            QueryType.SUMMARIZATION: [
-                rf"\b({'|'.join(question_words.get('summarization', []))})\b"
-            ],
-        }
-
-        # Language-specific synonyms for query expansion from config
-        language_config = handle_config_error(
-            operation=lambda: get_language_specific_config("retrieval", self.language),
-            fallback_value={
-                "synonyms": {
-                    "velika": (
-                        ["velika", "veća", "značajna", "važna"]
-                        if language == "hr"
-                        else ["large", "big", "significant", "important"]
-                    ),
-                    "mala": (
-                        ["mala", "manja", "sitna", "nevažna"]
-                        if language == "hr"
-                        else ["small", "little", "minor", "insignificant"]
-                    ),
-                    "dobra": (
-                        ["dobra", "kvalitetna", "izvrsna", "odlična"]
-                        if language == "hr"
-                        else ["good", "quality", "excellent", "outstanding"]
-                    ),
-                    "loša": (
-                        ["loša", "slaba", "neispravna", "neadekvatna"]
-                        if language == "hr"
-                        else ["bad", "poor", "incorrect", "inadequate"]
-                    ),
-                },
-                "morphology": {
-                    "hrvatska": (
-                        ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"]
-                        if language == "hr"
-                        else ["croatian", "croatia", "croatians"]
-                    ),
-                    "ekonomija": (
-                        ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim"]
-                        if language == "hr"
-                        else ["economy", "economic", "economics"]
-                    ),
-                    "politika": (
-                        ["politika", "politike", "političke", "političkih"]
-                        if language == "hr"
-                        else ["politics", "political", "policy"]
-                    ),
-                    "kultura": (
-                        ["kultura", "kulture", "kulturne", "kulturnih"]
-                        if language == "hr"
-                        else ["culture", "cultural", "cultures"]
-                    ),
-                },
-            },
-            config_file=f"config/{self.language}.toml",
-            section="[retrieval]",
-        )
-
-        self.synonym_groups = language_config.get("synonyms", {})
-        self.morphological_variants = language_config.get("morphology", {})
-        self.morphological_patterns = (
-            self.morphological_variants
-        )  # Alias for backward compatibility
-
-    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
+    def process_query(
+        self, query: str, context: Optional[Dict[str, Any]] = None
+    ) -> ProcessedQuery:
         """
-        Process Croatian query for retrieval.
+        Process a query for multilingual retrieval.
 
         Args:
             query: Raw query string
-            context: Optional context information
+            context: Additional context for processing
 
         Returns:
-            ProcessedQuery object with analysis results
+            ProcessedQuery with extracted information
         """
-        if not query or len(query.strip()) < self.config.min_query_length:
-            return self._create_empty_result(query)
-
-        original_query = query
         context = context or {}
+        original_query = query
 
         try:
-            # Step 1: Basic preprocessing
-            processed_query = self._preprocess_text(query)
+            # Validate query length
+            if len(query.strip()) < self.config.min_query_length:
+                return self._create_empty_result(query)
 
-            # Step 2: Determine query type
-            query_type = self._classify_query_type(processed_query)
+            # Step 1: Preprocess text using pure function
+            processed_query = normalize_text(
+                query,
+                normalize_case=self.config.normalize_case,
+                normalize_quotes=True,
+                normalize_punctuation=True,
+            )
 
-            # Step 3: Extract keywords
-            keywords = self._extract_keywords(processed_query)
+            # Step 2: Spell check if enabled and available
+            if self.config.enable_spell_check and self.spell_checker:
+                processed_query = self.spell_checker.check_and_correct(
+                    processed_query, self.config.language
+                )
 
-            # Step 4: Expand terms
-            expanded_terms = self._expand_terms(keywords) if self.config.expand_synonyms else []
+            # Step 3: Classify query type using pure function
+            question_patterns = self._get_question_patterns()
+            query_type_str = classify_query_by_patterns(
+                processed_query, question_patterns
+            )
+            query_type = QueryType(query_type_str)
 
-            # Step 5: Generate filters
-            filters = self._generate_filters(processed_query, context)
+            # Step 4: Extract keywords using pure function
+            stop_words = self._get_stop_words()
+            keywords = extract_keywords_from_text(
+                processed_query,
+                stop_words=stop_words,
+                min_word_length=self.config.min_word_length,
+                remove_stopwords=self.config.remove_stopwords,
+            )
 
-            # Step 6: Calculate confidence
-            confidence = self._calculate_confidence(processed_query, keywords, query_type)
+            # Step 5: Expand terms using pure function
+            expanded_terms = []
+            if self.config.expand_synonyms:
+                synonym_groups = self._get_synonym_groups()
+                expanded_terms = expand_terms_with_synonyms(
+                    keywords,
+                    synonym_groups=synonym_groups,
+                    max_expanded_terms=self.config.max_expanded_terms,
+                )
+
+            # Step 6: Generate filters using pure function
+            filters = generate_query_filters(
+                processed_query, context, filter_config=self.filter_config
+            )
+
+            # Step 7: Calculate confidence using pure function
+            confidence = calculate_query_confidence(
+                original_query=original_query,
+                processed_query=processed_query,
+                keywords=keywords,
+                query_type=query_type_str,
+                patterns_matched=1 if query_type != QueryType.GENERAL else 0,
+            )
 
             # Create metadata
             metadata = {
@@ -252,14 +477,14 @@ class MultilingualQueryProcessor:
                     "expand",
                     "filter",
                 ],
+                "language": self.config.language,
                 "original_length": len(original_query),
                 "processed_length": len(processed_query),
                 "keyword_count": len(keywords),
                 "expanded_count": len(expanded_terms),
-                "language": self.config.language,
             }
 
-            return ProcessedQuery(
+            result = ProcessedQuery(
                 original=original_query,
                 processed=processed_query,
                 query_type=query_type,
@@ -270,331 +495,237 @@ class MultilingualQueryProcessor:
                 metadata=metadata,
             )
 
+            self.logger.info(
+                f"Processed query: '{original_query[:50]}...' "
+                f"-> {len(keywords)} keywords, type: {query_type.value}, "
+                f"confidence: {confidence:.2f}"
+            )
+
+            return result
+
         except Exception as e:
-            self.logger.error(f"Query processing failed: {e}")
-            return self._create_error_result(original_query, str(e))
+            self.logger.error(f"Error processing query '{query}': {e}")
+            return self._create_error_result(query, str(e))
 
-    def _preprocess_text(self, text: str) -> str:
-        """
-        Basic text preprocessing for Croatian queries.
+    def _get_stop_words(self) -> Set[str]:
+        """Get stop words with caching."""
+        if self._stop_words is None:
+            if self.language_data_provider:
+                self._stop_words = self.language_data_provider.get_stop_words(
+                    self.config.language
+                )
+            else:
+                # Fallback to common stop words
+                self._stop_words = {
+                    "the",
+                    "a",
+                    "an",
+                    "and",
+                    "or",
+                    "but",
+                    "in",
+                    "on",
+                    "at",
+                    "to",
+                    "for",
+                    "of",
+                    "with",
+                    "by",
+                }
 
-        Args:
-            text: Raw text to preprocess
+        return self._stop_words
 
-        Returns:
-            Preprocessed text
-        """
-        # Remove extra whitespace
-        text = re.sub(r"\s+", " ", text.strip())
+    def _get_question_patterns(self) -> Dict[str, List[str]]:
+        """Get question patterns with caching."""
+        if self._question_patterns is None:
+            if self.language_data_provider:
+                self._question_patterns = (
+                    self.language_data_provider.get_question_patterns(
+                        self.config.language
+                    )
+                )
+            else:
+                # Fallback to basic patterns
+                self._question_patterns = {
+                    "factual": [r"\b(what|who|when|where|which)\b"],
+                    "explanatory": [r"\b(how|why|explain)\b"],
+                    "comparison": [r"\b(compare|difference|versus|vs)\b"],
+                    "summarization": [r"\b(summarize|summary|overview)\b"],
+                }
 
-        # Normalize case if configured
-        if self.config.normalize_case:
-            text = text.lower()
+        return self._question_patterns
 
-        # Normalize Croatian quotation marks
-        text = text.replace("„", '"').replace('"', '"')
-        text = text.replace(""", "'").replace(""", "'")
+    def _get_synonym_groups(self) -> Dict[str, List[str]]:
+        """Get synonym groups with caching."""
+        if self._synonym_groups is None:
+            if self.language_data_provider:
+                self._synonym_groups = self.language_data_provider.get_synonym_groups(
+                    self.config.language
+                )
+            else:
+                # Fallback to empty synonyms
+                self._synonym_groups = {}
 
-        # Remove excessive punctuation
-        text = re.sub(r"[!]{2,}", "!", text)
-        text = re.sub(r"[?]{2,}", "?", text)
-
-        return text
-
-    def _classify_query_type(self, query: str) -> QueryType:
-        """
-        Classify the type of query based on Croatian patterns.
-
-        Args:
-            query: Preprocessed query text
-
-        Returns:
-            Detected QueryType
-        """
-        query_lower = query.lower()
-
-        # Check each query type pattern
-        for query_type, patterns in self.question_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, query_lower, re.IGNORECASE):
-                    return query_type
-
-        # Default to general if no specific pattern found
-        return QueryType.GENERAL
-
-    def _extract_keywords(self, query: str) -> List[str]:
-        """
-        Extract meaningful keywords from Croatian query.
-
-        Args:
-            query: Preprocessed query text
-
-        Returns:
-            List of extracted keywords
-        """
-        # Split into words
-        words = re.findall(r"\b\w+\b", query.lower())
-
-        # Remove stop words if configured
-        if self.config.remove_stopwords:
-            words = [word for word in words if word not in self.stop_words]
-
-        # Remove very short words
-        words = [word for word in words if len(word) >= 2]
-
-        # Remove duplicates while preserving order
-        keywords = []
-        seen = set()
-        for word in words:
-            if word not in seen:
-                keywords.append(word)
-                seen.add(word)
-
-        return keywords
-
-    def _expand_terms(self, keywords: List[str]) -> List[str]:
-        """
-        Expand keywords with Croatian synonyms and morphological variations.
-
-        Args:
-            keywords: List of keywords to expand
-
-        Returns:
-            List of expanded terms
-        """
-        expanded = []
-
-        for keyword in keywords:
-            # Add morphological variations
-            if keyword in self.morphological_patterns:
-                expanded.extend(self.morphological_patterns[keyword])
-
-            # Add synonyms
-            for base_word, synonyms in self.synonym_groups.items():
-                if keyword == base_word or keyword in synonyms:
-                    expanded.extend(synonyms)
-
-        # Remove duplicates and original keywords
-        expanded_unique = []
-        original_set = set(keywords)
-        seen = set(keywords)  # Include original keywords in seen set
-
-        for term in expanded:
-            if term not in seen and term not in original_set:
-                expanded_unique.append(term)
-                seen.add(term)
-
-        # Limit expansion
-        return expanded_unique[: self.config.max_expanded_terms]
-
-    def _generate_filters(self, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate metadata filters based on query content and context.
-
-        Args:
-            query: Processed query text
-            context: Additional context information
-
-        Returns:
-            Dictionary of filters to apply
-        """
-        filters = {}
-
-        # Language filter (always Croatian for our system)
-        filters["language"] = "hr"
-
-        # Geographic filters
-        if re.search(
-            r"\b(zagreb|dubrovnik|split|rijeka|osijek|zadar|pula)\b",
-            query,
-            re.IGNORECASE,
-        ):
-            # Could add city-specific filtering
-            pass
-
-        # Topic filters based on keywords
-        if re.search(r"\b(povijest|historij|stari|drevni)\b", query, re.IGNORECASE):
-            filters["topic"] = "history"
-        elif re.search(r"\b(turizam|putovanje|odmor|plaža)\b", query, re.IGNORECASE):
-            filters["topic"] = "tourism"
-        elif re.search(r"\b(priroda|park|nacionalni|šuma|planine)\b", query, re.IGNORECASE):
-            filters["topic"] = "nature"
-        elif re.search(r"\b(hrana|jelo|kuhinja|restoran)\b", query, re.IGNORECASE):
-            filters["topic"] = "food"
-        elif re.search(r"\b(sport|nogomet|košarka|tenis)\b", query, re.IGNORECASE):
-            filters["topic"] = "sports"
-
-        # Add context-based filters
-        if "user_preferences" in context:
-            prefs = context["user_preferences"]
-            if "region" in prefs:
-                filters["region"] = prefs["region"]
-            if "content_type" in prefs:
-                filters["content_type"] = prefs["content_type"]
-
-        return filters
-
-    def _calculate_confidence(
-        self, query: str, keywords: List[str], query_type: QueryType
-    ) -> float:
-        """
-        Calculate confidence score for query processing quality.
-
-        Args:
-            query: Processed query
-            keywords: Extracted keywords
-            query_type: Detected query type
-
-        Returns:
-            Confidence score between 0.0 and 1.0
-        """
-        confidence = 0.5  # Base confidence
-
-        # Boost for reasonable query length
-        if 10 <= len(query) <= 200:
-            confidence += 0.2
-
-        # Boost for good keyword extraction
-        if 2 <= len(keywords) <= 8:
-            confidence += 0.2
-
-        # Boost for Croatian-specific words
-        croatian_indicators = ["ž", "č", "ć", "š", "đ"]
-        if any(char in query for char in croatian_indicators):
-            confidence += 0.1
-
-        # Boost for specific query types (not general)
-        if query_type != QueryType.GENERAL:
-            confidence += 0.1
-
-        # Penalize very short or very long queries
-        if len(query) < 5 or len(query) > 300:
-            confidence -= 0.2
-
-        # Penalize if no meaningful keywords
-        if len(keywords) == 0:
-            confidence -= 0.3
-
-        # Clamp to valid range
-        return max(0.0, min(1.0, confidence))
+        return self._synonym_groups
 
     def _create_empty_result(self, query: str) -> ProcessedQuery:
-        """Create result for empty/invalid query."""
+        """Create empty result for invalid queries."""
         return ProcessedQuery(
             original=query,
             processed="",
             query_type=QueryType.GENERAL,
             keywords=[],
             expanded_terms=[],
-            filters={"language": "hr"},
+            filters={},
             confidence=0.0,
-            metadata={"error": "Query too short or empty"},
+            metadata={"error": "Query too short", "language": self.config.language},
         )
 
     def _create_error_result(self, query: str, error: str) -> ProcessedQuery:
-        """Create result for processing error."""
+        """Create error result for failed processing."""
         return ProcessedQuery(
             original=query,
             processed=query,
             query_type=QueryType.GENERAL,
             keywords=[],
             expanded_terms=[],
-            filters={"language": "hr"},
+            filters={},
             confidence=0.0,
-            metadata={"error": error},
+            metadata={"error": error, "language": self.config.language},
         )
 
-    def analyze_query_complexity(self, query: str) -> Dict[str, Any]:
-        """
-        Analyze query complexity for debugging and optimization.
 
-        Args:
-            query: Query to analyze
-
-        Returns:
-            Dictionary with complexity analysis
-        """
-        analysis = {
-            "character_count": len(query),
-            "word_count": len(query.split()),
-            "sentence_count": query.count(".") + query.count("!") + query.count("?") + 1,
-            "has_question_mark": "?" in query,
-            "has_croatian_diacritics": any(c in query for c in "čćšžđČĆŠŽĐ"),
-            "complexity_score": 0.0,
-        }
-
-        # Calculate complexity score
-        score = 0.0
-
-        # Length complexity
-        if analysis["word_count"] > 10:
-            score += 0.3
-        elif analysis["word_count"] > 5:
-            score += 0.1
-
-        # Multiple sentences
-        if analysis["sentence_count"] > 1:
-            score += 0.2
-
-        # Question complexity
-        if analysis["has_question_mark"]:
-            score += 0.1
-
-        # Croatian language complexity
-        if analysis["has_croatian_diacritics"]:
-            score += 0.1
-
-        analysis["complexity_score"] = min(1.0, score)
-
-        return analysis
-
-    def suggest_query_improvements(self, processed_query: ProcessedQuery) -> List[str]:
-        """
-        Suggest improvements for better query results.
-
-        Args:
-            processed_query: Result of query processing
-
-        Returns:
-            List of improvement suggestions
-        """
-        suggestions = []
-
-        # Low confidence suggestions
-        if processed_query.confidence < 0.5:
-            if len(processed_query.keywords) < 2:
-                suggestions.append("Dodajte više ključnih riječi za bolju pretragu")
-
-            if len(processed_query.original) < 10:
-                suggestions.append("Proširite upit s više detalja")
-
-        # Query type specific suggestions
-        if processed_query.query_type == QueryType.GENERAL:
-            suggestions.append("Budite specifičniji - koristite 'što', 'kako', 'gdje', itd.")
-
-        # No expanded terms
-        if self.config.expand_synonyms and not processed_query.expanded_terms:
-            suggestions.append("Probajte koristiti sinonime za bolje rezultate")
-
-        # No filters applied
-        if len(processed_query.filters) <= 1:  # Only language filter
-            suggestions.append("Dodajte kontekst (grad, tema, vremenski period)")
-
-        return suggestions
+# Factory function for convenient creation
 
 
 def create_query_processor(
-    language: str = "hr", expand_synonyms: bool = True
+    config_dict: Optional[Dict[str, Any]] = None,
+    config_provider: Optional["ConfigProvider"] = None,
+    language: str = "hr",
 ) -> MultilingualQueryProcessor:
     """
-    Factory function to create query processor.
+    Create a MultilingualQueryProcessor with default dependencies.
 
     Args:
-        language: Processing language
-        expand_synonyms: Whether to expand with synonyms
+        config_dict: Configuration dictionary (optional)
+        config_provider: Configuration provider (optional)
+        language: Language code for language-specific behavior
 
     Returns:
-        Configured MultilingualQueryProcessor
+        Configured MultilingualQueryProcessor instance
     """
-    config = QueryProcessingConfig(language=language, expand_synonyms=expand_synonyms)
-    return MultilingualQueryProcessor(language=language, config=config)
+    # Create configuration
+    config = QueryProcessingConfig.from_config(
+        config_dict=config_dict, config_provider=config_provider, language=language
+    )
+
+    # Create language data provider (can be mocked in tests)
+    language_data_provider = None
+    try:
+        # Try to create production language data provider
+        if config_provider:
+            language_data_provider = ProductionLanguageDataProvider(config_provider)
+    except ImportError:
+        # In tests, language data provider might not be available
+        pass
+
+    # Get filter configuration
+    filter_config = {}
+    if config_provider:
+        try:
+            language_config = config_provider.get_language_specific_config(
+                "query_filters", language
+            )
+            filter_config = language_config.get("filters", {})
+        except (KeyError, AttributeError):
+            pass
+    elif config_dict and "query_filters" in config_dict:
+        filter_config = config_dict["query_filters"]
+
+    return MultilingualQueryProcessor(
+        config=config,
+        language_data_provider=language_data_provider,
+        filter_config=filter_config,
+    )
+
+
+# Production implementation of language data provider (optional)
+
+
+class ProductionLanguageDataProvider:
+    """Production implementation of LanguageDataProvider."""
+
+    def __init__(self, config_provider: "ConfigProvider"):
+        """Initialize with configuration provider."""
+        self.config_provider = config_provider
+        self._cache = {}
+
+    def get_stop_words(self, language: str) -> Set[str]:
+        """Get stop words for language."""
+        cache_key = f"stop_words_{language}"
+        if cache_key not in self._cache:
+            try:
+                shared_config = self.config_provider.get_language_shared(language)
+                words = shared_config.get("stopwords", {}).get("words", [])
+                self._cache[cache_key] = set(words)
+            except (KeyError, AttributeError):
+                self._cache[cache_key] = set()
+
+        return self._cache[cache_key]
+
+    def get_question_patterns(self, language: str) -> Dict[str, List[str]]:
+        """Get question classification patterns for language."""
+        cache_key = f"question_patterns_{language}"
+        if cache_key not in self._cache:
+            try:
+                shared_config = self.config_provider.get_language_shared(language)
+                self._cache[cache_key] = shared_config.get("question_patterns", {})
+            except (KeyError, AttributeError):
+                self._cache[cache_key] = {}
+
+        return self._cache[cache_key]
+
+    def get_synonym_groups(self, language: str) -> Dict[str, List[str]]:
+        """Get synonym groups for language."""
+        cache_key = f"synonym_groups_{language}"
+        if cache_key not in self._cache:
+            try:
+                shared_config = self.config_provider.get_language_shared(language)
+                self._cache[cache_key] = shared_config.get("synonym_groups", {})
+            except (KeyError, AttributeError):
+                self._cache[cache_key] = {}
+
+        return self._cache[cache_key]
+
+    def get_morphological_patterns(self, language: str) -> Dict[str, Any]:
+        """Get morphological patterns for language."""
+        cache_key = f"morphological_patterns_{language}"
+        if cache_key not in self._cache:
+            try:
+                shared_config = self.config_provider.get_language_shared(language)
+                self._cache[cache_key] = shared_config.get("morphological_patterns", {})
+            except (KeyError, AttributeError):
+                self._cache[cache_key] = {}
+
+        return self._cache[cache_key]
+
+
+# Convenience function for backward compatibility
+
+
+def process_query(
+    query: str, language: str = "hr", context: Optional[Dict[str, Any]] = None
+) -> ProcessedQuery:
+    """
+    Process query with backward compatibility.
+
+    Args:
+        query: Query text to process
+        language: Language code
+        context: Additional context
+
+    Returns:
+        ProcessedQuery result
+    """
+    processor = create_query_processor(language=language)
+    return processor.process_query(query, context)

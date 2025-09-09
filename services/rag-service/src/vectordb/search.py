@@ -1,25 +1,74 @@
 """
-Similarity search implementation for multilingual RAG system.
-Handles semantic search, ranking, and retrieval optimization.
+100% testable similarity search implementation for multilingual RAG system.
+Clean slate architecture with pure functions and dependency injection.
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Protocol, Union
 
 import numpy as np
 
-from ..utils.config_loader import get_language_specific_config, get_search_config, get_shared_config
-from ..utils.error_handler import create_config_loader, handle_config_error
-from .embeddings import MultilingualEmbeddingModel
-from .storage import ChromaDBStorage
-
 logger = logging.getLogger(__name__)
 
-# Create specialized config loaders
-load_vectordb_config = create_config_loader("config/config.toml", __name__)
+
+# Pure Data Structures
+@dataclass
+class SearchQuery:
+    """Search query with parameters."""
+
+    text: str
+    top_k: int = 5
+    method: str = "semantic"
+    filters: Optional[Dict[str, Any]] = None
+    similarity_threshold: float = 0.0
+    max_context_length: int = 2000
+    rerank: bool = True
+
+    def __post_init__(self):
+        """Validate query parameters."""
+        if self.top_k <= 0:
+            raise ValueError("top_k must be positive")
+        if self.similarity_threshold < 0 or self.similarity_threshold > 1:
+            raise ValueError("similarity_threshold must be between 0 and 1")
+
+
+@dataclass
+class SearchResult:
+    """Individual search result."""
+
+    id: str
+    content: str
+    score: float
+    metadata: Dict[str, Any]
+    rank: Optional[int] = None
+    method_used: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return asdict(self)
+
+
+@dataclass
+class SearchResponse:
+    """Complete search response with timing and metadata."""
+
+    query: str
+    results: List[SearchResult]
+    total_results: int
+    search_time: float
+    method_used: str
+    metadata: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        """Add ranking to results if not present."""
+        for i, result in enumerate(self.results):
+            if result.rank is None:
+                result.rank = i + 1
+                result.method_used = self.method_used
 
 
 class SearchMethod(Enum):
@@ -30,617 +79,662 @@ class SearchMethod(Enum):
     HYBRID = "hybrid"
 
 
-@dataclass
-class SearchConfig:
-    """Configuration for search operations."""
+# Protocol-based Dependencies (100% testable interfaces)
+class EmbeddingProvider(Protocol):
+    """Protocol for embedding generation."""
 
-    method: SearchMethod
-    top_k: int
-    similarity_threshold: float
-    max_context_length: int
-    rerank: bool
-    include_metadata: bool
-    include_distances: bool
+    async def encode_text(self, text: str) -> np.ndarray:
+        """Encode text to embedding vector."""
+        ...
 
-    @classmethod
-    def from_config(cls) -> "SearchConfig":
-        """Load configuration from TOML files."""
 
-        def load_config():
-            search_config = get_search_config()
-            shared_config = get_shared_config()
+class VectorSearchProvider(Protocol):
+    """Protocol for vector database search operations."""
 
-            # Convert string to enum
-            method_str = search_config["default_method"]
-            method = SearchMethod.SEMANTIC  # default
-            for search_method in SearchMethod:
-                if search_method.value == method_str:
-                    method = search_method
-                    break
+    async def search_by_embedding(
+        self,
+        query_embedding: np.ndarray,
+        top_k: int,
+        filters: Optional[Dict[str, Any]] = None,
+        include_metadata: bool = True,
+    ) -> Dict[str, Any]:
+        """Search by embedding vector."""
+        ...
 
-            return cls(
-                method=method,
-                top_k=search_config.get("top_k", shared_config.get("default_top_k", 5)),
-                similarity_threshold=search_config.get(
-                    "similarity_threshold", shared_config.get("similarity_threshold", 0.0)
-                ),
-                max_context_length=search_config["max_context_length"],
-                rerank=search_config["rerank"],
-                include_metadata=search_config["include_metadata"],
-                include_distances=search_config["include_distances"],
+    async def search_by_text(
+        self,
+        query_text: str,
+        top_k: int,
+        filters: Optional[Dict[str, Any]] = None,
+        include_metadata: bool = True,
+    ) -> Dict[str, Any]:
+        """Search by text (if supported by provider)."""
+        ...
+
+    async def get_document(self, document_id: str) -> Optional[Dict[str, Any]]:
+        """Get document by ID."""
+        ...
+
+
+class ConfigProvider(Protocol):
+    """Protocol for search configuration."""
+
+    def get_search_config(self) -> Dict[str, Any]:
+        """Get search configuration."""
+        ...
+
+    def get_scoring_weights(self) -> Dict[str, float]:
+        """Get scoring weights for hybrid search."""
+        ...
+
+
+# Pure Functions (100% testable)
+def validate_search_query(query: SearchQuery) -> List[str]:
+    """
+    Validate search query parameters.
+
+    Returns:
+        List of validation error messages (empty if valid)
+    """
+    errors = []
+
+    if not query.text or not query.text.strip():
+        errors.append("Query text cannot be empty")
+
+    if query.top_k <= 0:
+        errors.append("top_k must be positive")
+
+    if query.top_k > 100:
+        errors.append("top_k cannot exceed 100")
+
+    if query.similarity_threshold < 0 or query.similarity_threshold > 1:
+        errors.append("similarity_threshold must be between 0 and 1")
+
+    if query.max_context_length <= 0:
+        errors.append("max_context_length must be positive")
+
+    valid_methods = {method.value for method in SearchMethod}
+    if query.method not in valid_methods:
+        errors.append(f"method must be one of: {', '.join(valid_methods)}")
+
+    return errors
+
+
+def parse_vector_search_results(
+    raw_results: Dict[str, Any], method_used: str = "semantic"
+) -> List[SearchResult]:
+    """
+    Parse raw vector database results into SearchResult objects.
+
+    Args:
+        raw_results: Raw results from vector database
+        method_used: Search method identifier
+
+    Returns:
+        List of parsed search results
+    """
+    results = []
+
+    if not raw_results or not raw_results.get("ids"):
+        return results
+
+    # Handle ChromaDB-style nested lists
+    ids = raw_results["ids"]
+    if isinstance(ids, list) and ids and isinstance(ids[0], list):
+        ids = ids[0]
+
+    documents = raw_results.get("documents", [])
+    if isinstance(documents, list) and documents and isinstance(documents[0], list):
+        documents = documents[0]
+
+    metadatas = raw_results.get("metadatas", [])
+    if isinstance(metadatas, list) and metadatas and isinstance(metadatas[0], list):
+        metadatas = metadatas[0]
+
+    distances = raw_results.get("distances", [])
+    if isinstance(distances, list) and distances and isinstance(distances[0], list):
+        distances = distances[0]
+
+    # Create SearchResult objects
+    for i, doc_id in enumerate(ids):
+        content = documents[i] if i < len(documents) else ""
+        metadata = metadatas[i] if i < len(metadatas) else {}
+        distance = distances[i] if i < len(distances) else 0.0
+
+        # Convert distance to similarity score
+        score = distance_to_similarity(distance)
+
+        result = SearchResult(
+            id=str(doc_id),
+            content=content,
+            score=score,
+            metadata=metadata,
+            method_used=method_used,
+        )
+        results.append(result)
+
+    return results
+
+
+def distance_to_similarity(distance: float) -> float:
+    """
+    Convert distance metric to similarity score.
+
+    Args:
+        distance: Distance value (0 = identical, higher = less similar)
+
+    Returns:
+        Similarity score (0-1, higher = more similar)
+    """
+    # For cosine distance: similarity = 1 - distance
+    # Clamp to valid range
+    similarity = max(0.0, min(1.0, 1.0 - distance))
+    return similarity
+
+
+def calculate_keyword_score(query_terms: List[str], document_text: str) -> float:
+    """
+    Calculate keyword-based relevance score.
+
+    Args:
+        query_terms: List of query terms (lowercased)
+        document_text: Document text (lowercased)
+
+    Returns:
+        Keyword relevance score (0-1)
+    """
+    if not query_terms or not document_text:
+        return 0.0
+
+    doc_words = document_text.split()
+    if not doc_words:
+        return 0.0
+
+    # Count term matches
+    matches = 0
+    for term in query_terms:
+        if term in document_text:
+            matches += 1
+
+    # Basic TF-like score
+    score = matches / len(query_terms)
+
+    # Boost for exact phrase matches
+    query_phrase = " ".join(query_terms)
+    if query_phrase in document_text:
+        score *= 1.5
+
+    return min(1.0, score)
+
+
+def combine_scores(
+    semantic_score: float,
+    keyword_score: float,
+    semantic_weight: float = 0.7,
+    keyword_weight: float = 0.3,
+) -> float:
+    """
+    Combine semantic and keyword scores for hybrid search.
+
+    Args:
+        semantic_score: Semantic similarity score (0-1)
+        keyword_score: Keyword relevance score (0-1)
+        semantic_weight: Weight for semantic score
+        keyword_weight: Weight for keyword score
+
+    Returns:
+        Combined score
+    """
+    if semantic_weight + keyword_weight == 0:
+        return 0.0
+
+    # Normalize weights
+    total_weight = semantic_weight + keyword_weight
+    norm_semantic = semantic_weight / total_weight
+    norm_keyword = keyword_weight / total_weight
+
+    combined = (semantic_score * norm_semantic) + (keyword_score * norm_keyword)
+    return min(1.0, max(0.0, combined))
+
+
+def rerank_results_by_relevance(
+    query_text: str,
+    results: List[SearchResult],
+    boost_factors: Optional[Dict[str, float]] = None,
+) -> List[SearchResult]:
+    """
+    Rerank search results based on additional relevance factors.
+
+    Args:
+        query_text: Original search query
+        results: Search results to rerank
+        boost_factors: Optional scoring boost factors
+
+    Returns:
+        Reranked results (sorted by score descending)
+    """
+    if not results:
+        return results
+
+    # Default boost factors
+    if boost_factors is None:
+        boost_factors = {
+            "term_overlap": 0.2,
+            "length_optimal": 1.0,
+            "length_short": 0.8,
+            "length_long": 0.9,
+            "title_boost": 1.1,
+        }
+
+    query_terms = set(query_text.lower().split())
+
+    # Apply relevance boosts
+    for result in results:
+        content_terms = set(result.content.lower().split())
+
+        # Term overlap boost
+        if query_terms:
+            term_overlap = len(query_terms.intersection(content_terms)) / len(
+                query_terms
             )
+            overlap_boost = 1 + (term_overlap * boost_factors.get("term_overlap", 0.2))
+        else:
+            overlap_boost = 1.0
 
-        return load_vectordb_config(
-            operation=load_config,
-            fallback_value=cls(
-                method=SearchMethod.SEMANTIC,
-                top_k=5,
-                similarity_threshold=0.0,
-                max_context_length=2000,
-                rerank=True,
-                include_metadata=True,
-                include_distances=True,
-            ),
-            section="[search]",
-            error_level="error",
+        # Content length scoring
+        content_length = len(result.content)
+        if content_length < 100:
+            length_boost = boost_factors.get("length_short", 0.8)
+        elif content_length > 1000:
+            length_boost = boost_factors.get("length_long", 0.9)
+        else:
+            length_boost = boost_factors.get("length_optimal", 1.0)
+
+        # Title/metadata boost
+        title_boost = (
+            boost_factors.get("title_boost", 1.1)
+            if result.metadata.get("title")
+            else 1.0
         )
 
+        # Apply all boosts
+        result.score = result.score * overlap_boost * length_boost * title_boost
 
-@dataclass
-class SearchResult:
-    """Individual search result."""
-
-    content: str
-    score: float
-    metadata: Dict[str, Any]
-    id: str
-    rank: int = 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return asdict(self)
+    # Sort by updated scores
+    results.sort(key=lambda x: x.score, reverse=True)
+    return results
 
 
-@dataclass
-class SearchResponse:
-    """Complete search response."""
+def filter_results_by_threshold(
+    results: List[SearchResult], threshold: float
+) -> List[SearchResult]:
+    """
+    Filter search results by similarity threshold.
 
-    results: List[SearchResult]
-    query: str
-    method: SearchMethod
-    total_time: float
-    total_results: int
-    metadata: Dict[str, Any] = None
+    Args:
+        results: Search results to filter
+        threshold: Minimum similarity threshold (0-1)
 
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
+    Returns:
+        Filtered results above threshold
+    """
+    return [result for result in results if result.score >= threshold]
 
 
+def limit_results(results: List[SearchResult], max_results: int) -> List[SearchResult]:
+    """
+    Limit number of search results.
+
+    Args:
+        results: Search results
+        max_results: Maximum number of results to return
+
+    Returns:
+        Limited results
+    """
+    return results[:max_results] if max_results > 0 else results
+
+
+def extract_context_from_results(
+    results: List[SearchResult], max_context_length: int, separator: str = "\n\n"
+) -> str:
+    """
+    Extract context text from search results for RAG generation.
+
+    Args:
+        results: Search results
+        max_context_length: Maximum total context length
+        separator: Separator between result contents
+
+    Returns:
+        Combined context text
+    """
+    if not results:
+        return ""
+
+    context_parts = []
+    current_length = 0
+
+    for result in results:
+        content = result.content.strip()
+        if not content:
+            continue
+
+        # Check if adding this content would exceed limit
+        additional_length = len(content) + len(separator)
+        if current_length + additional_length > max_context_length:
+            # If we haven't added any content yet, add truncated version
+            if not context_parts:
+                remaining = max_context_length - len(separator) - 3  # Space for "..."
+                if remaining > 0:
+                    context_parts.append(content[:remaining] + "...")
+            break
+
+        context_parts.append(content)
+        current_length += additional_length
+
+    return separator.join(context_parts)
+
+
+# Main Search Engine Class
 class SemanticSearchEngine:
-    """Semantic search engine for multilingual documents."""
+    """
+    100% testable semantic search engine using dependency injection.
+    """
 
     def __init__(
         self,
-        embedding_model: MultilingualEmbeddingModel,
-        storage: ChromaDBStorage,
-        config: SearchConfig = None,
+        embedding_provider: EmbeddingProvider,
+        search_provider: VectorSearchProvider,
+        config_provider: ConfigProvider,
     ):
         """
-        Initialize search engine.
+        Initialize search engine with injected dependencies.
 
         Args:
-            embedding_model: Embedding model for query encoding
-            storage: ChromaDB storage client
-            config: Search configuration
+            embedding_provider: Text embedding service
+            search_provider: Vector search service
+            config_provider: Configuration service
         """
-        self.embedding_model = embedding_model
-        self.storage = storage
-        self.config = config or SearchConfig.from_config()
+        self.embedding_provider = embedding_provider
+        self.search_provider = search_provider
+        self.config_provider = config_provider
         self.logger = logging.getLogger(__name__)
 
-        # Ensure collection exists
-        if not self.storage.collection:
-            self.storage.create_collection()
-
-    def search(
-        self,
-        query: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        method: Optional[SearchMethod] = None,
-    ) -> SearchResponse:
+    async def search(self, query: SearchQuery) -> SearchResponse:
         """
-        Search for relevant documents.
+        Execute search query using specified method.
 
         Args:
-            query: Search query text
-            top_k: Number of results to return
-            filters: Metadata filters
-            method: Search method to use
+            query: Search query with parameters
 
         Returns:
-            SearchResponse with results
+            Search response with results and metadata
+
+        Raises:
+            ValueError: For invalid query parameters
         """
         start_time = time.time()
 
-        top_k = top_k or self.config.top_k
-        method = method or self.config.method
+        # Validate query
+        validation_errors = validate_search_query(query)
+        if validation_errors:
+            raise ValueError(f"Invalid query: {'; '.join(validation_errors)}")
 
         try:
-            if method == SearchMethod.SEMANTIC:
-                results = self._semantic_search(query, top_k, filters)
-            elif method == SearchMethod.KEYWORD:
-                results = self._keyword_search(query, top_k, filters)
-            elif method == SearchMethod.HYBRID:
-                results = self._hybrid_search(query, top_k, filters)
+            # Execute search based on method
+            if query.method == SearchMethod.SEMANTIC.value:
+                results = await self._semantic_search(query)
+            elif query.method == SearchMethod.KEYWORD.value:
+                results = await self._keyword_search(query)
+            elif query.method == SearchMethod.HYBRID.value:
+                results = await self._hybrid_search(query)
             else:
-                raise ValueError(f"Unknown search method: {method}")
+                raise ValueError(f"Unknown search method: {query.method}")
 
             # Apply post-processing
-            if self.config.rerank and len(results) > 1:
-                results = self._rerank_results(query, results)
+            if query.rerank and len(results) > 1:
+                results = rerank_results_by_relevance(query.text, results)
 
-            # Filter by similarity threshold
-            results = self._filter_by_threshold(results)
+            # Filter by threshold
+            if query.similarity_threshold > 0:
+                results = filter_results_by_threshold(
+                    results, query.similarity_threshold
+                )
 
             # Limit results
-            results = results[:top_k]
+            results = limit_results(results, query.top_k)
 
-            # Add ranking
-            for i, result in enumerate(results):
-                result.rank = i + 1
-
-            total_time = time.time() - start_time
+            search_time = time.time() - start_time
 
             return SearchResponse(
+                query=query.text,
                 results=results,
-                query=query,
-                method=method,
-                total_time=total_time,
                 total_results=len(results),
+                search_time=search_time,
+                method_used=query.method,
                 metadata={
-                    "filters": filters,
-                    "similarity_threshold": self.config.similarity_threshold,
-                    "reranked": self.config.rerank,
+                    "filters": query.filters,
+                    "similarity_threshold": query.similarity_threshold,
+                    "reranked": query.rerank,
                 },
             )
 
         except Exception as e:
-            self.logger.error(f"Search failed: {e}")
+            self.logger.error(f"Search failed for query '{query.text}': {e}")
             raise
 
-    def _semantic_search(
-        self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
-    ) -> List[SearchResult]:
-        """
-        Perform semantic similarity search.
-
-        Args:
-            query: Search query
-            top_k: Number of results
-            filters: Metadata filters
-
-        Returns:
-            List of search results
-        """
-        # Encode query
-        query_embedding = self.embedding_model.encode_text(query)
-
-        # Ensure embedding is 1D for ChromaDB (BGE-M3 returns 2D array)
-        if query_embedding.ndim == 2:
-            query_embedding = query_embedding[0]  # Take first (and only) embedding
-
-        # Search in ChromaDB
-        chroma_results = self.storage.query_similar(
-            query_embeddings=[query_embedding.tolist()],
-            n_results=top_k * 2,  # Get extra results for filtering/reranking
-            where=filters,
-            include=["documents", "metadatas", "distances"],
-        )
-
-        # Convert to SearchResult objects
-        results = []
-
-        if chroma_results and chroma_results.get("ids"):
-            ids = chroma_results["ids"][0]
-            documents = chroma_results.get("documents", [[]])[0]
-            metadatas = chroma_results.get("metadatas", [[]])[0]
-            distances = chroma_results.get("distances", [[]])[0]
-
-            for i, doc_id in enumerate(ids):
-                # Convert distance to similarity score (ChromaDB uses distance)
-                distance = distances[i] if i < len(distances) else 1.0
-                score = self._distance_to_similarity(distance)
-
-                result = SearchResult(
-                    content=documents[i] if i < len(documents) else "",
-                    score=score,
-                    metadata=metadatas[i] if i < len(metadatas) else {},
-                    id=doc_id,
-                )
-                results.append(result)
-
-        return results
-
-    def _keyword_search(
-        self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
-    ) -> List[SearchResult]:
-        """
-        Perform keyword-based search using ChromaDB's where_document filter.
-
-        Args:
-            query: Search query
-            top_k: Number of results
-            filters: Metadata filters
-
-        Returns:
-            List of search results
-        """
-        # Simple keyword matching using ChromaDB's document filter
-        query_terms = query.lower().split()
-
-        # Create document filter for keyword matching
-        document_filter = {"$contains": query_terms[0]} if query_terms else None
-
+    async def _semantic_search(self, query: SearchQuery) -> List[SearchResult]:
+        """Execute semantic similarity search."""
         try:
-            chroma_results = self.storage.query_similar(
-                query_texts=[query],  # Still use semantic for ranking
-                n_results=top_k * 2,
-                where=filters,
-                where_document=document_filter,
-                include=["documents", "metadatas", "distances"],
+            # Generate query embedding
+            query_embedding = await self.embedding_provider.encode_text(query.text)
+
+            # Search vector database
+            raw_results = await self.search_provider.search_by_embedding(
+                query_embedding=query_embedding,
+                top_k=query.top_k * 2,  # Get extra for filtering
+                filters=query.filters,
+                include_metadata=True,
             )
 
-            # Convert and score based on keyword matches
-            results = []
+            # Parse results
+            results = parse_vector_search_results(raw_results, "semantic")
+            return results
 
-            if chroma_results and chroma_results.get("ids"):
-                ids = chroma_results["ids"][0]
-                documents = chroma_results.get("documents", [[]])[0]
-                metadatas = chroma_results.get("metadatas", [[]])[0]
+        except Exception as e:
+            self.logger.error(f"Semantic search failed: {e}")
+            raise
 
-                for i, doc_id in enumerate(ids):
-                    # Calculate keyword-based score
-                    doc_text = documents[i].lower() if i < len(documents) else ""
-                    score = self._calculate_keyword_score(query_terms, doc_text)
+    async def _keyword_search(self, query: SearchQuery) -> List[SearchResult]:
+        """Execute keyword-based search."""
+        try:
+            # Use text search if provider supports it, otherwise fall back to semantic
+            if hasattr(self.search_provider, "search_by_text"):
+                raw_results = await self.search_provider.search_by_text(
+                    query_text=query.text,
+                    top_k=query.top_k * 2,
+                    filters=query.filters,
+                    include_metadata=True,
+                )
+                results = parse_vector_search_results(raw_results, "keyword")
+            else:
+                # Fallback: use semantic search and score by keywords
+                results = await self._semantic_search(query)
+                query_terms = query.text.lower().split()
 
-                    result = SearchResult(
-                        content=documents[i] if i < len(documents) else "",
-                        score=score,
-                        metadata=metadatas[i] if i < len(metadatas) else {},
-                        id=doc_id,
+                # Re-score using keyword matching
+                for result in results:
+                    keyword_score = calculate_keyword_score(
+                        query_terms, result.content.lower()
                     )
-                    results.append(result)
+                    result.score = keyword_score
+                    result.method_used = "keyword"
 
             # Sort by keyword score
             results.sort(key=lambda x: x.score, reverse=True)
             return results
 
         except Exception as e:
-            self.logger.warning(f"Keyword search failed, falling back to semantic: {e}")
-            return self._semantic_search(query, top_k, filters)
+            self.logger.error(f"Keyword search failed: {e}")
+            # Fallback to semantic search
+            return await self._semantic_search(query)
 
-    def _hybrid_search(
-        self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
-    ) -> List[SearchResult]:
-        """
-        Perform hybrid search combining semantic and keyword methods.
+    async def _hybrid_search(self, query: SearchQuery) -> List[SearchResult]:
+        """Execute hybrid search combining semantic and keyword methods."""
+        try:
+            # Get weights from config
+            weights = self.config_provider.get_scoring_weights()
+            semantic_weight = weights.get("semantic", 0.7)
+            keyword_weight = weights.get("keyword", 0.3)
 
-        Args:
-            query: Search query
-            top_k: Number of results
-            filters: Metadata filters
+            # Execute both searches concurrently
+            semantic_query = SearchQuery(
+                text=query.text,
+                top_k=query.top_k,
+                method="semantic",
+                filters=query.filters,
+                similarity_threshold=0.0,  # Apply threshold later
+                rerank=False,  # Rerank at the end
+            )
 
-        Returns:
-            List of search results
-        """
-        # Get results from both methods
-        semantic_results = self._semantic_search(query, top_k, filters)
-        keyword_results = self._keyword_search(query, top_k, filters)
+            keyword_query = SearchQuery(
+                text=query.text,
+                top_k=query.top_k,
+                method="keyword",
+                filters=query.filters,
+                similarity_threshold=0.0,
+                rerank=False,
+            )
 
-        # Combine and deduplicate results
-        combined_results = {}
+            # Run searches concurrently
+            semantic_results, keyword_results = await asyncio.gather(
+                self._semantic_search(semantic_query),
+                self._keyword_search(keyword_query),
+                return_exceptions=True,
+            )
 
-        # Get weights from config
-        weights = load_vectordb_config(
-            operation=lambda: {
-                "semantic": get_search_config()["weights"]["semantic_weight"],
-                "keyword": get_search_config()["weights"]["keyword_weight"],
-            },
-            fallback_value={"semantic": 0.7, "keyword": 0.3},
-            section="[search.weights]",
-        )
+            # Handle exceptions
+            if isinstance(semantic_results, Exception):
+                self.logger.warning(
+                    f"Semantic search failed in hybrid mode: {semantic_results}"
+                )
+                semantic_results = []
 
-        semantic_weight = weights["semantic"]
-        keyword_weight = weights["keyword"]
+            if isinstance(keyword_results, Exception):
+                self.logger.warning(
+                    f"Keyword search failed in hybrid mode: {keyword_results}"
+                )
+                keyword_results = []
 
-        # Add semantic results with weight
-        for result in semantic_results:
-            combined_results[result.id] = result
-            result.score *= semantic_weight
+            # Combine results with weighted scoring
+            combined_results = {}
 
-        # Add keyword results with weight
-        for result in keyword_results:
-            if result.id in combined_results:
-                # Combine scores for documents found by both methods
-                combined_results[result.id].score += result.score * keyword_weight
-            else:
-                result.score *= keyword_weight
+            # Add semantic results
+            for result in semantic_results:
                 combined_results[result.id] = result
+                result.score = combine_scores(result.score, 0.0, semantic_weight, 0.0)
+                result.method_used = "hybrid"
 
-        # Convert back to list and sort
-        hybrid_results = list(combined_results.values())
-        hybrid_results.sort(key=lambda x: x.score, reverse=True)
+            # Add/combine keyword results
+            query_terms = query.text.lower().split()
+            for result in keyword_results:
+                if result.id in combined_results:
+                    # Combine scores for documents found by both methods
+                    semantic_score = combined_results[result.id].score / semantic_weight
+                    keyword_score = result.score
+                    combined_score = combine_scores(
+                        semantic_score, keyword_score, semantic_weight, keyword_weight
+                    )
+                    combined_results[result.id].score = combined_score
+                else:
+                    # New document from keyword search
+                    result.score = combine_scores(
+                        0.0, result.score, 0.0, keyword_weight
+                    )
+                    result.method_used = "hybrid"
+                    combined_results[result.id] = result
 
-        return hybrid_results
+            # Convert to list and sort
+            hybrid_results = list(combined_results.values())
+            hybrid_results.sort(key=lambda x: x.score, reverse=True)
 
-    def _rerank_results(self, query: str, results: List[SearchResult]) -> List[SearchResult]:
-        """
-        Rerank results based on additional criteria.
+            return hybrid_results
 
-        Args:
-            query: Original query
-            results: Initial search results
+        except Exception as e:
+            self.logger.error(f"Hybrid search failed: {e}")
+            # Fallback to semantic search
+            return await self._semantic_search(query)
 
-        Returns:
-            Reranked results
-        """
-        query_terms = set(query.lower().split())
-
-        for result in results:
-            # Additional scoring factors
-            content_terms = set(result.content.lower().split())
-
-            # Boost score based on:
-            # 1. Term overlap
-            term_overlap = len(query_terms.intersection(content_terms)) / len(query_terms)
-
-            # 2. Content length (prefer neither too short nor too long)
-            content_length = len(result.content)
-            try:
-                scoring_config = get_search_config()["scoring"]
-                length_score_short = scoring_config["length_score_short"]
-                length_score_medium = scoring_config["length_score_medium"]
-                length_score_optimal = scoring_config["length_score_optimal"]
-                metadata_title_boost = scoring_config["metadata_title_boost"]
-            except Exception:
-                length_score_short = 0.8
-                length_score_medium = 0.9
-                length_score_optimal = 1.0
-                metadata_title_boost = 1.1
-
-            length_score = length_score_optimal
-            if content_length < 100:
-                length_score = length_score_short
-            elif content_length > 1000:
-                length_score = length_score_medium
-
-            # 3. Metadata quality (if title exists, boost score)
-            metadata_boost = metadata_title_boost if result.metadata.get("title") else 1.0
-
-            # Apply boosts
-            result.score = result.score * (1 + term_overlap * 0.2) * length_score * metadata_boost
-
-        # Re-sort by updated scores
-        results.sort(key=lambda x: x.score, reverse=True)
-        return results
-
-    def _filter_by_threshold(self, results: List[SearchResult]) -> List[SearchResult]:
-        """
-        Filter results by similarity threshold.
-
-        Args:
-            results: Search results to filter
-
-        Returns:
-            Filtered results
-        """
-        return [result for result in results if result.score >= self.config.similarity_threshold]
-
-    def _distance_to_similarity(self, distance: float) -> float:
-        """
-        Convert ChromaDB distance to similarity score.
-
-        Args:
-            distance: Distance value from ChromaDB
-
-        Returns:
-            Similarity score (0-1, higher is more similar)
-        """
-        # For cosine distance: similarity = 1 - distance
-        # Clamp to [0, 1] range
-        similarity = max(0.0, min(1.0, 1.0 - distance))
-        return similarity
-
-    def _calculate_keyword_score(self, query_terms: List[str], doc_text: str) -> float:
-        """
-        Calculate keyword-based relevance score.
-
-        Args:
-            query_terms: List of query terms
-            doc_text: Document text (lowercased)
-
-        Returns:
-            Keyword relevance score
-        """
-        if not query_terms or not doc_text:
-            return 0.0
-
-        doc_terms = doc_text.split()
-        doc_term_count = len(doc_terms)
-
-        if doc_term_count == 0:
-            return 0.0
-
-        # Count term matches
-        matches = sum(1 for term in query_terms if term in doc_text)
-
-        # Calculate TF-like score
-        score = matches / len(query_terms)
-
-        # Boost for exact phrase matches
-        query_phrase = " ".join(query_terms)
-        if query_phrase in doc_text:
-            try:
-                scoring_config = get_search_config()["scoring"]
-                phrase_match_boost = scoring_config["phrase_match_boost"]
-            except Exception:
-                phrase_match_boost = 1.5
-            score *= phrase_match_boost
-
-        return min(1.0, score)
-
-    def get_similar_documents(self, document_id: str, top_k: int = 5) -> List[SearchResult]:
+    async def find_similar_documents(
+        self, document_id: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
+    ) -> SearchResponse:
         """
         Find documents similar to a given document.
 
         Args:
-            document_id: ID of the reference document
-            top_k: Number of similar documents to return
+            document_id: ID of reference document
+            top_k: Number of similar documents to find
+            filters: Optional metadata filters
 
         Returns:
-            List of similar documents
+            Search response with similar documents
         """
         try:
-            # Get the reference document
-            doc_data = self.storage.get_documents(ids=[document_id])
-
-            if not doc_data or not doc_data.get("documents"):
+            # Get reference document
+            doc_data = await self.search_provider.get_document(document_id)
+            if not doc_data or not doc_data.get("content"):
                 raise ValueError(f"Document {document_id} not found")
 
-            reference_doc = doc_data["documents"][0]
+            # Use document content as query
+            reference_content = doc_data["content"]
 
-            # Use the document content as query
-            return self.search(reference_doc, top_k=top_k + 1).results[1:]  # Exclude self
+            # Create search query
+            similarity_query = SearchQuery(
+                text=reference_content,
+                top_k=top_k + 1,  # Get extra to exclude self
+                method="semantic",
+                filters=filters,
+            )
+
+            # Execute search
+            response = await self.search(similarity_query)
+
+            # Filter out the reference document itself
+            similar_results = [
+                result for result in response.results if result.id != document_id
+            ][:top_k]
+
+            return SearchResponse(
+                query=f"Similar to document {document_id}",
+                results=similar_results,
+                total_results=len(similar_results),
+                search_time=response.search_time,
+                method_used="semantic_similarity",
+                metadata={"reference_document_id": document_id},
+            )
 
         except Exception as e:
-            self.logger.error(f"Failed to find similar documents: {e}")
-            return []
+            self.logger.error(f"Similar document search failed: {e}")
+            raise
 
 
-class SearchResultFormatter:
-    """Utility class for formatting search results."""
-
-    @staticmethod
-    def format_for_display(response: SearchResponse) -> str:
-        """
-        Format search response for console display.
-
-        Args:
-            response: Search response to format
-
-        Returns:
-            Formatted string representation
-        """
-        lines = []
-        lines.append(f"Search Results for: '{response.query}'")
-        lines.append(f"Method: {response.method.value}, Time: {response.total_time:.3f}s")
-        lines.append(f"Found {response.total_results} results")
-        lines.append("-" * 50)
-
-        for result in response.results:
-            lines.append(f"#{result.rank} (Score: {result.score:.3f})")
-
-            # Show title if available
-            if result.metadata.get("title"):
-                lines.append(f"Title: {result.metadata['title']}")
-
-            # Show content preview
-            content_preview = (
-                result.content[:200] + "..." if len(result.content) > 200 else result.content
-            )
-            lines.append(f"Content: {content_preview}")
-
-            # Show source if available
-            if result.metadata.get("source"):
-                lines.append(f"Source: {result.metadata['source']}")
-
-            lines.append("")
-
-        return "\n".join(lines)
-
-    @staticmethod
-    def extract_context_chunks(response: SearchResponse, max_length: int = None) -> List[str]:
-        """
-        Extract context chunks for RAG generation.
-
-        Args:
-            response: Search response
-            max_length: Maximum total length of context (defaults from config)
-
-        Returns:
-            List of context chunks
-        """
-        # Use config default for max_length if not provided
-        if max_length is None:
-            try:
-                search_config = get_search_config()
-                max_length = search_config["max_context_length"]
-            except Exception:
-                max_length = 2000
-
-        chunks = []
-        total_length = 0
-
-        for result in response.results:
-            chunk_length = len(result.content)
-
-            if total_length + chunk_length > max_length:
-                if not chunks:  # Include at least one chunk
-                    remaining = max_length - 50  # Leave space for truncation marker
-                    truncated = result.content[:remaining] + "..."
-                    chunks.append(truncated)
-                break
-
-            chunks.append(result.content)
-            total_length += chunk_length
-
-        return chunks
+# Factory Functions
+def create_search_query(
+    text: str, top_k: int = 5, method: str = "semantic", **kwargs
+) -> SearchQuery:
+    """Factory function to create SearchQuery with validation."""
+    return SearchQuery(text=text, top_k=top_k, method=method, **kwargs)
 
 
 def create_search_engine(
-    embedding_model: MultilingualEmbeddingModel,
-    storage: ChromaDBStorage,
-    method: SearchMethod = None,
-    top_k: int = None,
+    embedding_provider: EmbeddingProvider,
+    search_provider: VectorSearchProvider,
+    config_provider: ConfigProvider,
 ) -> SemanticSearchEngine:
-    """
-    Factory function to create search engine.
-
-    Args:
-        embedding_model: Embedding model instance
-        storage: Storage client instance
-        method: Default search method (defaults from config)
-        top_k: Default number of results (defaults from config)
-
-    Returns:
-        Configured SemanticSearchEngine
-    """
-    # Use config defaults if not provided
-    if method is None or top_k is None:
-        try:
-            search_config = get_search_config()
-            if method is None:
-                method_str = search_config["default_method"]
-                method = SearchMethod.SEMANTIC  # default
-                for search_method in SearchMethod:
-                    if search_method.value == method_str:
-                        method = search_method
-                        break
-            if top_k is None:
-                top_k = search_config["top_k"]
-        except Exception:
-            method = method or SearchMethod.SEMANTIC
-            top_k = top_k or 5
-
-    config = SearchConfig(
-        method=method,
-        top_k=top_k,
-        similarity_threshold=0.0,
-        max_context_length=2000,
-        rerank=True,
-        include_metadata=True,
-        include_distances=True,
+    """Factory function to create SemanticSearchEngine."""
+    return SemanticSearchEngine(
+        embedding_provider=embedding_provider,
+        search_provider=search_provider,
+        config_provider=config_provider,
     )
-    return SemanticSearchEngine(embedding_model, storage, config)

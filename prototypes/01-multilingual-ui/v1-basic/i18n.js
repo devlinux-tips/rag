@@ -16,9 +16,7 @@ class I18n {
                     loading: "Obrađuje se..."
                 },
                 search: {
-                    title: "Pretraži Dokumente",
-                    description: "Pretražite višejezične dokumente s jezično-specifičnom obradom",
-                    inputLanguage: "Pretraži u:",
+                    title: "Inteligentna Pretraga",
                     placeholder: "Pretražite dokumente...",
                     button: "Pretraži"
                 },
@@ -28,17 +26,15 @@ class I18n {
                     resultsFound: "rezultata pronađeno"
                 },
                 upload: {
-                    title: "Učitaj Dokumente",
-                    description: "Dodaj nove dokumente u višejezičnu bazu znanja",
-                    documentLanguage: "Jezik dokumenta:",
-                    autoDetect: "Automatska detekcija",
+                    title: "Baza Znanja",
+                    autoDetect: "🤖 Automatska Detekcija",
                     dragDrop: "Povucite datoteke ovdje ili kliknite za odabir",
                     supportedFormats: "Podržava PDF, DOCX, TXT datoteke"
                 },
                 languages: {
-                    croatian: "Hrvatski",
-                    english: "Engleski",
-                    multilingual: "Višejezično"
+                    croatian: "🇭🇷 Hrvatski Fokus",
+                    english: "🇬🇧 Engleski Fokus",
+                    multilingual: "🌐 Pretraži Sve"
                 },
                 errors: {
                     noResults: "Nema rezultata za vašu pretragu.",
@@ -56,9 +52,7 @@ class I18n {
                     loading: "Processing..."
                 },
                 search: {
-                    title: "Search Documents",
-                    description: "Search through multilingual documents with language-specific processing",
-                    inputLanguage: "Search in:",
+                    title: "Intelligent Search",
                     placeholder: "Search documents...",
                     button: "Search"
                 },
@@ -68,17 +62,15 @@ class I18n {
                     resultsFound: "results found"
                 },
                 upload: {
-                    title: "Upload Documents",
-                    description: "Add new documents to the multilingual knowledge base",
-                    documentLanguage: "Document language:",
-                    autoDetect: "Auto-detect",
+                    title: "Knowledge Base",
+                    autoDetect: "🤖 Auto-Detect",
                     dragDrop: "Drag files here or click to select",
                     supportedFormats: "Supports PDF, DOCX, TXT files"
                 },
                 languages: {
-                    croatian: "Croatian",
-                    english: "English",
-                    multilingual: "Multilingual"
+                    croatian: "🇭🇷 Croatian Focus",
+                    english: "🇬🇧 English Focus",
+                    multilingual: "🌐 Search Everything"
                 },
                 errors: {
                     noResults: "No results found for your search.",

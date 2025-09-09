@@ -63,7 +63,7 @@ class ConfigLoader:
             if main_config_path.exists():
                 with open(main_config_path, "rb") as f:
                     main_config = tomllib.load(f)
-                    return main_config.get("languages", {}).get("config_files", {})
+                    return main_config["languages"].get("config_files", {})
         except Exception:
             pass
 
@@ -90,7 +90,9 @@ class ConfigLoader:
 
         # Use dynamic language config file mapping
         language_config_files = self._get_language_config_files()
-        language_file_names = [f.replace(".toml", "") for f in language_config_files.values()]
+        language_file_names = [
+            f.replace(".toml", "") for f in language_config_files.values()
+        ]
 
         if config_name in language_file_names:
             # This is a language-specific config (croatian, english, etc.)
@@ -106,61 +108,7 @@ class ConfigLoader:
             with open(config_path, "rb") as f:
                 config_data = tomllib.load(f)
 
-            # For non-Croatian configs, we need to return the specific section from the consolidated config
-            if config_name != "croatian":
-                # Map config names to their sections in the consolidated config
-                section_mapping = {
-                    "vectordb": {
-                        "embeddings": config_data.get("embeddings", {}),
-                        "storage": config_data.get("storage", {}),
-                        "search": config_data.get("search", {}),
-                        "factory": config_data.get("vectordb", {}).get("factory", {}),
-                    },
-                    "generation": {
-                        "ollama": config_data.get("ollama", {}),
-                        "prompts": config_data.get("prompts", {}),
-                        "response_parsing": config_data.get("response_parsing", {}),
-                    },
-                    "preprocessing": {
-                        "processing": config_data.get("processing", {}),
-                        "extraction": config_data.get("extraction", {}),
-                        "chunking": config_data.get("chunking", {}),
-                        "cleaning": config_data.get("cleaning", {}),
-                        "formatting_patterns": config_data.get("formatting_patterns", {}),
-                    },
-                    "retrieval": {
-                        "query_processing": config_data.get("query_processing", {}),
-                        "retrieval": config_data.get("retrieval", {}),
-                        "ranking": config_data.get("ranking", {}),
-                        "reranking": config_data.get("reranking", {}),
-                        "hybrid_retrieval": config_data.get("hybrid_retrieval", {}),
-                    },
-                    "pipeline": {
-                        "processing": config_data.get("processing", {}),
-                        "embedding": config_data.get("embeddings", {}),
-                        "chroma": config_data.get("storage", {}),
-                        "retrieval": config_data.get("retrieval", {}),
-                        "ollama": config_data.get("ollama", {}),
-                        "system": config_data.get("system", {}),
-                        "paths": config_data.get("paths", {}),
-                        "performance": config_data.get("performance", {}),
-                        "pipeline": config_data.get("pipeline", {}),
-                    },
-                    "main": None,  # Return full config for main
-                    "config": None,  # Return full config for config
-                    "croatian": None,  # Return full config for language files
-                    "english": None,  # Return full config for language files
-                }
-
-                # Check if this is a language config file
-                language_configs = self._get_language_config_files()
-                for lang_config in language_configs.values():
-                    lang_name = lang_config.replace(".toml", "")
-                    section_mapping[lang_name] = None  # Return full config for language files
-
-                if config_name in section_mapping and section_mapping[config_name] is not None:
-                    config_data = section_mapping[config_name]
-                # If config_name is not mapped or maps to None, return the full config
+            # All configs return their full data - no special section mapping needed
 
             self._cache[config_name] = config_data
             logger.info(f"Loaded configuration: {config_name}")
@@ -251,7 +199,7 @@ def get_config_section(config_name: str, section: str) -> Dict[str, Any]:
 def get_shared_config() -> Dict[str, Any]:
     """Get shared configuration from main config (constants and common settings)."""
     main_config = load_config("config")
-    return main_config.get("shared", {})
+    return main_config["shared"]
 
 
 # ============================================================================
@@ -296,7 +244,7 @@ def get_language_shared(language: str) -> Dict[str, Any]:
         Dictionary containing language-specific shared configuration
     """
     config = get_language_config(language)
-    return config.get("shared", {})
+    return config["shared"]
 
 
 def get_language_specific_config(section: str, language: str) -> Dict[str, Any]:
@@ -323,7 +271,7 @@ def get_supported_languages() -> list[str]:
     """
     try:
         main_config = load_config("config")
-        return main_config.get("languages", {}).get("supported", ["hr"])
+        return main_config["languages"].get("supported", ["hr"])
     except Exception:
         # Fallback to Croatian only
         return ["hr"]
@@ -331,36 +279,15 @@ def get_supported_languages() -> list[str]:
 
 def get_language_config_file(language: str) -> str:
     """
-    Get config file name for language.
+    Get config file name for language using convention-based naming.
 
     Args:
-        language: Language code
+        language: Language code (e.g., 'hr', 'en')
 
     Returns:
-        Config file name (e.g., 'croatian.toml')
+        Config file name (e.g., 'hr.toml', 'en.toml')
     """
-    try:
-        main_config = load_config("config")
-        config_files = main_config.get("languages", {}).get("config_files", {})
-
-        if language in config_files:
-            return config_files[language]
-
-        # Try common mappings
-        language_mapping = {
-            "hr": "croatian.toml",
-            "croatian": "croatian.toml",
-            "en": "english.toml",
-            "english": "english.toml",
-        }
-
-        if language.lower() in language_mapping:
-            return language_mapping[language.lower()]
-
-    except Exception:
-        pass
-
-    # Fallback
+    # Convention: language code directly maps to filename
     return f"{language}.toml"
 
 
@@ -591,22 +518,22 @@ def get_pipeline_config() -> Dict[str, Any]:
 def get_processing_config() -> Dict[str, Any]:
     """Get document processing configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config.get("processing", {})
+    return pipeline_config["processing"]
 
 
 def get_chroma_config() -> Dict[str, Any]:
     """Get ChromaDB configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config.get("chroma", {})
+    return pipeline_config["chroma"]
 
 
 def get_performance_config() -> Dict[str, Any]:
     """Get performance configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config.get("performance", {})
+    return pipeline_config["performance"]
 
 
 def get_system_config() -> Dict[str, Any]:
     """Get system configuration."""
     main_config = load_config("config")
-    return main_config.get("system", {})
+    return main_config["system"]

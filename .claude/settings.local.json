@@ -2,7 +2,24 @@
   "permissions": {
     "allow": [
       "mcp__ruv-swarm",
-      "mcp__claude-flow"
+      "mcp__claude-flow",
+      "Bash(python:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__serena__create_text_file",
+      "mcp__serena__activate_project",
+      "mcp__serena__execute_shell_command",
+      "mcp__serena__list_dir",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__read_file",
+      "mcp__serena__replace_regex",
+      "mcp__serena__replace_symbol_body",
+      "mcp__serena__find_file",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol",
+      "Bash(find:*)",
+      "Bash(for file in tests/test_hybrid_retriever.py tests/test_prompt_templates.py tests/test_rag_cli.py tests/test_reranker.py tests/test_response_parser.py tests/test_storage.py)",
+      "Bash(do sed -i 's/_v2\\.py/.py/g' \"$file\")",
+      "Bash(done)"
     ],
     "deny": []
   }

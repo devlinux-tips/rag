@@ -1,669 +1,710 @@
 """
-Main retrieval logic for multilingual RAG system.
-Orchestrates query processing, search, and result ranking.
+100% testable document retrieval system for multilingual RAG.
+Clean slate architecture with pure functions and dependency injection.
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Protocol, Union
 
-from ..utils.config_loader import get_retrieval_config
-from ..utils.error_handler import handle_config_error
-from ..vectordb.embeddings import MultilingualEmbeddingModel
-from ..vectordb.search import SearchMethod, SearchResponse, SemanticSearchEngine
-from ..vectordb.storage import ChromaDBStorage
-from .query_processor import MultilingualQueryProcessor, ProcessedQuery, QueryType
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
+# Pure Data Structures
 class RetrievalStrategy(Enum):
     """Available retrieval strategies."""
 
-    SIMPLE = "simple"  # Basic semantic search
-    ADAPTIVE = "adaptive"  # Adapt based on query type
-    MULTI_PASS = "multi_pass"  # Multiple search passes
-    HYBRID = "hybrid"  # Combine multiple approaches
+    SEMANTIC = "semantic"
+    KEYWORD = "keyword"
+    HYBRID = "hybrid"
+    ADAPTIVE = "adaptive"
+    MULTI_PASS = "multi_pass"
+
+
+class QueryType(Enum):
+    """Detected query types for adaptive retrieval."""
+
+    FACTUAL = "factual"
+    CONCEPTUAL = "conceptual"
+    PROCEDURAL = "procedural"
+    COMPARATIVE = "comparative"
+    EXPLORATORY = "exploratory"
 
 
 @dataclass
-class RetrievalConfig:
-    """Configuration for document retrieval."""
+class RetrievalQuery:
+    """Structured retrieval query with processing metadata."""
 
-    strategy: RetrievalStrategy = RetrievalStrategy.ADAPTIVE
+    original_text: str
+    processed_text: str
+    query_type: QueryType
+    language: str
+    keywords: List[str]
+    filters: Optional[Dict[str, Any]] = None
     max_results: int = 10
-    min_similarity: float = 0.1
-    enable_reranking: bool = True
-    enable_query_expansion: bool = True
-    adaptive_top_k: bool = True
-    fallback_enabled: bool = True
-    timeout_seconds: int = 30
+    similarity_threshold: float = 0.1
+    strategy_override: Optional[RetrievalStrategy] = None
 
-    @classmethod
-    def from_config(cls) -> "RetrievalConfig":
-        """Load configuration from TOML files."""
+    def __post_init__(self):
+        """Validate query parameters."""
+        if self.max_results <= 0:
+            raise ValueError("max_results must be positive")
+        if not 0 <= self.similarity_threshold <= 1:
+            raise ValueError("similarity_threshold must be between 0 and 1")
 
-        def load_config():
-            config = get_retrieval_config()["retrieval"]
 
-            # Convert string to enum
-            strategy_str = config["default_strategy"]
-            strategy = RetrievalStrategy.HYBRID  # default
-            for strategy_enum in RetrievalStrategy:
-                if strategy_enum.value == strategy_str:
-                    strategy = strategy_enum
-                    break
+@dataclass
+class RetrievedDocument:
+    """Individual retrieved document with relevance metadata."""
 
-            return cls(
-                strategy=strategy,
-                max_results=config["top_k"],
-                min_similarity=config["similarity_threshold"],
-                fallback_enabled=config["fallback_enabled"],
-                timeout_seconds=config.get("max_retries", 30),  # Reuse as timeout
-            )
+    id: str
+    content: str
+    score: float
+    metadata: Dict[str, Any]
+    retrieval_method: str
+    rank: Optional[int] = None
+    query_match_info: Optional[Dict[str, Any]] = None
 
-        return handle_config_error(
-            operation=load_config,
-            fallback_value=cls(),  # Default constructor
-            config_file="config/config.toml",
-            section="[retrieval]",
-        )
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "id": self.id,
+            "content": self.content,
+            "score": self.score,
+            "metadata": self.metadata,
+            "retrieval_method": self.retrieval_method,
+            "rank": self.rank,
+            "query_match_info": self.query_match_info,
+        }
 
 
 @dataclass
 class RetrievalResult:
-    """Result of document retrieval operation."""
+    """Complete retrieval result with timing and strategy metadata."""
 
     query: str
-    processed_query: ProcessedQuery
-    documents: List[Dict[str, Any]]
+    documents: List[RetrievedDocument]
+    total_found: int
+    retrieval_time: float
     strategy_used: RetrievalStrategy
-    search_time: float
-    total_time: float
-    result_count: int
-    confidence: float
-    metadata: Dict[str, Any]
+    query_type: QueryType
+    language: str
+    metadata: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        """Add ranking to documents if not present."""
+        for i, doc in enumerate(self.documents):
+            if doc.rank is None:
+                doc.rank = i + 1
 
 
-class IntelligentRetriever:
-    """Intelligent document retriever for multilingual RAG system."""
+# Protocol-based Dependencies (100% testable interfaces)
+class QueryProcessor(Protocol):
+    """Protocol for query processing."""
+
+    async def process_query(self, query: str, language: str) -> RetrievalQuery:
+        """Process raw query into structured format."""
+        ...
+
+
+class SearchEngine(Protocol):
+    """Protocol for search operations."""
+
+    async def search(
+        self,
+        query: str,
+        top_k: int,
+        method: str = "semantic",
+        filters: Optional[Dict[str, Any]] = None,
+        similarity_threshold: float = 0.0,
+    ) -> List[Dict[str, Any]]:
+        """Execute search and return results."""
+        ...
+
+
+class ResultRanker(Protocol):
+    """Protocol for result ranking and reordering."""
+
+    def rank_results(
+        self, query: RetrievalQuery, documents: List[RetrievedDocument]
+    ) -> List[RetrievedDocument]:
+        """Rank documents by relevance."""
+        ...
+
+
+class RetrievalConfig(Protocol):
+    """Protocol for retrieval configuration."""
+
+    def get_strategy_config(self, strategy: RetrievalStrategy) -> Dict[str, Any]:
+        """Get configuration for specific strategy."""
+        ...
+
+    def get_adaptive_config(self, query_type: QueryType) -> Dict[str, Any]:
+        """Get adaptive configuration for query type."""
+        ...
+
+
+# Pure Functions (100% testable)
+def select_retrieval_strategy(
+    query: RetrievalQuery,
+    default_strategy: RetrievalStrategy = RetrievalStrategy.SEMANTIC,
+) -> RetrievalStrategy:
+    """
+    Select optimal retrieval strategy based on query characteristics.
+
+    Args:
+        query: Processed query with metadata
+        default_strategy: Fallback strategy
+
+    Returns:
+        Selected retrieval strategy
+    """
+    # Use explicit override if provided
+    if query.strategy_override:
+        return query.strategy_override
+
+    # Strategy selection based on query type
+    strategy_map = {
+        QueryType.FACTUAL: RetrievalStrategy.KEYWORD,
+        QueryType.CONCEPTUAL: RetrievalStrategy.SEMANTIC,
+        QueryType.PROCEDURAL: RetrievalStrategy.HYBRID,
+        QueryType.COMPARATIVE: RetrievalStrategy.HYBRID,
+        QueryType.EXPLORATORY: RetrievalStrategy.SEMANTIC,
+    }
+
+    selected = strategy_map.get(query.query_type, default_strategy)
+
+    # Adjust based on query characteristics
+    if len(query.keywords) >= 3 and selected == RetrievalStrategy.SEMANTIC:
+        # Many keywords suggest hybrid approach might work better
+        selected = RetrievalStrategy.HYBRID
+
+    return selected
+
+
+def calculate_adaptive_top_k(query: RetrievalQuery, base_top_k: int = 10) -> int:
+    """
+    Calculate adaptive top_k based on query characteristics.
+
+    Args:
+        query: Processed query
+        base_top_k: Base number of results
+
+    Returns:
+        Adjusted top_k value
+    """
+    # Base adjustment factors
+    multipliers = {
+        QueryType.FACTUAL: 0.8,  # Precise queries need fewer results
+        QueryType.CONCEPTUAL: 1.2,  # Broad queries benefit from more results
+        QueryType.PROCEDURAL: 1.0,  # Standard amount
+        QueryType.COMPARATIVE: 1.3,  # Need examples for comparison
+        QueryType.EXPLORATORY: 1.5,  # Exploration needs variety
+    }
+
+    multiplier = multipliers.get(query.query_type, 1.0)
+
+    # Adjust for query complexity
+    if len(query.keywords) > 5:
+        multiplier *= 1.2  # Complex queries may need more results
+    elif len(query.keywords) <= 2:
+        multiplier *= 0.9  # Simple queries need fewer
+
+    # Apply bounds
+    adjusted = int(base_top_k * multiplier)
+    return max(5, min(50, adjusted))  # Clamp to reasonable range
+
+
+def merge_retrieval_results(
+    semantic_docs: List[RetrievedDocument],
+    keyword_docs: List[RetrievedDocument],
+    semantic_weight: float = 0.7,
+    keyword_weight: float = 0.3,
+) -> List[RetrievedDocument]:
+    """
+    Merge results from different retrieval methods.
+
+    Args:
+        semantic_docs: Results from semantic search
+        keyword_docs: Results from keyword search
+        semantic_weight: Weight for semantic scores
+        keyword_weight: Weight for keyword scores
+
+    Returns:
+        Merged and deduplicated results
+    """
+    if not semantic_docs and not keyword_docs:
+        return []
+
+    if not semantic_docs:
+        return keyword_docs
+
+    if not keyword_docs:
+        return semantic_docs
+
+    # Normalize weights
+    total_weight = semantic_weight + keyword_weight
+    if total_weight == 0:
+        return semantic_docs  # Fallback
+
+    norm_semantic = semantic_weight / total_weight
+    norm_keyword = keyword_weight / total_weight
+
+    # Index documents by ID for merging
+    merged = {}
+
+    # Add semantic results
+    for doc in semantic_docs:
+        merged[doc.id] = RetrievedDocument(
+            id=doc.id,
+            content=doc.content,
+            score=doc.score * norm_semantic,
+            metadata=doc.metadata,
+            retrieval_method="hybrid",
+            query_match_info={"semantic_score": doc.score, "keyword_score": 0.0},
+        )
+
+    # Add/merge keyword results
+    for doc in keyword_docs:
+        if doc.id in merged:
+            # Combine scores for documents found by both methods
+            existing = merged[doc.id]
+            existing.score += doc.score * norm_keyword
+            existing.query_match_info["keyword_score"] = doc.score
+        else:
+            # New document from keyword search only
+            merged[doc.id] = RetrievedDocument(
+                id=doc.id,
+                content=doc.content,
+                score=doc.score * norm_keyword,
+                metadata=doc.metadata,
+                retrieval_method="hybrid",
+                query_match_info={"semantic_score": 0.0, "keyword_score": doc.score},
+            )
+
+    # Convert to list and sort by combined score
+    result = list(merged.values())
+    result.sort(key=lambda x: x.score, reverse=True)
+
+    return result
+
+
+def filter_results_by_threshold(
+    documents: List[RetrievedDocument], threshold: float
+) -> List[RetrievedDocument]:
+    """
+    Filter results by similarity threshold.
+
+    Args:
+        documents: Retrieved documents
+        threshold: Minimum score threshold
+
+    Returns:
+        Filtered documents
+    """
+    return [doc for doc in documents if doc.score >= threshold]
+
+
+def limit_results(
+    documents: List[RetrievedDocument], max_results: int
+) -> List[RetrievedDocument]:
+    """
+    Limit number of results.
+
+    Args:
+        documents: Retrieved documents
+        max_results: Maximum number to return
+
+    Returns:
+        Limited documents
+    """
+    return documents[:max_results] if max_results > 0 else documents
+
+
+def add_query_match_analysis(
+    query: RetrievalQuery, documents: List[RetrievedDocument]
+) -> List[RetrievedDocument]:
+    """
+    Add query match analysis to document metadata.
+
+    Args:
+        query: Original retrieval query
+        documents: Retrieved documents
+
+    Returns:
+        Documents with enhanced match information
+    """
+    query_terms = set(query.keywords)
+
+    for doc in documents:
+        if not doc.query_match_info:
+            doc.query_match_info = {}
+
+        # Analyze keyword matches
+        doc_words = set(doc.content.lower().split())
+        keyword_matches = query_terms.intersection(doc_words)
+
+        doc.query_match_info.update(
+            {
+                "keyword_matches": list(keyword_matches),
+                "keyword_match_ratio": len(keyword_matches) / len(query_terms)
+                if query_terms
+                else 0,
+                "content_length": len(doc.content),
+                "query_type": query.query_type.value,
+                "language": query.language,
+            }
+        )
+
+    return documents
+
+
+def calculate_diversity_score(documents: List[RetrievedDocument]) -> float:
+    """
+    Calculate diversity score for result set.
+
+    Args:
+        documents: Retrieved documents
+
+    Returns:
+        Diversity score (0-1, higher is more diverse)
+    """
+    if len(documents) <= 1:
+        return 1.0
+
+    # Simple diversity based on content similarity
+    # In production, this could use actual embedding similarity
+    diversity_factors = []
+
+    for i, doc1 in enumerate(documents):
+        for doc2 in documents[i + 1 :]:
+            # Simple content-based diversity (word overlap)
+            words1 = set(doc1.content.lower().split())
+            words2 = set(doc2.content.lower().split())
+
+            if words1 and words2:
+                overlap = len(words1.intersection(words2))
+                total = len(words1.union(words2))
+                similarity = overlap / total if total > 0 else 0
+                diversity_factors.append(1 - similarity)
+
+    return sum(diversity_factors) / len(diversity_factors) if diversity_factors else 0.5
+
+
+# Main Retrieval Engine Class
+class DocumentRetriever:
+    """
+    100% testable document retrieval engine using dependency injection.
+    """
 
     def __init__(
         self,
-        query_processor: MultilingualQueryProcessor,
-        search_engine: SemanticSearchEngine,
-        config: RetrievalConfig = None,
+        query_processor: QueryProcessor,
+        search_engine: SearchEngine,
+        result_ranker: ResultRanker,
+        config: RetrievalConfig,
     ):
         """
-        Initialize intelligent retriever.
+        Initialize retriever with injected dependencies.
 
         Args:
-            query_processor: Multilingual query processor
-            search_engine: Semantic search engine
-            config: Retrieval configuration
+            query_processor: Query processing service
+            search_engine: Document search service
+            result_ranker: Result ranking service
+            config: Configuration service
         """
         self.query_processor = query_processor
         self.search_engine = search_engine
-        self.config = config or RetrievalConfig()
+        self.result_ranker = result_ranker
+        self.config = config
         self.logger = logging.getLogger(__name__)
 
-        # Performance tracking
-        self._query_stats = {
-            "total_queries": 0,
-            "successful_queries": 0,
-            "average_time": 0.0,
-            "strategy_usage": {strategy: 0 for strategy in RetrievalStrategy},
-        }
-
-    def retrieve(
+    async def retrieve_documents(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
+        language: str = "en",
+        max_results: Optional[int] = None,
         strategy: Optional[RetrievalStrategy] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> RetrievalResult:
         """
-        Retrieve relevant documents for multilingual query.
+        Retrieve relevant documents for query.
 
         Args:
-            query: User query string
-            context: Optional context information
-            strategy: Optional override for retrieval strategy
+            query: Natural language query
+            language: Query language
+            max_results: Maximum results to return
+            strategy: Retrieval strategy override
+            filters: Optional metadata filters
 
         Returns:
-            RetrievalResult with documents and metadata
+            Retrieval result with documents and metadata
+
+        Raises:
+            ValueError: For invalid parameters
         """
+        if not query or not query.strip():
+            raise ValueError("Query cannot be empty")
+
         start_time = time.time()
-        strategy = strategy or self.config.strategy
-        context = context or {}
 
         try:
-            self.logger.info(f"Retrieving documents for query: '{query[:50]}...'")
+            # Process query
+            processed_query = await self.query_processor.process_query(query, language)
 
-            # Step 1: Process query
-            processed_query = self.query_processor.process_query(query, context)
+            # Apply overrides
+            if max_results is not None:
+                processed_query.max_results = max_results
+            if strategy is not None:
+                processed_query.strategy_override = strategy
+            if filters is not None:
+                processed_query.filters = filters
 
-            if processed_query.confidence < 0.1:
-                return self._create_low_confidence_result(query, processed_query, start_time)
+            # Select retrieval strategy
+            selected_strategy = select_retrieval_strategy(processed_query)
 
-            # Step 2: Choose retrieval strategy
-            if strategy == RetrievalStrategy.ADAPTIVE:
-                strategy = self._choose_adaptive_strategy(processed_query)
-
-            # Step 3: Execute retrieval
-            search_start = time.time()
-            search_response = self._execute_search(processed_query, strategy, context)
-            search_time = time.time() - search_start
-
-            # Step 4: Post-process results
-            documents = self._post_process_results(search_response, processed_query)
-
-            # Step 5: Calculate overall confidence
-            confidence = self._calculate_retrieval_confidence(
-                processed_query, search_response, documents
+            # Execute retrieval based on strategy
+            documents = await self._execute_retrieval_strategy(
+                processed_query, selected_strategy
             )
 
-            total_time = time.time() - start_time
+            # Apply post-processing
+            documents = self._post_process_results(processed_query, documents)
 
-            # Update statistics
-            self._update_stats(strategy, total_time, len(documents) > 0)
+            retrieval_time = time.time() - start_time
 
-            # Create result
-            result = RetrievalResult(
+            return RetrievalResult(
                 query=query,
-                processed_query=processed_query,
                 documents=documents,
-                strategy_used=strategy,
-                search_time=search_time,
-                total_time=total_time,
-                result_count=len(documents),
-                confidence=confidence,
+                total_found=len(documents),
+                retrieval_time=retrieval_time,
+                strategy_used=selected_strategy,
+                query_type=processed_query.query_type,
+                language=processed_query.language,
                 metadata={
-                    "search_method": (search_response.method.value if search_response else None),
-                    "original_results": (search_response.total_results if search_response else 0),
-                    "filtered_results": len(documents),
-                    "query_type": processed_query.query_type.value,
-                    "processing_confidence": processed_query.confidence,
-                    "context_used": bool(context),
+                    "processed_query": processed_query.processed_text,
+                    "keywords": processed_query.keywords,
+                    "filters": processed_query.filters,
+                    "diversity_score": calculate_diversity_score(documents),
                 },
             )
 
-            self.logger.info(
-                f"Retrieved {len(documents)} documents in {total_time:.3f}s "
-                f"using {strategy.value} strategy"
-            )
-
-            return result
-
         except Exception as e:
-            self.logger.error(f"Retrieval failed: {e}")
-            return self._create_error_result(query, str(e), start_time)
+            self.logger.error(f"Retrieval failed for query '{query}': {e}")
+            raise
 
-    def _choose_adaptive_strategy(self, processed_query: ProcessedQuery) -> RetrievalStrategy:
-        """
-        Choose best retrieval strategy based on query characteristics.
-
-        Args:
-            processed_query: Processed query information
-
-        Returns:
-            Best RetrievalStrategy for this query
-        """
-        query_type = processed_query.query_type
-        keyword_count = len(processed_query.keywords)
-        confidence = processed_query.confidence
-
-        # Low confidence queries need more comprehensive search
-        if confidence < 0.4:
-            return RetrievalStrategy.MULTI_PASS
-
-        # Factual queries with specific keywords work well with simple search
-        if query_type == QueryType.FACTUAL and keyword_count >= 2:
-            return RetrievalStrategy.SIMPLE
-
-        # Complex queries benefit from hybrid approach
-        if query_type in [QueryType.EXPLANATORY, QueryType.COMPARISON]:
-            return RetrievalStrategy.HYBRID
-
-        # Summarization queries need multi-pass to get diverse content
-        if query_type == QueryType.SUMMARIZATION:
-            return RetrievalStrategy.MULTI_PASS
-
-        # Default to simple for general queries
-        return RetrievalStrategy.SIMPLE
-
-    def _execute_search(
-        self,
-        processed_query: ProcessedQuery,
-        strategy: RetrievalStrategy,
-        context: Dict[str, Any],
-    ) -> Optional[SearchResponse]:
-        """
-        Execute search based on strategy.
-
-        Args:
-            processed_query: Processed query
-            strategy: Retrieval strategy to use
-            context: Additional context
-
-        Returns:
-            Search response or None if failed
-        """
-        try:
-            if strategy == RetrievalStrategy.SIMPLE:
-                return self._simple_search(processed_query, context)
-
-            elif strategy == RetrievalStrategy.HYBRID:
-                return self._hybrid_search(processed_query, context)
-
-            elif strategy == RetrievalStrategy.MULTI_PASS:
-                return self._multi_pass_search(processed_query, context)
-
-            else:  # Fallback to simple
-                return self._simple_search(processed_query, context)
-
-        except Exception as e:
-            self.logger.error(f"Search execution failed: {e}")
-
-            # Try fallback if enabled
-            if self.config.fallback_enabled and strategy != RetrievalStrategy.SIMPLE:
-                self.logger.info("Attempting fallback to simple search")
-                return self._simple_search(processed_query, context)
-
-            return None
-
-    def _simple_search(
-        self, processed_query: ProcessedQuery, context: Dict[str, Any]
-    ) -> SearchResponse:
-        """
-        Execute simple semantic search.
-
-        Args:
-            processed_query: Processed query
-            context: Search context
-
-        Returns:
-            Search response
-        """
-        # Determine top_k based on query type
-        if self.config.adaptive_top_k:
-            if processed_query.query_type == QueryType.SUMMARIZATION:
-                top_k = min(15, self.config.max_results + 5)  # More results for summaries
-            elif processed_query.query_type == QueryType.FACTUAL:
-                top_k = min(8, self.config.max_results)  # Fewer for specific facts
-            else:
-                top_k = self.config.max_results
+    async def _execute_retrieval_strategy(
+        self, query: RetrievalQuery, strategy: RetrievalStrategy
+    ) -> List[RetrievedDocument]:
+        """Execute retrieval using specified strategy."""
+        if strategy == RetrievalStrategy.SEMANTIC:
+            return await self._semantic_retrieval(query)
+        elif strategy == RetrievalStrategy.KEYWORD:
+            return await self._keyword_retrieval(query)
+        elif strategy == RetrievalStrategy.HYBRID:
+            return await self._hybrid_retrieval(query)
+        elif strategy == RetrievalStrategy.ADAPTIVE:
+            return await self._adaptive_retrieval(query)
+        elif strategy == RetrievalStrategy.MULTI_PASS:
+            return await self._multi_pass_retrieval(query)
         else:
-            top_k = self.config.max_results
-
-        return self.search_engine.search(
-            query=processed_query.processed,
-            top_k=top_k,
-            filters=processed_query.filters,
-            method=SearchMethod.SEMANTIC,
-        )
-
-    def _hybrid_search(
-        self, processed_query: ProcessedQuery, context: Dict[str, Any]
-    ) -> SearchResponse:
-        """
-        Execute hybrid semantic + keyword search.
-
-        Args:
-            processed_query: Processed query
-            context: Search context
-
-        Returns:
-            Combined search response
-        """
-        return self.search_engine.search(
-            query=processed_query.processed,
-            top_k=self.config.max_results,
-            filters=processed_query.filters,
-            method=SearchMethod.HYBRID,
-        )
-
-    def _multi_pass_search(
-        self, processed_query: ProcessedQuery, context: Dict[str, Any]
-    ) -> SearchResponse:
-        """
-        Execute multiple search passes with different approaches.
-
-        Args:
-            processed_query: Processed query
-            context: Search context
-
-        Returns:
-            Combined search response
-        """
-        all_results = []
-        seen_ids = set()
-
-        # Pass 1: Semantic search with original query
-        try:
-            semantic_response = self.search_engine.search(
-                query=processed_query.processed,
-                top_k=max(5, self.config.max_results // 2),
-                filters=processed_query.filters,
-                method=SearchMethod.SEMANTIC,
+            self.logger.warning(
+                f"Unknown strategy {strategy}, falling back to semantic"
             )
+            return await self._semantic_retrieval(query)
 
-            for result in semantic_response.results:
-                if result.id not in seen_ids:
-                    all_results.append(result)
-                    seen_ids.add(result.id)
+    async def _semantic_retrieval(
+        self, query: RetrievalQuery
+    ) -> List[RetrievedDocument]:
+        """Execute semantic similarity retrieval."""
+        top_k = calculate_adaptive_top_k(query, query.max_results)
 
-        except Exception as e:
-            self.logger.warning(f"Semantic search pass failed: {e}")
-
-        # Pass 2: Keyword search if we have good keywords
-        if processed_query.keywords:
-            try:
-                keyword_query = " ".join(processed_query.keywords[:3])  # Top 3 keywords
-                keyword_response = self.search_engine.search(
-                    query=keyword_query,
-                    top_k=max(3, self.config.max_results // 3),
-                    filters=processed_query.filters,
-                    method=SearchMethod.KEYWORD,
-                )
-
-                for result in keyword_response.results:
-                    if result.id not in seen_ids:
-                        all_results.append(result)
-                        seen_ids.add(result.id)
-
-            except Exception as e:
-                self.logger.warning(f"Keyword search pass failed: {e}")
-
-        # Pass 3: Expanded terms search if available
-        if processed_query.expanded_terms:
-            try:
-                expanded_query = " ".join(processed_query.expanded_terms[:3])
-                expanded_response = self.search_engine.search(
-                    query=expanded_query,
-                    top_k=max(2, self.config.max_results // 5),
-                    filters=processed_query.filters,
-                    method=SearchMethod.SEMANTIC,
-                )
-
-                for result in expanded_response.results:
-                    if result.id not in seen_ids:
-                        all_results.append(result)
-                        seen_ids.add(result.id)
-
-            except Exception as e:
-                self.logger.warning(f"Expanded terms search pass failed: {e}")
-
-        # Create combined response
-        from ..vectordb.search import SearchMethod, SearchResponse
-
-        # Sort by relevance score
-        all_results.sort(key=lambda x: x.score, reverse=True)
-
-        # Limit to max results
-        final_results = all_results[: self.config.max_results]
-
-        # Update ranks
-        for i, result in enumerate(final_results):
-            result.rank = i + 1
-
-        return SearchResponse(
-            results=final_results,
-            query=processed_query.processed,
-            method=SearchMethod.HYBRID,  # Multi-pass is a type of hybrid
-            total_time=0.0,  # Will be set by caller
-            total_results=len(final_results),
-            metadata={"multi_pass": True, "passes": 3},
+        results = await self.search_engine.search(
+            query=query.processed_text,
+            top_k=top_k,
+            method="semantic",
+            filters=query.filters,
+            similarity_threshold=query.similarity_threshold,
         )
 
-    def _post_process_results(
-        self, search_response: Optional[SearchResponse], processed_query: ProcessedQuery
-    ) -> List[Dict[str, Any]]:
-        """
-        Post-process search results for final output.
-
-        Args:
-            search_response: Search response to process
-            processed_query: Original processed query
-
-        Returns:
-            List of processed document dictionaries
-        """
-        if not search_response or not search_response.results:
-            return []
-
-        documents = []
-
-        for result in search_response.results:
-            # Filter by minimum similarity threshold
-            if result.score < self.config.min_similarity:
-                continue
-
-            # Create document dictionary
-            document = {
-                "id": result.id,
-                "content": result.content,
-                "metadata": result.metadata,
-                "relevance_score": result.score,
-                "rank": result.rank,
-                "retrieval_metadata": {
-                    "query_type": processed_query.query_type.value,
-                    "matching_keywords": self._find_matching_keywords(
-                        result.content, processed_query.keywords
-                    ),
-                    "content_length": len(result.content),
-                    "has_title": bool(result.metadata.get("title")),
-                    "source": result.metadata.get("source", "unknown"),
-                },
-            }
-
-            documents.append(document)
+        documents = [
+            RetrievedDocument(
+                id=result.get("id", ""),
+                content=result.get("content", ""),
+                score=result.get("score", 0.0),
+                metadata=result.get("metadata", {}),
+                retrieval_method="semantic",
+            )
+            for result in results
+        ]
 
         return documents
 
-    def _find_matching_keywords(self, content: str, keywords: List[str]) -> List[str]:
-        """
-        Find which keywords appear in the content.
+    async def _keyword_retrieval(
+        self, query: RetrievalQuery
+    ) -> List[RetrievedDocument]:
+        """Execute keyword-based retrieval."""
+        top_k = calculate_adaptive_top_k(query, query.max_results)
 
-        Args:
-            content: Document content
-            keywords: List of keywords to check
-
-        Returns:
-            List of matching keywords
-        """
-        content_lower = content.lower()
-        matching = []
-
-        for keyword in keywords:
-            if keyword.lower() in content_lower:
-                matching.append(keyword)
-
-        return matching
-
-    def _calculate_retrieval_confidence(
-        self,
-        processed_query: ProcessedQuery,
-        search_response: Optional[SearchResponse],
-        documents: List[Dict[str, Any]],
-    ) -> float:
-        """
-        Calculate confidence in retrieval results.
-
-        Args:
-            processed_query: Processed query
-            search_response: Search response
-            documents: Final documents
-
-        Returns:
-            Confidence score between 0.0 and 1.0
-        """
-        if not documents:
-            return 0.0
-
-        confidence = processed_query.confidence * 0.4  # Base from query processing
-
-        # Boost for good result count
-        if 3 <= len(documents) <= 8:
-            confidence += 0.2
-        elif 1 <= len(documents) <= 2:
-            confidence += 0.1
-
-        # Boost for high relevance scores
-        if documents:
-            avg_score = sum(doc["relevance_score"] for doc in documents) / len(documents)
-            if avg_score > 0.7:
-                confidence += 0.2
-            elif avg_score > 0.5:
-                confidence += 0.1
-
-        # Boost for keyword matches
-        total_matches = sum(
-            len(doc["retrieval_metadata"]["matching_keywords"]) for doc in documents
-        )
-        if total_matches > len(processed_query.keywords):
-            confidence += 0.1
-
-        # Boost for diverse sources
-        sources = set(doc["retrieval_metadata"]["source"] for doc in documents)
-        if len(sources) > 2:
-            confidence += 0.1
-
-        return max(0.0, min(1.0, confidence))
-
-    def _create_low_confidence_result(
-        self, query: str, processed_query: ProcessedQuery, start_time: float
-    ) -> RetrievalResult:
-        """Create result for low confidence query."""
-        return RetrievalResult(
-            query=query,
-            processed_query=processed_query,
-            documents=[],
-            strategy_used=RetrievalStrategy.SIMPLE,
-            search_time=0.0,
-            total_time=time.time() - start_time,
-            result_count=0,
-            confidence=processed_query.confidence,
-            metadata={
-                "error": "Low query processing confidence",
-                "suggestions": self.query_processor.suggest_query_improvements(processed_query),
-            },
+        results = await self.search_engine.search(
+            query=query.processed_text,
+            top_k=top_k,
+            method="keyword",
+            filters=query.filters,
+            similarity_threshold=query.similarity_threshold,
         )
 
-    def _create_error_result(self, query: str, error: str, start_time: float) -> RetrievalResult:
-        """Create result for retrieval error."""
-        return RetrievalResult(
-            query=query,
-            processed_query=ProcessedQuery(
-                original=query,
-                processed=query,
-                query_type=QueryType.GENERAL,
-                keywords=[],
-                expanded_terms=[],
-                filters={},
-                confidence=0.0,
-                metadata={"error": error},
-            ),
-            documents=[],
-            strategy_used=RetrievalStrategy.SIMPLE,
-            search_time=0.0,
-            total_time=time.time() - start_time,
-            result_count=0,
-            confidence=0.0,
-            metadata={"error": error},
-        )
-
-    def _update_stats(self, strategy: RetrievalStrategy, time_taken: float, success: bool):
-        """Update performance statistics."""
-        self._query_stats["total_queries"] += 1
-        self._query_stats["strategy_usage"][strategy] += 1
-
-        if success:
-            self._query_stats["successful_queries"] += 1
-
-        # Update average time (moving average)
-        total = self._query_stats["total_queries"]
-        current_avg = self._query_stats["average_time"]
-        self._query_stats["average_time"] = (current_avg * (total - 1) + time_taken) / total
-
-    def get_performance_stats(self) -> Dict[str, Any]:
-        """
-        Get retrieval performance statistics.
-
-        Returns:
-            Dictionary with performance metrics
-        """
-        total = self._query_stats["total_queries"]
-        if total == 0:
-            return {"no_queries": True}
-
-        return {
-            "total_queries": total,
-            "success_rate": self._query_stats["successful_queries"] / total,
-            "average_time": self._query_stats["average_time"],
-            "strategy_usage": {
-                strategy.value: count / total
-                for strategy, count in self._query_stats["strategy_usage"].items()
-            },
-        }
-
-    def suggest_retrieval_improvements(self, result: RetrievalResult) -> List[str]:
-        """
-        Suggest improvements for better retrieval results.
-
-        Args:
-            result: Retrieval result to analyze
-
-        Returns:
-            List of improvement suggestions
-        """
-        suggestions = []
-
-        # Low result count
-        if result.result_count == 0:
-            suggestions.append("Probajte proširiti upit ili koristiti sinonime")
-            suggestions.append("Provjerite pravopis ključnih riječi")
-        elif result.result_count < 3:
-            suggestions.append("Upit je možda previše specifičan - probajte generalniji pristup")
-
-        # Low confidence
-        if result.confidence < 0.5:
-            suggestions.extend(
-                self.query_processor.suggest_query_improvements(result.processed_query)
+        documents = [
+            RetrievedDocument(
+                id=result.get("id", ""),
+                content=result.get("content", ""),
+                score=result.get("score", 0.0),
+                metadata=result.get("metadata", {}),
+                retrieval_method="keyword",
             )
+            for result in results
+        ]
 
-        # Strategy-specific suggestions
-        if result.strategy_used == RetrievalStrategy.SIMPLE:
-            if result.processed_query.query_type == QueryType.COMPARISON:
-                suggestions.append("Za usporedbe koristite hibridnu strategiju pretrage")
+        return documents
 
-        # Long retrieval time
-        if result.total_time > 2.0:
-            suggestions.append("Razmotriti skraćivanje upita za brže rezultate")
+    async def _hybrid_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+        """Execute hybrid retrieval combining semantic and keyword approaches."""
+        top_k = calculate_adaptive_top_k(query, query.max_results)
 
-        return suggestions
+        # Execute both approaches concurrently
+        semantic_task = self._semantic_retrieval(query)
+        keyword_task = self._keyword_retrieval(query)
+
+        semantic_docs, keyword_docs = await asyncio.gather(
+            semantic_task, keyword_task, return_exceptions=True
+        )
+
+        # Handle exceptions
+        if isinstance(semantic_docs, Exception):
+            self.logger.warning(f"Semantic retrieval failed: {semantic_docs}")
+            semantic_docs = []
+
+        if isinstance(keyword_docs, Exception):
+            self.logger.warning(f"Keyword retrieval failed: {keyword_docs}")
+            keyword_docs = []
+
+        # Get weights from config
+        strategy_config = self.config.get_strategy_config(RetrievalStrategy.HYBRID)
+        semantic_weight = strategy_config.get("semantic_weight", 0.7)
+        keyword_weight = strategy_config.get("keyword_weight", 0.3)
+
+        # Merge results
+        merged_docs = merge_retrieval_results(
+            semantic_docs, keyword_docs, semantic_weight, keyword_weight
+        )
+
+        return merged_docs
+
+    async def _adaptive_retrieval(
+        self, query: RetrievalQuery
+    ) -> List[RetrievedDocument]:
+        """Execute adaptive retrieval based on query characteristics."""
+        # Get adaptive configuration
+        adaptive_config = self.config.get_adaptive_config(query.query_type)
+
+        # Select sub-strategy based on query type
+        if query.query_type in [QueryType.FACTUAL]:
+            return await self._keyword_retrieval(query)
+        elif query.query_type in [QueryType.CONCEPTUAL, QueryType.EXPLORATORY]:
+            return await self._semantic_retrieval(query)
+        else:
+            return await self._hybrid_retrieval(query)
+
+    async def _multi_pass_retrieval(
+        self, query: RetrievalQuery
+    ) -> List[RetrievedDocument]:
+        """Execute multi-pass retrieval with progressive refinement."""
+        # First pass: broad semantic search
+        broad_query = RetrievalQuery(
+            original_text=query.original_text,
+            processed_text=query.processed_text,
+            query_type=query.query_type,
+            language=query.language,
+            keywords=query.keywords,
+            filters=query.filters,
+            max_results=query.max_results * 2,  # Get more for refinement
+            similarity_threshold=0.0,  # Lower threshold for first pass
+        )
+
+        first_pass = await self._semantic_retrieval(broad_query)
+
+        # If we have enough high-quality results, return them
+        high_quality = [
+            doc for doc in first_pass if doc.score >= query.similarity_threshold
+        ]
+        if len(high_quality) >= query.max_results:
+            return high_quality[: query.max_results]
+
+        # Second pass: keyword search for additional results
+        second_pass = await self._keyword_retrieval(query)
+
+        # Merge and deduplicate
+        all_docs = merge_retrieval_results(first_pass, second_pass)
+
+        # Filter and limit
+        filtered = filter_results_by_threshold(all_docs, query.similarity_threshold)
+        return limit_results(filtered, query.max_results)
+
+    def _post_process_results(
+        self, query: RetrievalQuery, documents: List[RetrievedDocument]
+    ) -> List[RetrievedDocument]:
+        """Apply post-processing to retrieval results."""
+        if not documents:
+            return documents
+
+        # Add query match analysis
+        documents = add_query_match_analysis(query, documents)
+
+        # Apply result ranking
+        documents = self.result_ranker.rank_results(query, documents)
+
+        # Apply final filtering
+        documents = filter_results_by_threshold(documents, query.similarity_threshold)
+        documents = limit_results(documents, query.max_results)
+
+        return documents
 
 
-def create_intelligent_retriever(
-    embedding_model: MultilingualEmbeddingModel,
-    storage: ChromaDBStorage,
-    strategy: RetrievalStrategy = RetrievalStrategy.ADAPTIVE,
-    language: str = "hr",
-) -> IntelligentRetriever:
-    """
-    Factory function to create intelligent retriever.
+# Factory Functions
+def create_retrieval_query(
+    original_text: str,
+    processed_text: str,
+    query_type: QueryType,
+    language: str,
+    keywords: List[str],
+    **kwargs,
+) -> RetrievalQuery:
+    """Factory function to create RetrievalQuery with validation."""
+    return RetrievalQuery(
+        original_text=original_text,
+        processed_text=processed_text,
+        query_type=query_type,
+        language=language,
+        keywords=keywords,
+        **kwargs,
+    )
 
-    Args:
-        embedding_model: Multilingual embedding model
-        storage: ChromaDB storage
-        strategy: Default retrieval strategy
-        language: Language code ('hr' for Croatian, 'en' for English)
 
-    Returns:
-        Configured IntelligentRetriever
-    """
-    from ..vectordb.search import create_search_engine
-    from .query_processor import create_query_processor
-
-    # Create components
-    query_processor = create_query_processor(language=language)
-    search_engine = create_search_engine(embedding_model, storage)
+def create_document_retriever(
+    query_processor: QueryProcessor,
+    search_engine: SearchEngine,
+    result_ranker: ResultRanker,
+    config: RetrievalConfig,
+) -> DocumentRetriever:
+    """Factory function to create DocumentRetriever."""
+    return DocumentRetriever(
+        query_processor=query_processor,
+        search_engine=search_engine,
+        result_ranker=result_ranker,
+        config=config,
+    )

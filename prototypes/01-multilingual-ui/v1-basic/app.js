@@ -28,9 +28,10 @@ class RAGApp {
 
     setupEventListeners() {
         // Interface language switcher
-        document.querySelectorAll('.lang-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const lang = e.target.dataset.lang;
+        document.querySelectorAll('.lang-flag').forEach(flag => {
+            flag.addEventListener('click', (e) => {
+                const flagElement = e.currentTarget;
+                const lang = flagElement.dataset.lang;
                 this.switchInterfaceLanguage(lang);
             });
         });
@@ -117,11 +118,11 @@ class RAGApp {
 
     updateLanguageSwitcher() {
         const currentLang = window.i18n.getCurrentLanguage();
-        document.querySelectorAll('.lang-btn').forEach(btn => {
-            if (btn.dataset.lang === currentLang) {
-                btn.classList.add('active');
+        document.querySelectorAll('.lang-flag').forEach(flag => {
+            if (flag.dataset.lang === currentLang) {
+                flag.classList.add('active');
             } else {
-                btn.classList.remove('active');
+                flag.classList.remove('active');
             }
         });
     }

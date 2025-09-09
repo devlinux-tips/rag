@@ -4,10 +4,11 @@
 
 - You're Senior Architect Developer and think like one.
 - I'm trying to stay a critical and sharp analytical thinker. Whenever you see opportunities in our conversation for planning, brainstorming please push my critical thinking ability.
+- **Always challenge me first** - Question requirements, discuss architectural implications, debate alternatives before implementing. Force discussion and arguments before any hasty decisions. I'll explicitly say when something is concrete and final.
 - If it is easiest to do new file with code/test, etc. than fix something broken, do the new from ground up.
 - When doing refactoring and/or removing or renaming something, do not do incomplete, backward compatible changes, do full changes, ask if have any issues.
 - Always prioritize writing, clean, simple and modular code with DRY principle.
-Ask before hard-coding anything.
+- Ask before hard-coding anything.
 
 ## What this project does
 
@@ -515,6 +516,51 @@ config = get_unified_config()
 - **Interface Segregation**: Small, focused interfaces
 - **Open/Closed**: Open for extension, closed for modification
 
+### **🔧 Systematic Refactoring Protocol**
+
+**CRITICAL**: This protocol MUST be followed for all systematic changes to prevent multiple iterations and bugs.
+
+#### **Discovery → Plan → Execute → Validate Pattern**
+```
+1. DISCOVERY FIRST: Find ALL instances before changing ANY
+   - Use Grep/Glob to find all occurrences
+   - List every file that needs changes
+   - Show user the complete scope
+
+2. PLAN WITH TESTING: Define validation strategy upfront
+   - How will you test each change?
+   - What does "done" look like?
+   - Include compilation/testing in the plan
+
+3. EXECUTE INCREMENTALLY: One file at a time with validation
+   - Change one file
+   - Test compilation immediately
+   - Fix any issues before moving to next file
+
+4. VALIDATE COMPLETELY: Prove everything works before claiming done
+   - Test compilation of ALL changed files
+   - Run relevant tests if available
+   - Never say "done" without proof
+```
+
+#### **Refactoring Communication Patterns**
+**User should request:**
+- "First show me ALL [pattern] you'll change, then fix them with testing"
+- "Don't claim done until everything compiles"
+- "Test each change before moving to the next"
+
+**Claude must respond:**
+- List ALL instances found during discovery
+- Test compilation after each file change
+- Never claim completion without validation proof
+
+#### **Anti-Patterns to Avoid**
+- ❌ Claiming "done" without testing
+- ❌ Making multiple changes without intermediate validation
+- ❌ Introducing syntax errors while "fixing" things
+- ❌ Piecemeal discovery (finding more instances later)
+- ❌ "It should work" without proving it works
+
 ### **🔧 Common Refactoring Issues & Solutions**
 
 #### **Issue 1: TOML Configuration Structure**
@@ -702,6 +748,14 @@ general_config = get_generation_config()  # Missing language-specific templates
 - **Status**: Partially implemented (reduced to 3 chunks)
 - **Strategy**: Implement smart context truncation based on relevance scores
 - **Expected Benefit**: 20-30% speedup for long documents
+
+#### **LLM Configuration and Prompting Strategies**
+- **Priority**: Medium ⚡
+- **Status**: Not implemented
+- **Strategy**: Re-evaluate current model selection and prompt engineering approaches for optimal multilingual performance
+- **Areas of Focus**: Model comparison (qwen2.5 vs alternatives), prompt template optimization, temperature and parameter tuning, Croatian-specific fine-tuning considerations
+- **Expected Benefit**: Improved response quality and potentially faster generation times
+- **Implementation Time**: 1-2 weeks of systematic evaluation
 
 ### **🌐 Feature Enhancements**
 
