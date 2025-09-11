@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 # ===== PURE FUNCTIONS =====
 
 
-def normalize_text_for_bm25(
-    text: str, stop_words: set, min_token_length: int = 3
-) -> List[str]:
+def normalize_text_for_bm25(text: str, stop_words: set, min_token_length: int = 3) -> List[str]:
     """
     Preprocess text for BM25 scoring.
     Pure function - no side effects, deterministic output.
@@ -43,9 +41,7 @@ def normalize_text_for_bm25(
         raise ValueError(f"Stop words must be set, got {type(stop_words)}")
 
     if not isinstance(min_token_length, int) or min_token_length < 1:
-        raise ValueError(
-            f"Min token length must be positive integer, got {min_token_length}"
-        )
+        raise ValueError(f"Min token length must be positive integer, got {min_token_length}")
 
     # Convert to lowercase
     processed_text = text.lower()
@@ -60,9 +56,7 @@ def normalize_text_for_bm25(
     filtered_tokens = [
         token
         for token in tokens
-        if len(token) >= min_token_length
-        and not token.isdigit()
-        and token not in stop_words
+        if len(token) >= min_token_length and not token.isdigit() and token not in stop_words
     ]
 
     return filtered_tokens
@@ -208,14 +202,10 @@ def combine_hybrid_scores(
         )
 
     if not isinstance(dense_weight, (int, float)) or dense_weight < 0:
-        raise ValueError(
-            f"Dense weight must be non-negative number, got {dense_weight}"
-        )
+        raise ValueError(f"Dense weight must be non-negative number, got {dense_weight}")
 
     if not isinstance(sparse_weight, (int, float)) or sparse_weight < 0:
-        raise ValueError(
-            f"Sparse weight must be non-negative number, got {sparse_weight}"
-        )
+        raise ValueError(f"Sparse weight must be non-negative number, got {sparse_weight}")
 
     if dense_weight + sparse_weight == 0:
         raise ValueError("At least one weight must be positive")
@@ -264,9 +254,7 @@ def rank_results_by_score(
         if score_key not in result:
             raise ValueError(f"Result at index {i} missing score key '{score_key}'")
         if not isinstance(result[score_key], (int, float)):
-            raise ValueError(
-                f"Score at index {i} must be number, got {type(result[score_key])}"
-            )
+            raise ValueError(f"Score at index {i} must be number, got {type(result[score_key])}")
 
     # Sort results
     return sorted(results, key=lambda x: x[score_key], reverse=descending)
@@ -320,9 +308,7 @@ class HybridConfig:
     min_score_threshold: float = 0.0
 
     @classmethod
-    def from_validated_config(
-        cls, hybrid_config: HybridRetrievalConfig
-    ) -> "HybridConfig":
+    def from_validated_config(cls, hybrid_config: HybridRetrievalConfig) -> "HybridConfig":
         """Create HybridConfig from validated HybridRetrievalConfig."""
         return cls(
             dense_weight=hybrid_config.dense_weight,
@@ -478,9 +464,7 @@ class BM25Scorer:
 
             # Tokenize all documents
             self.tokenized_docs = [
-                normalize_text_for_bm25(
-                    doc, self.stop_words, self.config.min_token_length
-                )
+                normalize_text_for_bm25(doc, self.stop_words, self.config.min_token_length)
                 for doc in documents
             ]
 
@@ -626,9 +610,7 @@ class HybridRetriever:
                 bm25_scores = normalize_scores(bm25_scores)
 
             # Create content to BM25 score mapping
-            content_to_bm25 = {
-                doc: score for doc, score in zip(self.documents, bm25_scores)
-            }
+            content_to_bm25 = {doc: score for doc, score in zip(self.documents, bm25_scores)}
 
             # Process dense results and combine with BM25
             hybrid_results = []
@@ -639,9 +621,7 @@ class HybridRetriever:
 
                 # Get BM25 score for this content
                 if content not in content_to_bm25:
-                    raise ValueError(
-                        f"Content not indexed in BM25 scorer: {content[:100]}..."
-                    )
+                    raise ValueError(f"Content not indexed in BM25 scorer: {content[:100]}...")
                 bm25_score = content_to_bm25[content]
 
                 # Calculate hybrid score

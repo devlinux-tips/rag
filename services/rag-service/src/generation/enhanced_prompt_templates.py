@@ -189,12 +189,8 @@ def format_context_chunks(
         # Check if adding this chunk would exceed the limit
         if current_length + len(formatted_chunk) > options.max_length:
             # Truncate the last chunk to fit within the limit
-            remaining_space = (
-                options.max_length - current_length - 50
-            )  # Leave some buffer
-            if (
-                remaining_space > options.min_chunk_size
-            ):  # Only add if there's meaningful space
+            remaining_space = options.max_length - current_length - 50  # Leave some buffer
+            if remaining_space > options.min_chunk_size:  # Only add if there's meaningful space
                 truncated_chunk = formatted_chunk[:remaining_space].rsplit(" ", 1)[
                     0
                 ]  # Break at word boundary
@@ -249,9 +245,7 @@ def build_category_prompt(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         context_used=formatted_context,
-        chunks_included=len(context_chunks)
-        if not truncated
-        else len(context_chunks) - 1,
+        chunks_included=len(context_chunks) if not truncated else len(context_chunks) - 1,
         truncated=truncated,
     )
 
@@ -294,19 +288,18 @@ def calculate_template_stats(
         categories[category.value] = {
             "template_count": len(template_dict),
             "template_types": [t.value for t in template_dict.keys()],
-            "avg_template_length": sum(len(t.template) for t in template_dict.values())
-            / len(template_dict)
-            if template_dict
-            else 0,
+            "avg_template_length": (
+                sum(len(t.template) for t in template_dict.values()) / len(template_dict)
+                if template_dict
+                else 0
+            ),
         }
 
-    return TemplateStats(
-        total_categories=len(templates), language=language, categories=categories
-    )
+    return TemplateStats(total_categories=len(templates), language=language, categories=categories)
 
 
 def validate_templates(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]]
+    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
 ) -> ValidationResult:
     """Pure function to validate all templates for common issues."""
     issues = []
@@ -381,15 +374,9 @@ def suggest_template_improvements(
     if (
         "avg_confidence" in usage_stats and usage_stats["avg_confidence"] < 0.7
     ) or "avg_confidence" not in usage_stats:
-        suggestions.append(
-            "Consider more specific system prompts to improve response quality"
-        )
+        suggestions.append("Consider more specific system prompts to improve response quality")
 
-    avg_length = (
-        usage_stats["avg_response_length"]
-        if "avg_response_length" in usage_stats
-        else 200
-    )
+    avg_length = usage_stats["avg_response_length"] if "avg_response_length" in usage_stats else 200
     if avg_length < 100:
         suggestions.append("Templates might be generating too brief responses")
     elif avg_length > 500:
@@ -455,13 +442,9 @@ class _EnhancedPromptBuilder:
 
         # Load configuration
         self._prompt_config = self._config_provider.get_prompt_config(language)
-        self._templates = parse_config_templates(
-            self._prompt_config.category_templates, language
-        )
+        self._templates = parse_config_templates(self._prompt_config.category_templates, language)
 
-        self._log_info(
-            f"Loaded {len(self._templates)} template categories for {language}"
-        )
+        self._log_info(f"Loaded {len(self._templates)} template categories for {language}")
 
     def _log_info(self, message: str) -> None:
         """Log info message if logger available."""
@@ -596,14 +579,10 @@ class _EnhancedPromptBuilder:
         }
 
         if not result.valid:
-            self._log_warning(
-                f"Template validation failed with {len(result.issues)} issues"
-            )
+            self._log_warning(f"Template validation failed with {len(result.issues)} issues")
 
         if result.warnings:
-            self._log_debug(
-                f"Template validation found {len(result.warnings)} warnings"
-            )
+            self._log_debug(f"Template validation found {len(result.warnings)} warnings")
 
         return validation_dict
 
@@ -619,16 +598,12 @@ class _EnhancedPromptBuilder:
         if required_types is None:
             required_types = [PromptType.SYSTEM, PromptType.USER]
 
-        return get_missing_templates(
-            self._templates, required_categories, required_types
-        )
+        return get_missing_templates(self._templates, required_categories, required_types)
 
     def find_templates_by_content(self, search_text: str) -> List[Tuple[str, str]]:
         """Find templates containing specific text."""
         matches = find_template_by_content(self._templates, search_text)
-        return [
-            (category.value, prompt_type.value) for category, prompt_type in matches
-        ]
+        return [(category.value, prompt_type.value) for category, prompt_type in matches]
 
 
 # ================================

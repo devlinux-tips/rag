@@ -355,17 +355,11 @@ def detect_language_content(text: str, language_words: List[str]) -> float:
     total_words = len(text.split())
 
     # Dynamic diacritic expectation based on actual text
-    char_ratio = (
-        char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0
-    )  # 5% threshold
+    char_ratio = char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0  # 5% threshold
     word_ratio = word_score / max(total_words * 0.2, 1)  # 20% common words threshold
 
     # Language-agnostic scoring
-    score = (
-        min((char_ratio + word_ratio) / 2, 1.0)
-        if char_score > 0
-        else min(word_ratio, 1.0)
-    )
+    score = min((char_ratio + word_ratio) / 2, 1.0) if char_score > 0 else min(word_ratio, 1.0)
 
     return score
 
@@ -431,9 +425,7 @@ def clean_text_comprehensive(
     cleaned = text
 
     # Remove document header/footer artifacts
-    cleaned = remove_headers_footers(
-        cleaned, document_cleaning_config.header_footer_patterns
-    )
+    cleaned = remove_headers_footers(cleaned, document_cleaning_config.header_footer_patterns)
     if len(cleaned) != len(text):
         operations.append("header_footer_removal")
 
@@ -521,9 +513,7 @@ class MultilingualTextCleaner:
         )
 
         # Document cleaning configuration
-        doc_cleaning_data = self._config_provider.get_document_cleaning_config(
-            self.language
-        )
+        doc_cleaning_data = self._config_provider.get_document_cleaning_config(self.language)
         self.document_cleaning_config = DocumentCleaningConfig(
             header_footer_patterns=doc_cleaning_data["header_footer_patterns"],
             ocr_corrections=doc_cleaning_data["ocr_corrections"],
@@ -614,9 +604,7 @@ class MultilingualTextCleaner:
 
         # Set language-specific locale (fail-fast approach)
         if self.language_config.locale_primary:
-            self._environment.set_locale(
-                locale.LC_ALL, self.language_config.locale_primary
-            )
+            self._environment.set_locale(locale.LC_ALL, self.language_config.locale_primary)
 
     def _log_debug(self, message: str) -> None:
         """Log debug message if logger available."""
@@ -714,8 +702,6 @@ def setup_language_environment(
 
     config_prov = config_provider or create_config_provider()
     env_prov = create_environment_provider()
-    cleaner = MultilingualTextCleaner(
-        language, config_prov, environment_provider=env_prov
-    )
+    cleaner = MultilingualTextCleaner(language, config_prov, environment_provider=env_prov)
 
     cleaner.setup_language_environment()

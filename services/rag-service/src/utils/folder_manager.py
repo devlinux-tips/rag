@@ -200,14 +200,10 @@ def calculate_folder_structure(
 
     # Language-specific tenant folders
     if language:
-        tenant_shared_str = render_path_template(
-            config.tenant_shared_template, **params
-        )
+        tenant_shared_str = render_path_template(config.tenant_shared_template, **params)
         paths.tenant_shared_documents_lang = Path(tenant_shared_str)
 
-        tenant_processed_str = render_path_template(
-            config.tenant_processed_template, **params
-        )
+        tenant_processed_str = render_path_template(config.tenant_processed_template, **params)
         paths.tenant_shared_processed_lang = Path(tenant_processed_str)
 
     # User-specific folders
@@ -220,14 +216,10 @@ def calculate_folder_structure(
 
         # Language-specific user folders
         if language:
-            user_documents_str = render_path_template(
-                config.user_documents_template, **params
-            )
+            user_documents_str = render_path_template(config.user_documents_template, **params)
             paths.user_documents_lang = Path(user_documents_str)
 
-            user_processed_str = render_path_template(
-                config.user_processed_template, **params
-            )
+            user_processed_str = render_path_template(config.user_processed_template, **params)
             paths.user_processed_lang = Path(user_processed_str)
 
     # Model folders
@@ -303,12 +295,8 @@ def calculate_collection_paths(
     user_params = {**params, "scope": "user", "language": language}
     tenant_params = {**params, "scope": "tenant", "language": language}
 
-    user_collection = render_path_template(
-        config.collection_name_template, **user_params
-    )
-    tenant_collection = render_path_template(
-        config.collection_name_template, **tenant_params
-    )
+    user_collection = render_path_template(config.collection_name_template, **user_params)
+    tenant_collection = render_path_template(config.collection_name_template, **tenant_params)
 
     return CollectionPaths(
         user_collection_name=user_collection,
@@ -344,9 +332,7 @@ def calculate_tenant_cleanup_paths(tenant: Tenant, config: FolderConfig) -> List
     return [tenant_root, models_root]
 
 
-def calculate_usage_stats_paths(
-    tenant: Tenant, config: FolderConfig
-) -> Dict[str, Path]:
+def calculate_usage_stats_paths(tenant: Tenant, config: FolderConfig) -> Dict[str, Path]:
     """Pure function to calculate paths for usage statistics."""
     params = build_template_params(tenant, config=config)
     tenant_root_str = render_path_template(config.tenant_root_template, **params)
@@ -495,9 +481,7 @@ class _TenantFolderManager:
 
         return processed_path
 
-    def get_tenant_chromadb_path(
-        self, tenant: Tenant, create_if_missing: bool = True
-    ) -> Path:
+    def get_tenant_chromadb_path(self, tenant: Tenant, create_if_missing: bool = True) -> Path:
         """Get ChromaDB storage path for tenant."""
         config = self._get_config()
         chromadb_path = calculate_chromadb_path(tenant, config)
@@ -554,9 +538,7 @@ class _TenantFolderManager:
     def cleanup_tenant_folders(self, tenant: Tenant, confirm: bool = False) -> bool:
         """Clean up all folders for a tenant. USE WITH CAUTION."""
         if not confirm:
-            self._log_warning(
-                "Cleanup requires explicit confirmation. Set confirm=True"
-            )
+            self._log_warning("Cleanup requires explicit confirmation. Set confirm=True")
             return False
 
         try:

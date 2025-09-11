@@ -232,9 +232,7 @@ class DependencyAnalyzer:
             report.append("")
 
             # Sort modules by category and name
-            sorted_modules = sorted(
-                modules, key=lambda m: (self.modules[m]["category"], m)
-            )
+            sorted_modules = sorted(modules, key=lambda m: (self.modules[m]["category"], m))
 
             for module in sorted_modules:
                 info = self.modules[module]
@@ -253,13 +251,9 @@ class DependencyAnalyzer:
                 report.append(f"  - Size: {size} lines")
 
                 # Show internal dependencies
-                internal_deps = [
-                    dep for dep in self.dependencies[module] if dep.startswith("src.")
-                ]
+                internal_deps = [dep for dep in self.dependencies[module] if dep.startswith("src.")]
                 if internal_deps:
-                    report.append(
-                        f"  - Dependencies: {', '.join(sorted(internal_deps))}"
-                    )
+                    report.append(f"  - Dependencies: {', '.join(sorted(internal_deps))}")
 
                 report.append("")
 
@@ -304,30 +298,22 @@ class DependencyAnalyzer:
         report.append("## Recommendations")
         report.append("")
         report.append("### 🎯 Refactoring Priorities")
-        report.append(
-            "1. **Legacy Modules**: Consider migrating or removing legacy modules"
-        )
+        report.append("1. **Legacy Modules**: Consider migrating or removing legacy modules")
         report.append(
             "2. **High Dependency Modules**: Review modules with many dependencies for simplification"
         )
-        report.append(
-            "3. **Core Dependencies**: Ensure stability of highly depended-upon modules"
-        )
+        report.append("3. **Core Dependencies**: Ensure stability of highly depended-upon modules")
         report.append("")
 
         report.append("### 📐 Architecture Insights")
-        report.append(
-            "- **Level 0 modules** are foundational and should be most stable"
-        )
+        report.append("- **Level 0 modules** are foundational and should be most stable")
         report.append("- **Provider modules** implement dependency injection patterns")
         report.append("- **Legacy modules** indicate areas needing modernization")
         report.append("")
 
         return "\n".join(report)
 
-    def _generate_detailed_dependency_listing(
-        self, levels: Dict[int, List[str]]
-    ) -> List[str]:
+    def _generate_detailed_dependency_listing(self, levels: Dict[int, List[str]]) -> List[str]:
         """Generate detailed listing of each file and its dependencies."""
         listing = []
 
@@ -341,9 +327,7 @@ class DependencyAnalyzer:
         all_modules.sort(key=lambda x: (x[0], x[1]))  # Sort by dep count, then level
 
         listing.append("### 📋 Complete Module Dependency Reference")
-        listing.append(
-            "*Format: `filename.py` → depends on: [`dependency1.py`, `dependency2.py`]*"
-        )
+        listing.append("*Format: `filename.py` → depends on: [`dependency1.py`, `dependency2.py`]*")
         listing.append("")
 
         current_dep_count = -1
@@ -367,9 +351,7 @@ class DependencyAnalyzer:
             # Get dependencies
             deps = sorted(self.dependencies[module])
             if deps:
-                dep_files = [
-                    dep.replace("src.", "").replace(".", "/") + ".py" for dep in deps
-                ]
+                dep_files = [dep.replace("src.", "").replace(".", "/") + ".py" for dep in deps]
                 deps_str = ", ".join(f"`{dep}`" for dep in dep_files)
                 listing.append(f"- **`{file_name}`** → depends on: [{deps_str}]")
             else:
@@ -388,9 +370,7 @@ class DependencyAnalyzer:
 
             # Show all imports (including external)
             if info["imports"]:
-                external_imports = [
-                    imp for imp in info["imports"] if not imp.startswith("src.")
-                ]
+                external_imports = [imp for imp in info["imports"] if not imp.startswith("src.")]
                 if external_imports:
                     # Group by common prefixes
                     stdlib_imports = [
@@ -416,24 +396,16 @@ class DependencyAnalyzer:
                             "itertools",
                         ]
                     ]
-                    third_party = [
-                        imp for imp in external_imports if imp not in stdlib_imports
-                    ]
+                    third_party = [imp for imp in external_imports if imp not in stdlib_imports]
 
                     ext_imports = []
                     if stdlib_imports:
-                        ext_imports.append(
-                            f"stdlib: {', '.join(sorted(set(stdlib_imports)))}"
-                        )
+                        ext_imports.append(f"stdlib: {', '.join(sorted(set(stdlib_imports)))}")
                     if third_party:
-                        ext_imports.append(
-                            f"3rd-party: {', '.join(sorted(set(third_party)))}"
-                        )
+                        ext_imports.append(f"3rd-party: {', '.join(sorted(set(third_party)))}")
 
                     if ext_imports:
-                        listing.append(
-                            f"  - External imports: {' | '.join(ext_imports)}"
-                        )
+                        listing.append(f"  - External imports: {' | '.join(ext_imports)}")
 
             listing.append("")
 
@@ -465,16 +437,12 @@ def main():
     report = analyzer.generate_report(levels)
 
     # Save report
-    report_file = (
-        "/home/x/src/rag/learn-rag/services/rag-service/DEPENDENCY_ANALYSIS.md"
-    )
+    report_file = "/home/x/src/rag/learn-rag/services/rag-service/DEPENDENCY_ANALYSIS.md"
     with open(report_file, "w", encoding="utf-8") as f:
         f.write(report)
 
     print(f"✅ Report saved to: {report_file}")
-    print(
-        f"📊 Analyzed {len(analyzer.modules)} modules across {len(levels)} dependency levels"
-    )
+    print(f"📊 Analyzed {len(analyzer.modules)} modules across {len(levels)} dependency levels")
 
 
 if __name__ == "__main__":

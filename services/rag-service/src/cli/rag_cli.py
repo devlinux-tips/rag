@@ -133,14 +133,10 @@ class FolderManagerProtocol(Protocol):
     def ensure_context_folders(self, context: Any, language: str) -> bool:
         ...
 
-    def get_collection_storage_paths(
-        self, context: Any, language: str
-    ) -> Dict[str, Any]:
+    def get_collection_storage_paths(self, context: Any, language: str) -> Dict[str, Any]:
         ...
 
-    def get_tenant_folder_structure(
-        self, tenant: Any, user: Any, language: str
-    ) -> Dict[str, Any]:
+    def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> Dict[str, Any]:
         ...
 
     def create_tenant_folder_structure(
@@ -179,9 +175,7 @@ def validate_language_code(language: str) -> str:
     valid_languages = {"hr", "en", "multilingual"}
 
     if language not in valid_languages:
-        raise ValueError(
-            f"Unsupported language: {language}. Supported: {valid_languages}"
-        )
+        raise ValueError(f"Unsupported language: {language}. Supported: {valid_languages}")
 
     return language
 
@@ -242,9 +236,7 @@ def create_tenant_context(tenant_slug: str, user_id: str) -> TenantContext:
         )
 
 
-def format_query_results(
-    result: QueryResult, context: TenantContext, language: str
-) -> List[str]:
+def format_query_results(result: QueryResult, context: TenantContext, language: str) -> List[str]:
     """Format query results for display using pure logic."""
     if not result.success:
         return [
@@ -346,9 +338,7 @@ def format_collection_info(
     return lines
 
 
-def format_system_status(
-    status: SystemStatus, context: TenantContext, language: str
-) -> List[str]:
+def format_system_status(status: SystemStatus, context: TenantContext, language: str) -> List[str]:
     """Format system status using pure logic."""
     lines = [
         f"📊 System status for tenant: {context.tenant_slug}",
@@ -364,12 +354,8 @@ def format_system_status(
         lines.append(f"❌ RAG System: Failed to initialize")
 
     # Folder structure
-    existing_folders = [
-        path for path, exists in status.folder_structure.items() if exists
-    ]
-    missing_folders = [
-        path for path, exists in status.folder_structure.items() if not exists
-    ]
+    existing_folders = [path for path, exists in status.folder_structure.items() if exists]
+    missing_folders = [path for path, exists in status.folder_structure.items() if not exists]
 
     lines.append(
         f"📁 Folder structure ({len(existing_folders)} existing, {len(missing_folders)} missing):"
@@ -399,9 +385,7 @@ def format_system_status(
     return lines
 
 
-def format_create_folders_result(
-    result: Dict[str, Any], context: TenantContext
-) -> List[str]:
+def format_create_folders_result(result: Dict[str, Any], context: TenantContext) -> List[str]:
     """Format create-folders result using pure logic."""
     lines = [
         f"📁 Folder creation result for tenant: {context.tenant_slug}",
@@ -429,9 +413,7 @@ def format_create_folders_result(
         lines.append(f"\n{result['message'] if 'message' in result else ''}")
     else:
         lines.append("❌ Folder creation failed")
-        lines.append(
-            f"Error: {result['error'] if 'error' in result else 'Unknown error'}"
-        )
+        lines.append(f"Error: {result['error'] if 'error' in result else 'Unknown error'}")
 
     return lines
 
@@ -461,9 +443,7 @@ Examples:
     parser.add_argument(
         "--tenant", default="development", help="Tenant slug (default: development)"
     )
-    parser.add_argument(
-        "--user", default="dev_user", help="User ID (default: dev_user)"
-    )
+    parser.add_argument("--user", default="dev_user", help="User ID (default: dev_user)")
     parser.add_argument(
         "--language",
         choices=["hr", "en", "multilingual"],
@@ -486,9 +466,7 @@ Examples:
     query_parser.add_argument(
         "--top-k", type=int, default=5, help="Number of documents to retrieve"
     )
-    query_parser.add_argument(
-        "--no-sources", action="store_true", help="Don't return sources"
-    )
+    query_parser.add_argument("--no-sources", action="store_true", help="Don't return sources")
 
     # Process documents command
     process_parser = subparsers.add_parser("process-docs", help="Process documents")
@@ -643,9 +621,7 @@ class MultiTenantRAGCLI:
     ) -> CollectionInfo:
         """Execute list collections command using pure business logic."""
         try:
-            collections_info = self.folder_manager.get_collection_storage_paths(
-                context, language
-            )
+            collections_info = self.folder_manager.get_collection_storage_paths(context, language)
 
             # Get available collections from storage
             available_collections = self.storage.list_collections()
@@ -656,9 +632,7 @@ class MultiTenantRAGCLI:
             tenant_collection = collections_info["tenant_collection_name"]
 
             if user_collection in available_collections:
-                document_counts[user_collection] = self.storage.get_document_count(
-                    user_collection
-                )
+                document_counts[user_collection] = self.storage.get_document_count(user_collection)
 
             if tenant_collection in available_collections:
                 document_counts[tenant_collection] = self.storage.get_document_count(
@@ -683,9 +657,7 @@ class MultiTenantRAGCLI:
                 document_counts={},
             )
 
-    async def execute_status_command(
-        self, context: TenantContext, language: str
-    ) -> SystemStatus:
+    async def execute_status_command(self, context: TenantContext, language: str) -> SystemStatus:
         """Execute status command using pure business logic."""
         error_messages = []
 
@@ -700,9 +672,7 @@ class MultiTenantRAGCLI:
 
         # Check folder structure
         try:
-            paths = self.folder_manager.get_tenant_folder_structure(
-                context, None, language
-            )
+            paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
             folder_structure = {}
             for path_name, path in paths.items():
                 folder_structure[f"{path_name}: {path}"] = Path(str(path)).exists()
@@ -736,9 +706,7 @@ class MultiTenantRAGCLI:
             existing_folders = []
 
             for language in languages:
-                paths = self.folder_manager.get_tenant_folder_structure(
-                    context, None, language
-                )
+                paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
 
                 for path_name, path in paths.items():
                     path_obj = Path(str(path))
@@ -769,9 +737,7 @@ class MultiTenantRAGCLI:
     async def execute_command(self, args: CLIArgs) -> None:
         """Execute the requested command using pure business logic."""
         if not args.command:
-            self.write_output(
-                ["❌ No command specified. Use --help for available commands."]
-            )
+            self.write_output(["❌ No command specified. Use --help for available commands."])
             return
 
         # Create context using pure function
@@ -812,9 +778,7 @@ class MultiTenantRAGCLI:
                 collection_info = await self.execute_list_collections_command(
                     context, args.language
                 )
-                formatted_output = format_collection_info(
-                    collection_info, context, args.language
-                )
+                formatted_output = format_collection_info(collection_info, context, args.language)
                 self.write_output(formatted_output)
 
             elif args.command == "status":
@@ -823,9 +787,7 @@ class MultiTenantRAGCLI:
                 self.write_output(formatted_output)
 
             elif args.command == "create-folders":
-                result = await self.execute_create_folders_command(
-                    context, args.languages
-                )
+                result = await self.execute_create_folders_command(context, args.languages)
                 formatted_output = format_create_folders_result(result, context)
                 self.write_output(formatted_output)
 
@@ -924,18 +886,14 @@ class MockFolderManager:
     def ensure_context_folders(self, context: Any, language: str) -> bool:
         return True
 
-    def get_collection_storage_paths(
-        self, context: Any, language: str
-    ) -> Dict[str, Any]:
+    def get_collection_storage_paths(self, context: Any, language: str) -> Dict[str, Any]:
         return {
             "user_collection_name": f"user_{context.user_username}_{language}",
             "tenant_collection_name": f"tenant_{context.tenant_slug}_{language}",
             "base_path": f"/mock/path/{context.tenant_slug}",
         }
 
-    def get_tenant_folder_structure(
-        self, tenant: Any, user: Any, language: str
-    ) -> Dict[str, Any]:
+    def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> Dict[str, Any]:
         return {
             "data_folder": Path(f"/mock/{tenant.tenant_slug}/data"),
             "models_folder": Path(f"/mock/{tenant.tenant_slug}/models"),
@@ -1056,9 +1014,7 @@ async def main():
                         if self.tenant_context:
                             # Use proper tenant-specific path from configuration template
                             tenant_slug = self.tenant_context.tenant_slug
-                            persist_dir = os.path.join(
-                                data_base_dir, tenant_slug, "vectordb"
-                            )
+                            persist_dir = os.path.join(data_base_dir, tenant_slug, "vectordb")
                         else:
                             # Fallback for testing without tenant context - still avoid hardcoded "vectordb_cli"
                             persist_dir = os.path.join(data_base_dir, "cli_vectordb")
@@ -1066,9 +1022,7 @@ async def main():
                         os.makedirs(persist_dir, exist_ok=True)
 
                         self._client = chromadb.PersistentClient(path=persist_dir)
-                        print(
-                            f"✅ ChromaDB persistent client initialized: {persist_dir}"
-                        )
+                        print(f"✅ ChromaDB persistent client initialized: {persist_dir}")
 
                         # Create or get collection for this tenant/user/language
                         if self.tenant_context:
@@ -1079,9 +1033,7 @@ async def main():
 
                         # Try to get existing collection first
                         try:
-                            self._collection = self._client.get_collection(
-                                collection_name
-                            )
+                            self._collection = self._client.get_collection(collection_name)
                             existing_count = self._collection.count()
                             print(
                                 f"📦 Found existing collection: {collection_name} ({existing_count} documents)"
@@ -1092,12 +1044,16 @@ async def main():
                                 name=collection_name,
                                 metadata={
                                     "description": f"Documents for tenant:{self.tenant_context.tenant_slug if self.tenant_context else 'unknown'}, user:{self.tenant_context.user_username if self.tenant_context else 'unknown'}, language:{self.language}",
-                                    "tenant": self.tenant_context.tenant_slug
-                                    if self.tenant_context
-                                    else "unknown",
-                                    "user": self.tenant_context.user_username
-                                    if self.tenant_context
-                                    else "unknown",
+                                    "tenant": (
+                                        self.tenant_context.tenant_slug
+                                        if self.tenant_context
+                                        else "unknown"
+                                    ),
+                                    "user": (
+                                        self.tenant_context.user_username
+                                        if self.tenant_context
+                                        else "unknown"
+                                    ),
                                     "language": self.language,
                                 },
                             )
@@ -1111,9 +1067,7 @@ async def main():
                             self._model = SentenceTransformer("BAAI/bge-m3")
                             print("✅ BGE-M3 model loaded successfully")
                         except ImportError:
-                            print(
-                                "⚠️ sentence-transformers not installed, using dummy embeddings"
-                            )
+                            print("⚠️ sentence-transformers not installed, using dummy embeddings")
                             self._model = None
 
                         print(f"🎯 Complete RAG system initialized for {self.language}")
@@ -1122,14 +1076,10 @@ async def main():
                         print(f"❌ Failed to initialize RAG components: {e}")
                         raise e
 
-                async def add_documents(
-                    self, document_paths: list, batch_size: int = 10
-                ):
+                async def add_documents(self, document_paths: list, batch_size: int = 10):
                     """Process documents through complete pipeline: extract → chunk → embed → store."""
                     if not self._collection:
-                        raise RuntimeError(
-                            "RAG system not initialized. Call initialize() first."
-                        )
+                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
 
                     processed_docs = 0
                     total_chunks = 0
@@ -1173,9 +1123,7 @@ async def main():
                             overlap = 50
                             chunks = []
 
-                            for i in range(
-                                0, len(extracted_text), chunk_size - overlap
-                            ):
+                            for i in range(0, len(extracted_text), chunk_size - overlap):
                                 chunk_text = extracted_text[i : i + chunk_size].strip()
                                 if chunk_text:
                                     chunks.append(
@@ -1184,9 +1132,7 @@ async def main():
                                             "chunk_id": f"doc_{processed_docs}_chunk_{len(chunks)}",
                                             "source": str(doc_path),
                                             "start_char": i,
-                                            "end_char": min(
-                                                i + chunk_size, len(extracted_text)
-                                            ),
+                                            "end_char": min(i + chunk_size, len(extracted_text)),
                                         }
                                     )
 
@@ -1204,12 +1150,8 @@ async def main():
                                 # Dummy embeddings if model not available
                                 import numpy as np
 
-                                embeddings = [
-                                    np.random.random(1024).tolist() for _ in chunks
-                                ]
-                                print(
-                                    f"⚠️ Generated {len(embeddings)} dummy embeddings"
-                                )
+                                embeddings = [np.random.random(1024).tolist() for _ in chunks]
+                                print(f"⚠️ Generated {len(embeddings)} dummy embeddings")
 
                             # 4. Real vector storage in ChromaDB
                             if chunks and embeddings:
@@ -1228,9 +1170,7 @@ async def main():
                                     ids=[chunk["chunk_id"] for chunk in chunks],
                                     embeddings=embeddings,
                                 )
-                                print(
-                                    f"✅ Stored {len(chunks)} chunks in vector database"
-                                )
+                                print(f"✅ Stored {len(chunks)} chunks in vector database")
 
                             processed_docs += 1
                             total_chunks += len(chunks)
@@ -1254,18 +1194,16 @@ async def main():
                         "total_chunks": total_chunks,
                         "stored_chunks": stored_count,
                         "processing_time": processing_time,
-                        "documents_per_second": processed_docs / processing_time
-                        if processing_time > 0
-                        else 0,
+                        "documents_per_second": (
+                            processed_docs / processing_time if processing_time > 0 else 0
+                        ),
                         "errors": errors if errors else None,
                     }
 
                 async def query(self, query_obj):
                     """Handle queries with real retrieval and response generation."""
                     if not self._collection:
-                        raise RuntimeError(
-                            "RAG system not initialized. Call initialize() first."
-                        )
+                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
 
                     start_time = time.time()
                     query_text = query_obj.text
@@ -1287,41 +1225,35 @@ async def main():
                         print("🔍 Searching vector database...")
                         results = self._collection.query(
                             query_embeddings=[query_embedding],
-                            n_results=min(
-                                3, self._collection.count()
-                            ),  # Get up to 3 results
+                            n_results=min(3, self._collection.count()),  # Get up to 3 results
                         )
 
                         retrieved_chunks = []
                         context_chunks = []
 
                         if results["documents"][0]:
-                            print(
-                                f"📊 Found {len(results['documents'][0])} relevant chunks"
-                            )
+                            print(f"📊 Found {len(results['documents'][0])} relevant chunks")
 
                             for i, (doc, metadata) in enumerate(
                                 zip(results["documents"][0], results["metadatas"][0])
                             ):
                                 distance = (
-                                    results["distances"][0][i]
-                                    if "distances" in results
-                                    else 0
+                                    results["distances"][0][i] if "distances" in results else 0
                                 )
-                                score = (
-                                    1 - distance
-                                )  # Convert distance to similarity score
+                                score = 1 - distance  # Convert distance to similarity score
 
                                 chunk_data = {
                                     "content": doc,
                                     "similarity_score": score,
                                     "final_score": score,
-                                    "source": metadata["source"]
-                                    if "source" in metadata
-                                    else "Unknown",
-                                    "chunk_id": metadata["chunk_id"]
-                                    if "chunk_id" in metadata
-                                    else f"chunk_{i}",
+                                    "source": (
+                                        metadata["source"] if "source" in metadata else "Unknown"
+                                    ),
+                                    "chunk_id": (
+                                        metadata["chunk_id"]
+                                        if "chunk_id" in metadata
+                                        else f"chunk_{i}"
+                                    ),
                                 }
                                 retrieved_chunks.append(chunk_data)
                                 context_chunks.append(doc)
@@ -1335,9 +1267,7 @@ async def main():
                             context_text = "\n\n".join(context_chunks)
 
                             # Simple answer extraction (similar to test_real_full_rag.py)
-                            sentences = [
-                                s.strip() for s in context_text.split(".") if s.strip()
-                            ]
+                            sentences = [s.strip() for s in context_text.split(".") if s.strip()]
                             relevant_sentences = []
 
                             # Look for sentences containing key terms from the query
@@ -1345,9 +1275,7 @@ async def main():
                             for sentence in sentences:
                                 sentence_lower = sentence.lower()
                                 if any(
-                                    word in sentence_lower
-                                    for word in query_words
-                                    if len(word) > 2
+                                    word in sentence_lower for word in query_words if len(word) > 2
                                 ):
                                     relevant_sentences.append(sentence)
 
@@ -1362,9 +1290,7 @@ async def main():
                                 )
                                 print(f"✅ Generated fallback answer")
                         else:
-                            answer = (
-                                "No relevant documents found in the knowledge base."
-                            )
+                            answer = "No relevant documents found in the knowledge base."
                             print("⚠️ No documents retrieved")
 
                         total_time = time.time() - start_time

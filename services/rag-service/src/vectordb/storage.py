@@ -121,9 +121,7 @@ class VectorCollection(Protocol):
 class VectorDatabase(Protocol):
     """Vector database interface."""
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
         ...
 
     def get_collection(self, name: str) -> VectorCollection:
@@ -170,9 +168,7 @@ def validate_embeddings_for_storage(
         if emb is None:
             raise ValueError(f"Embedding at index {i} is None")
         if not isinstance(emb, np.ndarray):
-            raise ValueError(
-                f"Embedding at index {i} must be numpy array, got {type(emb)}"
-            )
+            raise ValueError(f"Embedding at index {i} must be numpy array, got {type(emb)}")
 
         if expected_dim is not None and emb.shape[0] != expected_dim:
             raise ValueError(
@@ -192,9 +188,7 @@ def prepare_storage_batch(
 ) -> List[Dict[str, Any]]:
     """Prepare documents for batch storage - pure function."""
     if len(documents) != len(embeddings) != len(metadata_list):
-        raise ValueError(
-            "Documents, embeddings, and metadata lists must have same length"
-        )
+        raise ValueError("Documents, embeddings, and metadata lists must have same length")
 
     batches = []
     total_items = len(documents)
@@ -299,9 +293,7 @@ class VectorStorage:
         self.collection: Optional[VectorCollection] = None
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(
-        self, collection_name: str, reset_if_exists: bool = False
-    ) -> None:
+    async def initialize(self, collection_name: str, reset_if_exists: bool = False) -> None:
         """Initialize storage with collection."""
         self.collection = self.database.create_collection(
             name=collection_name, reset_if_exists=reset_if_exists
@@ -337,9 +329,7 @@ class VectorStorage:
             self.collection.add(**batch)
             all_doc_ids.extend(batch["ids"])
 
-        self.logger.info(
-            f"Stored {len(validated_docs)} documents in {len(batches)} batches"
-        )
+        self.logger.info(f"Stored {len(validated_docs)} documents in {len(batches)} batches")
 
         return StorageResult(
             success=True,

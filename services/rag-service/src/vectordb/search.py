@@ -334,13 +334,9 @@ def rerank_results_by_relevance(
 
         # Term overlap boost
         if query_terms:
-            term_overlap = len(query_terms.intersection(content_terms)) / len(
-                query_terms
-            )
+            term_overlap = len(query_terms.intersection(content_terms)) / len(query_terms)
             if "term_overlap" not in boost_factors:
-                raise ValueError(
-                    "Missing 'term_overlap' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'term_overlap' in boost_factors configuration")
             overlap_boost = 1 + (term_overlap * boost_factors["term_overlap"])
         else:
             overlap_boost = 1.0
@@ -349,9 +345,7 @@ def rerank_results_by_relevance(
         content_length = len(result.content)
         if content_length < 100:
             if "length_short" not in boost_factors:
-                raise ValueError(
-                    "Missing 'length_short' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'length_short' in boost_factors configuration")
             length_boost = boost_factors["length_short"]
         elif content_length > 1000:
             if "length_long" not in boost_factors:
@@ -359,9 +353,7 @@ def rerank_results_by_relevance(
             length_boost = boost_factors["length_long"]
         else:
             if "length_optimal" not in boost_factors:
-                raise ValueError(
-                    "Missing 'length_optimal' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'length_optimal' in boost_factors configuration")
             length_boost = boost_factors["length_optimal"]
 
         # Title/metadata boost
@@ -369,9 +361,7 @@ def rerank_results_by_relevance(
             raise ValueError("Missing 'title_boost' in boost_factors configuration")
         title_boost = (
             boost_factors["title_boost"]
-            if result.metadata.get(
-                "title"
-            )  # Keep .get() - metadata from external sources
+            if result.metadata.get("title")  # Keep .get() - metadata from external sources
             else 1.0
         )
 
@@ -516,9 +506,7 @@ class SemanticSearchEngine:
 
             # Filter by threshold
             if query.similarity_threshold > 0:
-                results = filter_results_by_threshold(
-                    results, query.similarity_threshold
-                )
+                results = filter_results_by_threshold(results, query.similarity_threshold)
 
             # Limit results
             results = limit_results(results, query.top_k)
@@ -583,9 +571,7 @@ class SemanticSearchEngine:
 
                 # Re-score using keyword matching
                 for result in results:
-                    keyword_score = calculate_keyword_score(
-                        query_terms, result.content.lower()
-                    )
+                    keyword_score = calculate_keyword_score(query_terms, result.content.lower())
                     result.score = keyword_score
                     result.method_used = "keyword"
 
@@ -603,13 +589,9 @@ class SemanticSearchEngine:
             # Get weights from config - validate required keys
             weights = self.config_provider.get_scoring_weights()
             if "semantic" not in weights:
-                raise ValueError(
-                    "Missing 'semantic' weight in scoring weights configuration"
-                )
+                raise ValueError("Missing 'semantic' weight in scoring weights configuration")
             if "keyword" not in weights:
-                raise ValueError(
-                    "Missing 'keyword' weight in scoring weights configuration"
-                )
+                raise ValueError("Missing 'keyword' weight in scoring weights configuration")
             semantic_weight = weights["semantic"]
             keyword_weight = weights["keyword"]
 
@@ -641,15 +623,11 @@ class SemanticSearchEngine:
 
             # Handle exceptions
             if isinstance(semantic_results, Exception):
-                self.logger.warning(
-                    f"Semantic search failed in hybrid mode: {semantic_results}"
-                )
+                self.logger.warning(f"Semantic search failed in hybrid mode: {semantic_results}")
                 semantic_results = []
 
             if isinstance(keyword_results, Exception):
-                self.logger.warning(
-                    f"Keyword search failed in hybrid mode: {keyword_results}"
-                )
+                self.logger.warning(f"Keyword search failed in hybrid mode: {keyword_results}")
                 keyword_results = []
 
             # Combine results with weighted scoring
@@ -674,9 +652,7 @@ class SemanticSearchEngine:
                     combined_results[result.id].score = combined_score
                 else:
                     # New document from keyword search
-                    result.score = combine_scores(
-                        0.0, result.score, 0.0, keyword_weight
-                    )
+                    result.score = combine_scores(0.0, result.score, 0.0, keyword_weight)
                     result.method_used = "hybrid"
                     combined_results[result.id] = result
 
@@ -725,9 +701,9 @@ class SemanticSearchEngine:
             response = await self.search(similarity_query)
 
             # Filter out the reference document itself
-            similar_results = [
-                result for result in response.results if result.id != document_id
-            ][:top_k]
+            similar_results = [result for result in response.results if result.id != document_id][
+                :top_k
+            ]
 
             return SearchResponse(
                 query=f"Similar to document {document_id}",

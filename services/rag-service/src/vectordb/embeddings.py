@@ -81,9 +81,7 @@ class EmbeddingModel(Protocol):
 class ModelLoader(Protocol):
     """Model loader interface for dependency injection."""
 
-    def load_model(
-        self, model_name: str, cache_dir: str, device: str, **kwargs
-    ) -> EmbeddingModel:
+    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
         """Load embedding model."""
         ...
 
@@ -262,9 +260,7 @@ def validate_embedding_dimensions(
         raise ValueError(f"Expected {num_texts} embeddings, got {embeddings.shape[0]}")
 
     if expected_dim is not None and embeddings.shape[1] != expected_dim:
-        raise ValueError(
-            f"Expected embedding dimension {expected_dim}, got {embeddings.shape[1]}"
-        )
+        raise ValueError(f"Expected embedding dimension {expected_dim}, got {embeddings.shape[1]}")
 
 
 def calculate_embedding_statistics(embeddings: np.ndarray) -> Dict[str, Any]:
@@ -387,9 +383,7 @@ class MultilingualEmbeddingGenerator:
         """
         try:
             # Detect device
-            self._device_info = self.device_detector.detect_best_device(
-                self.config.device
-            )
+            self._device_info = self.device_detector.detect_best_device(self.config.device)
             self.logger.info(f"Using device: {self._device_info.device_type}")
 
             # Load model
@@ -403,9 +397,7 @@ class MultilingualEmbeddingGenerator:
             )
 
             self._is_initialized = True
-            self.logger.info(
-                f"Embedding system initialized with model: {self.config.model_name}"
-            )
+            self.logger.info(f"Embedding system initialized with model: {self.config.model_name}")
 
         except Exception as e:
             self.logger.error(f"Failed to initialize embedding system: {e}")
@@ -433,9 +425,7 @@ class MultilingualEmbeddingGenerator:
             ValueError: If input texts are invalid
         """
         if not self._is_initialized:
-            raise RuntimeError(
-                "Embedding system not initialized. Call initialize() first."
-            )
+            raise RuntimeError("Embedding system not initialized. Call initialize() first.")
 
         import time
 
@@ -446,12 +436,8 @@ class MultilingualEmbeddingGenerator:
             cleaned_texts = validate_texts_for_embedding(texts)
 
             # Determine processing parameters
-            use_normalize = (
-                normalize if normalize is not None else self.config.normalize_embeddings
-            )
-            use_batch_size = (
-                batch_size if batch_size is not None else self.config.batch_size
-            )
+            use_normalize = normalize if normalize is not None else self.config.normalize_embeddings
+            use_batch_size = batch_size if batch_size is not None else self.config.batch_size
 
             # Calculate optimal batch size
             available_memory = None

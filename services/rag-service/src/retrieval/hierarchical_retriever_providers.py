@@ -31,9 +31,7 @@ class MockQueryProcessor:
         """Set mock response for specific query."""
         self.mock_responses[query] = response
 
-    def process_query(
-        self, query: str, context: Optional[Dict[str, Any]] = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """Mock query processing."""
         self.call_history.append({"query": query, "context": context})
 
@@ -192,9 +190,7 @@ class MockReranker:
 
         # Update final scores to show reranking effect
         for i, doc in enumerate(reranked):
-            doc["final_score"] = max(
-                0.1, doc.get("final_score", 0.5) + (0.1 * (len(reranked) - i))
-            )
+            doc["final_score"] = max(0.1, doc.get("final_score", 0.5) + (0.1 * (len(reranked) - i)))
             doc["reranked"] = True
 
         return reranked
@@ -254,9 +250,7 @@ class ProductionQueryProcessor:
                 # Final fallback to basic processor
                 self._processor = None
 
-    def process_query(
-        self, query: str, context: Optional[Dict[str, Any]] = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """Process query using production processor."""
         # Handle case where processor couldn't be initialized
         if self._processor is None:
@@ -355,9 +349,7 @@ class ProductionRerankerAdapter:
         category: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Adapt production reranker to our interface."""
-        return await self._reranker.rerank(
-            query=query, documents=documents, category=category
-        )
+        return await self._reranker.rerank(query=query, documents=documents, category=category)
 
 
 # ================================
@@ -449,9 +441,7 @@ def create_production_setup(
     query_processor = ProductionQueryProcessor(language)
     categorizer = ProductionCategorizer(language)
     search_engine_adapter = ProductionSearchEngineAdapter(search_engine)
-    reranker_adapter = (
-        ProductionRerankerAdapter(reranker, language) if reranker else None
-    )
+    reranker_adapter = ProductionRerankerAdapter(reranker, language) if reranker else None
 
     # Use Python's standard logger
     import logging
@@ -505,9 +495,7 @@ def create_production_setup(
     )
 
 
-def create_test_config(
-    max_results: int = 5, performance_tracking: bool = True
-) -> RetrievalConfig:
+def create_test_config(max_results: int = 5, performance_tracking: bool = True) -> RetrievalConfig:
     """Create test configuration with customizable parameters."""
     return RetrievalConfig(
         default_max_results=max_results,

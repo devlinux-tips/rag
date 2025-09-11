@@ -30,9 +30,7 @@ class DefaultLanguageProvider:
                 )
             return language_config["formal"]
         except Exception as e:
-            raise ConfigurationError(
-                f"Failed to load formal prompts for {language}: {e}"
-            )
+            raise ConfigurationError(f"Failed to load formal prompts for {language}: {e}")
 
     def get_error_template(self, language: str) -> str:
         """Get error message template for language.
@@ -50,9 +48,7 @@ class DefaultLanguageProvider:
                 )
             return language_config["error_message_template"]
         except Exception as e:
-            raise ConfigurationError(
-                f"Failed to load error template for {language}: {e}"
-            )
+            raise ConfigurationError(f"Failed to load error template for {language}: {e}")
 
     def get_confidence_settings(self, language: str) -> Dict[str, Any]:
         """Get confidence calculation settings for language.
@@ -65,9 +61,7 @@ class DefaultLanguageProvider:
 
             return get_language_specific_config("confidence", language)
         except Exception as e:
-            raise ConfigurationError(
-                f"Failed to load confidence settings for {language}: {e}"
-            )
+            raise ConfigurationError(f"Failed to load confidence settings for {language}: {e}")
 
 
 class MockLanguageProvider:
@@ -120,9 +114,7 @@ class MockLanguageProvider:
 
     def get_confidence_settings(self, language: str) -> Dict[str, Any]:
         """Get confidence calculation settings for language."""
-        self.call_log.append(
-            {"method": "get_confidence_settings", "language": language}
-        )
+        self.call_log.append({"method": "get_confidence_settings", "language": language})
 
         if language not in self.confidence_settings:
             return {"error_phrases": [f"mock_error_{language}", "test_failure"]}

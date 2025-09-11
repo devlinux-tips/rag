@@ -13,9 +13,7 @@ from typing import Any, Dict, Type, Union
 import toml
 
 
-def extract_keys_from_config(
-    config: Dict[str, Any], prefix: str = ""
-) -> Dict[str, Type]:
+def extract_keys_from_config(config: Dict[str, Any], prefix: str = "") -> Dict[str, Type]:
     """Extract all keys from config with their types."""
     schema = {}
 
@@ -51,9 +49,7 @@ def main():
     with open("config/hr.toml", "r") as f:
         hr_config = toml.load(f)
 
-    print(
-        f"✅ Loaded configs: main ({len(main_config)} sections), hr ({len(hr_config)} sections)"
-    )
+    print(f"✅ Loaded configs: main ({len(main_config)} sections), hr ({len(hr_config)} sections)")
 
     # Extract schemas
     main_schema = extract_keys_from_config(main_config)
@@ -66,20 +62,14 @@ def main():
     # Generate ConfigValidator schema
     print("\n🔧 Generated MAIN_CONFIG_SCHEMA:")
     for key, typ in sorted(main_schema.items()):
-        print(
-            f'        "{key}": {typ.__name__ if not isinstance(typ, tuple) else typ},'
-        )
+        print(f'        "{key}": {typ.__name__ if not isinstance(typ, tuple) else typ},')
 
     print(f"\n🔧 Generated LANGUAGE_CONFIG_SCHEMA:")
     for key, typ in sorted(language_schema.items()):
-        print(
-            f'        "{key}": {typ.__name__ if not isinstance(typ, tuple) else typ},'
-        )
+        print(f'        "{key}": {typ.__name__ if not isinstance(typ, tuple) else typ},')
 
     print(f"\n🎯 SUMMARY:")
-    print(
-        f"   Main config keys: {len(main_schema)} (was expecting 140+ in ConfigValidator)"
-    )
+    print(f"   Main config keys: {len(main_schema)} (was expecting 140+ in ConfigValidator)")
     print(
         f"   Language config keys: {len(language_schema)} (was expecting 120+ in ConfigValidator)"
     )

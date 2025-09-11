@@ -46,9 +46,7 @@ class MockFileSystemProvider:
 
     def create_folder(self, folder_path: Path) -> bool:
         """Mock folder creation."""
-        self.call_history.append(
-            {"operation": "create_folder", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "create_folder", "path": str(folder_path)})
 
         if self.should_fail.get("create_folder", False):
             return False
@@ -62,9 +60,7 @@ class MockFileSystemProvider:
 
     def folder_exists(self, folder_path: Path) -> bool:
         """Mock folder existence check."""
-        self.call_history.append(
-            {"operation": "folder_exists", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "folder_exists", "path": str(folder_path)})
         path_str = str(folder_path)
         if path_str not in self.existing_folders:
             raise ValueError(f"Mock folder existence not configured for {folder_path}")
@@ -72,9 +68,7 @@ class MockFileSystemProvider:
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Mock folder removal."""
-        self.call_history.append(
-            {"operation": "remove_folder", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "remove_folder", "path": str(folder_path)})
 
         if self.should_fail.get("remove_folder", False):
             return False
@@ -88,9 +82,7 @@ class MockFileSystemProvider:
 
     def get_folder_stats(self, folder_path: Path) -> FolderStats:
         """Mock folder statistics."""
-        self.call_history.append(
-            {"operation": "get_folder_stats", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "get_folder_stats", "path": str(folder_path)})
 
         path_str = str(folder_path)
         if path_str not in self.folder_stats:

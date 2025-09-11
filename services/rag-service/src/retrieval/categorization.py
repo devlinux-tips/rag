@@ -115,9 +115,7 @@ def normalize_query_text(query: str) -> str:
     return normalized
 
 
-def extract_cultural_indicators(
-    query: str, cultural_keywords: Dict[str, List[str]]
-) -> List[str]:
+def extract_cultural_indicators(query: str, cultural_keywords: Dict[str, List[str]]) -> List[str]:
     """
     Extract cultural indicators from query text.
     Pure function with no side effects.
@@ -169,9 +167,7 @@ def calculate_query_complexity(
             query.lower(),
         )
     )
-    conditional_words = len(
-        re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower())
-    )
+    conditional_words = len(re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower()))
     comparative_words = len(
         re.findall(r"\b(više|manje|bolji|gori|better|worse|more|less)\b", query.lower())
     )
@@ -289,9 +285,7 @@ def determine_retrieval_strategy(
 
     # Default strategy - validate required key
     if "default" not in strategy_config:
-        raise ValueError(
-            "Missing 'default' strategy in retrieval_strategies configuration"
-        )
+        raise ValueError("Missing 'default' strategy in retrieval_strategies configuration")
     return strategy_config["default"]
 
 
@@ -398,17 +392,11 @@ class QueryCategorizer:
         if "patterns" not in config_data:
             raise ValueError("Missing 'patterns' in categorization configuration")
         if "cultural_keywords" not in config_data:
-            raise ValueError(
-                "Missing 'cultural_keywords' in categorization configuration"
-            )
+            raise ValueError("Missing 'cultural_keywords' in categorization configuration")
         if "complexity_thresholds" not in config_data:
-            raise ValueError(
-                "Missing 'complexity_thresholds' in categorization configuration"
-            )
+            raise ValueError("Missing 'complexity_thresholds' in categorization configuration")
         if "retrieval_strategies" not in config_data:
-            raise ValueError(
-                "Missing 'retrieval_strategies' in categorization configuration"
-            )
+            raise ValueError("Missing 'retrieval_strategies' in categorization configuration")
 
         self._config = CategorizationConfig(
             categories=config_data["categories"],
@@ -582,9 +570,7 @@ class EnhancedQueryCategorizer(QueryCategorizer):
                 CategoryType.EDUCATION: DocumentCategory.EDUCATIONAL,
             }
             if modern_result.category not in category_mapping:
-                raise ValueError(
-                    f"Missing category mapping for '{modern_result.category}'"
-                )
+                raise ValueError(f"Missing category mapping for '{modern_result.category}'")
             legacy_primary = category_mapping[modern_result.category]
         except (KeyError, AttributeError):
             legacy_primary = DocumentCategory.GENERAL

@@ -20,9 +20,7 @@ class ConfigProvider(Protocol):
         """Load configuration by name."""
         ...
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get language-specific configuration."""
         ...
 
@@ -48,9 +46,7 @@ class ProductionLanguageDataProvider:
                 "language_data", language
             )
             if "stop_words" not in lang_config:
-                raise ValueError(
-                    f"Missing 'stop_words' in language configuration for {language}"
-                )
+                raise ValueError(f"Missing 'stop_words' in language configuration for {language}")
             stop_words = lang_config["stop_words"]
             self._cache[cache_key] = set(stop_words)
 
@@ -132,9 +128,7 @@ class MockLanguageDataProvider:
         """Set mock synonym groups for language."""
         self.synonym_groups[language] = synonyms
 
-    def set_morphological_patterns(
-        self, language: str, patterns: Dict[str, List[str]]
-    ) -> None:
+    def set_morphological_patterns(self, language: str, patterns: Dict[str, List[str]]) -> None:
         """Set mock morphological patterns for language."""
         self.morphological_patterns[language] = patterns
 
@@ -167,9 +161,7 @@ class MockConfigProvider:
         """Set mock configuration."""
         self.configs[config_name] = config
 
-    def set_language_config(
-        self, section: str, language: str, config: Dict[str, Any]
-    ) -> None:
+    def set_language_config(self, section: str, language: str, config: Dict[str, Any]) -> None:
         """Set mock language-specific configuration."""
         key = f"{section}_{language}"
         self.language_configs[key] = config
@@ -178,9 +170,7 @@ class MockConfigProvider:
         """Load mock configuration by name."""
         return self.configs.get(config_name, {})
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get mock language-specific configuration."""
         key = f"{section}_{language}"
         return self.language_configs.get(key, {})

@@ -445,9 +445,7 @@ class MultilingualOllamaClient:
 
         return DefaultLanguageProvider()
 
-    async def generate_text_async(
-        self, request: GenerationRequest
-    ) -> GenerationResponse:
+    async def generate_text_async(self, request: GenerationRequest) -> GenerationResponse:
         """
         Generate text using Ollama with async support.
 
@@ -464,14 +462,10 @@ class MultilingualOllamaClient:
             raise ConnectionError("Ollama service is not available")
 
         # Step 2: Get language-specific configuration
-        formal_prompts = self.language_config_provider.get_formal_prompts(
-            request.language
-        )
+        formal_prompts = self.language_config_provider.get_formal_prompts(request.language)
 
         # Step 3: Build and enhance prompt
-        base_prompt = build_complete_prompt(
-            request.query, request.context, system_prompt=None
-        )
+        base_prompt = build_complete_prompt(request.query, request.context, system_prompt=None)
 
         enhanced_prompt = enhance_prompt_with_formality(
             base_prompt, formal_prompts, self.config.prefer_formal_style
@@ -489,9 +483,7 @@ class MultilingualOllamaClient:
             )
             generated_text = parse_streaming_response(json_lines)
         else:
-            response = await self.http_client.post(
-                url, ollama_request, self.config.timeout
-            )
+            response = await self.http_client.post(url, ollama_request, self.config.timeout)
             generated_text = parse_non_streaming_response(response.json())
 
             # Step 6: Apply text preservation if needed

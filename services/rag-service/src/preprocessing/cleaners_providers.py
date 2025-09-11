@@ -112,9 +112,7 @@ class MockConfigProvider:
         """Set mock cleaning configuration."""
         self.cleaning_config = config
 
-    def set_document_cleaning_config(
-        self, language: str, config: Dict[str, Any]
-    ) -> None:
+    def set_document_cleaning_config(self, language: str, config: Dict[str, Any]) -> None:
         """Set mock document cleaning configuration."""
         self.document_cleaning_configs[language] = config
 
@@ -330,9 +328,7 @@ def create_test_providers(
         },
         "shared_language_configs": {
             language: {
-                "stopwords": {
-                    "words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]
-                },
+                "stopwords": {"words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]},
                 "chars_pattern": r"[^\w\s.,!?:;()-]",
             }
         },

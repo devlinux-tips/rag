@@ -75,9 +75,7 @@ class RetrievalConfig:
 class QueryProcessor(Protocol):
     """Protocol for query processing operations."""
 
-    def process_query(
-        self, query: str, context: Optional[Dict[str, Any]] = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """Process query into structured format."""
         ...
 
@@ -140,9 +138,7 @@ class LoggerProvider(Protocol):
 # ================================
 
 
-def calculate_keyword_boost(
-    content: str, keywords: List[str], boost_weight: float = 0.2
-) -> float:
+def calculate_keyword_boost(content: str, keywords: List[str], boost_weight: float = 0.2) -> float:
     """
     Calculate keyword match boost for content.
     Pure function with no side effects.
@@ -281,14 +277,11 @@ def calculate_faq_boost(content: str, boost_weight: float = 0.1) -> float:
 
     content_lower = content.lower()
     faq_score = (
-        sum(boost_weight for indicator in faq_indicators if indicator in content_lower)
-        * 0.3
+        sum(boost_weight for indicator in faq_indicators if indicator in content_lower) * 0.3
     )  # Moderate FAQ boost
 
     # Question-answer structure boost
-    if any(
-        pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]
-    ):
+    if any(pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]):
         faq_score += 0.2
 
     # Short, concise answer boost (FAQ answers are usually brief)
@@ -334,9 +327,7 @@ def calculate_comparative_boost(content: str, boost_weight: float = 0.1) -> floa
 
     # Structure indicators boost (tables, lists, comparisons)
     structure_indicators = ["|", "vs", "•", "-", "1.", "2.", "prvo", "drugo"]
-    structure_score = sum(
-        0.05 for indicator in structure_indicators if indicator in content
-    )
+    structure_score = sum(0.05 for indicator in structure_indicators if indicator in content)
 
     return comparative_score + structure_score
 
@@ -487,9 +478,7 @@ def filter_results_by_threshold(
     Returns:
         Filtered search results
     """
-    return [
-        result for result in results if result.similarity_score >= similarity_threshold
-    ]
+    return [result for result in results if result.similarity_score >= similarity_threshold]
 
 
 def calculate_overall_confidence(
@@ -635,9 +624,7 @@ class HierarchicalRetriever:
         # Step 2: Map strategy and get threshold
         strategy_type = self._map_retrieval_strategy(categorization.retrieval_strategy)
         if strategy_type.value not in self._config.similarity_thresholds:
-            raise ValueError(
-                f"Missing similarity threshold for strategy '{strategy_type.value}'"
-            )
+            raise ValueError(f"Missing similarity threshold for strategy '{strategy_type.value}'")
         similarity_threshold = self._config.similarity_thresholds[strategy_type.value]
 
         # Step 3: Execute search with expanded results for processing
@@ -654,9 +641,9 @@ class HierarchicalRetriever:
         )
 
         # Step 5: Filter and limit results
-        filtered_results = filter_results_by_threshold(
-            processed_results, similarity_threshold
-        )[:max_results]
+        filtered_results = filter_results_by_threshold(processed_results, similarity_threshold)[
+            :max_results
+        ]
 
         # Step 6: Convert to dict format for compatibility
         result_dicts = [
@@ -765,9 +752,7 @@ class HierarchicalRetriever:
         """Get performance statistics."""
         return {
             "total_retrievals": self._retrieval_count,
-            "strategy_stats": self._strategy_stats.copy()
-            if self._strategy_stats
-            else {},
+            "strategy_stats": self._strategy_stats.copy() if self._strategy_stats else {},
             "reranking_enabled": self._reranker is not None,
             "performance_tracking": self._config.performance_tracking,
         }
@@ -884,9 +869,7 @@ def create_hierarchical_retriever(
                 reranker_instance = DocumentReranker(language=language)
                 from .hierarchical_retriever_providers import ProductionRerankerAdapter
 
-                reranker_component = ProductionRerankerAdapter(
-                    reranker_instance, language
-                )
+                reranker_component = ProductionRerankerAdapter(reranker_instance, language)
             except ImportError:
                 pass  # Reranker not available
 

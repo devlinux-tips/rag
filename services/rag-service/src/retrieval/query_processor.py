@@ -354,9 +354,7 @@ class MultilingualQueryProcessor:
         self._synonym_groups = None
         self._morphological_patterns = None
 
-    def process_query(
-        self, query: str, context: Optional[Dict[str, Any]] = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
         """
         Process a query for multilingual retrieval.
 
@@ -413,9 +411,7 @@ class MultilingualQueryProcessor:
             )
 
         # Step 6: Generate filters using pure function
-        filters = generate_query_filters(
-            processed_query, context, filter_config=self.filter_config
-        )
+        filters = generate_query_filters(processed_query, context, filter_config=self.filter_config)
 
         # Step 7: Calculate confidence using pure function
         confidence = calculate_query_confidence(
@@ -465,9 +461,7 @@ class MultilingualQueryProcessor:
         """Get stop words with caching."""
         if self._stop_words is None:
             if self.language_data_provider:
-                self._stop_words = self.language_data_provider.get_stop_words(
-                    self.config.language
-                )
+                self._stop_words = self.language_data_provider.get_stop_words(self.config.language)
             else:
                 # Fallback to common stop words
                 self._stop_words = {
@@ -493,10 +487,8 @@ class MultilingualQueryProcessor:
         """Get question patterns with caching."""
         if self._question_patterns is None:
             if self.language_data_provider:
-                self._question_patterns = (
-                    self.language_data_provider.get_question_patterns(
-                        self.config.language
-                    )
+                self._question_patterns = self.language_data_provider.get_question_patterns(
+                    self.config.language
                 )
             else:
                 # Fallback to basic patterns
@@ -569,9 +561,7 @@ def create_query_processor(
         Configured MultilingualQueryProcessor instance
     """
     # Create configuration from validated config - no fallbacks needed
-    config = QueryProcessingConfig.from_validated_config(
-        main_config=main_config, language=language
-    )
+    config = QueryProcessingConfig.from_validated_config(main_config=main_config, language=language)
 
     # Create language data provider (can be mocked in tests)
     language_data_provider = None
@@ -667,9 +657,7 @@ class ProductionLanguageDataProvider:
                 shared_config = self.config_provider.get_language_shared(language)
                 # Direct access - ConfigValidator guarantees existence if morphological_patterns exists in config
                 if "morphological_patterns" not in shared_config:
-                    raise ValueError(
-                        "Missing 'morphological_patterns' in shared configuration"
-                    )
+                    raise ValueError("Missing 'morphological_patterns' in shared configuration")
                 self._cache[cache_key] = shared_config["morphological_patterns"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}

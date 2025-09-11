@@ -41,9 +41,9 @@ class AsyncHttpxClient:
             response = await client.get(url, timeout=timeout)
 
             json_data = None
-            if "content-type" in response.headers and response.headers[
-                "content-type"
-            ].startswith("application/json"):
+            if "content-type" in response.headers and response.headers["content-type"].startswith(
+                "application/json"
+            ):
                 json_data = response.json()
 
             return HttpResponse(
@@ -68,9 +68,9 @@ class AsyncHttpxClient:
             response = await client.post(url, json=json_data, timeout=timeout)
 
             json_data_response = None
-            if "content-type" in response.headers and response.headers[
-                "content-type"
-            ].startswith("application/json"):
+            if "content-type" in response.headers and response.headers["content-type"].startswith(
+                "application/json"
+            ):
                 json_data_response = response.json()
 
             return HttpResponse(
@@ -93,9 +93,7 @@ class AsyncHttpxClient:
         lines = []
 
         try:
-            async with client.stream(
-                "POST", url, json=json_data, timeout=timeout
-            ) as response:
+            async with client.stream("POST", url, json=json_data, timeout=timeout) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if line.strip():
@@ -162,9 +160,7 @@ class MockHttpClient:
             return self.responses[key]
 
         # Default response
-        return HttpResponse(
-            status_code=200, content=b'{"models": []}', json_data={"models": []}
-        )
+        return HttpResponse(status_code=200, content=b'{"models": []}', json_data={"models": []})
 
     async def post(
         self, url: str, json_data: Dict[str, Any], timeout: float = 30.0
@@ -238,9 +234,7 @@ class FallbackAsyncClient:
         import requests
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, lambda: requests.get(url, timeout=timeout)
-        )
+        response = await loop.run_in_executor(None, lambda: requests.get(url, timeout=timeout))
 
         return HttpResponse(status_code=response.status_code, content=response.content)
 

@@ -58,9 +58,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
 
     def __init__(self):
         """Initialize mock search provider."""
-        self.documents = (
-            {}
-        )  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
+        self.documents = {}  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
         self.logger = logging.getLogger(__name__)
 
     def add_document(
@@ -213,9 +211,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
             }
         return None
 
-    def _matches_filters(
-        self, metadata: Dict[str, Any], filters: Dict[str, Any]
-    ) -> bool:
+    def _matches_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         """Check if metadata matches filters."""
         for key, value in filters.items():
             if key not in metadata or metadata[key] != value:
@@ -348,9 +344,11 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             query_kwargs = {
                 "query_embeddings": [query_embedding.tolist()],
                 "n_results": top_k,
-                "include": ["documents", "metadatas", "distances"]
-                if include_metadata
-                else ["documents", "distances"],
+                "include": (
+                    ["documents", "metadatas", "distances"]
+                    if include_metadata
+                    else ["documents", "distances"]
+                ),
             }
 
             if filters:
@@ -383,9 +381,11 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             query_kwargs = {
                 "query_texts": [query_text],
                 "n_results": top_k,
-                "include": ["documents", "metadatas", "distances"]
-                if include_metadata
-                else ["documents", "distances"],
+                "include": (
+                    ["documents", "metadatas", "distances"]
+                    if include_metadata
+                    else ["documents", "distances"]
+                ),
             }
 
             if filters:
@@ -411,20 +411,14 @@ class ChromaDBSearchProvider(VectorSearchProvider):
 
             results = await loop.run_in_executor(
                 None,
-                lambda: self.collection.get(
-                    ids=[document_id], include=["documents", "metadatas"]
-                ),
+                lambda: self.collection.get(ids=[document_id], include=["documents", "metadatas"]),
             )
 
             if results and results.get("ids") and results["ids"]:
                 return {
                     "id": document_id,
-                    "content": results["documents"][0]
-                    if results.get("documents")
-                    else "",
-                    "metadata": results["metadatas"][0]
-                    if results.get("metadatas")
-                    else {},
+                    "content": results["documents"][0] if results.get("documents") else "",
+                    "metadata": results["metadatas"][0] if results.get("metadatas") else {},
                 }
 
             return None
@@ -484,9 +478,7 @@ class ProductionConfigProvider(ConfigProvider):
 
         # Validate required weight keys
         if "semantic_weight" not in weights:
-            raise ValueError(
-                "Missing 'semantic_weight' in search weights configuration"
-            )
+            raise ValueError("Missing 'semantic_weight' in search weights configuration")
         if "keyword_weight" not in weights:
             raise ValueError("Missing 'keyword_weight' in search weights configuration")
 
@@ -507,9 +499,7 @@ def create_mock_search_provider() -> VectorSearchProvider:
     return MockVectorSearchProvider()
 
 
-def create_mock_config_provider(
-    custom_config: Optional[Dict[str, Any]] = None
-) -> ConfigProvider:
+def create_mock_config_provider(custom_config: Optional[Dict[str, Any]] = None) -> ConfigProvider:
     """Create mock config provider for testing."""
     return MockConfigProvider(custom_config=custom_config)
 

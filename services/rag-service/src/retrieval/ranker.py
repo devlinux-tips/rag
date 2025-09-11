@@ -87,9 +87,7 @@ class ConfigProvider(Protocol):
     def get_ranking_config(self) -> Dict[str, Any]:
         ...
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         ...
 
 
@@ -208,9 +206,7 @@ def calculate_content_quality_score(
     score -= min(0.2, negative_matches * 0.1)
 
     # Boost for having title
-    has_title = bool(
-        metadata.get("title")
-    )  # Keep .get() - document metadata from external sources
+    has_title = bool(metadata.get("title"))  # Keep .get() - document metadata from external sources
     if has_title:
         score += 0.1
 
@@ -301,9 +297,7 @@ def calculate_language_relevance_score(
     elif language == "en":
         # English capitalization patterns
         sentence_count = len(re.findall(r"[.!?]+", content))
-        capital_starts = len(
-            re.findall(r"(?:^|[.!?]\s+)([A-Z][a-z])", content, re.MULTILINE)
-        )
+        capital_starts = len(re.findall(r"(?:^|[.!?]\s+)([A-Z][a-z])", content, re.MULTILINE))
         capitalization_score = 0.0
         if sentence_count > 0:
             capitalization_ratio = capital_starts / sentence_count
@@ -318,8 +312,7 @@ def calculate_language_relevance_score(
             r"\b(technology|science|research|development|innovation)\b",
         ]
         vocab_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE))
-            for pattern in english_patterns
+            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in english_patterns
         )
         vocab_score = min(0.4, vocab_matches / len(content.split()) * 5)
         score += vocab_score
@@ -441,11 +434,13 @@ def calculate_length_appropriateness_score(
         "content_length": content_length,
         "query_type": query_type,
         "optimal_range": f"{optimal_min}-{optimal_max} chars",
-        "length_category": "optimal"
-        if optimal_min <= content_length <= optimal_max
-        else "too_short"
-        if content_length < optimal_min
-        else "too_long",
+        "length_category": (
+            "optimal"
+            if optimal_min <= content_length <= optimal_max
+            else "too_short"
+            if content_length < optimal_min
+            else "too_long"
+        ),
     }
 
     return score, metadata
@@ -471,9 +466,7 @@ def calculate_query_type_match_score(
 
     # Check type-specific patterns
     patterns = type_patterns[query_type] if query_type in type_patterns else []
-    pattern_matches = sum(
-        len(re.findall(pattern, content_lower)) for pattern in patterns
-    )
+    pattern_matches = sum(len(re.findall(pattern, content_lower)) for pattern in patterns)
     pattern_score = min(0.3, pattern_matches * 0.1)
     score += pattern_score
 
@@ -485,9 +478,7 @@ def calculate_query_type_match_score(
             structural_score = 0.2
     elif query_type == "explanatory":
         # Look for step-by-step or process indicators
-        if re.search(r"\b\d+\.\s+\w+", content) or re.search(
-            r"prvo|drugo|treće", content_lower
-        ):
+        if re.search(r"\b\d+\.\s+\w+", content) or re.search(r"prvo|drugo|treće", content_lower):
             structural_score = 0.2
 
     score += structural_score
@@ -561,9 +552,7 @@ def apply_diversity_filtering(
         for existing_hash in used_content_hashes:
             if len(content_words) == 0 or len(existing_hash) == 0:
                 continue
-            similarity = len(content_words & existing_hash) / len(
-                content_words | existing_hash
-            )
+            similarity = len(content_words & existing_hash) / len(content_words | existing_hash)
             if similarity > diversity_threshold:
                 is_similar = True
                 break
@@ -660,9 +649,7 @@ class DocumentRanker:
 
         context = context or {}
 
-        self.logger.info(
-            f"Ranking {len(documents)} documents using {self.config.method.value}"
-        )
+        self.logger.info(f"Ranking {len(documents)} documents using {self.config.method.value}")
 
         # Step 1: Calculate ranking signals for each document
         ranked_docs = []
@@ -672,9 +659,7 @@ class DocumentRanker:
 
         # Step 2: Apply diversity filtering if enabled
         if self.config.enable_diversity:
-            ranked_docs = apply_diversity_filtering(
-                ranked_docs, self.config.diversity_threshold
-            )
+            ranked_docs = apply_diversity_filtering(ranked_docs, self.config.diversity_threshold)
 
         # Step 3: Final sort by score
         ranked_docs.sort(key=lambda x: x.final_score, reverse=True)
@@ -690,12 +675,8 @@ class DocumentRanker:
         self, document: Dict[str, Any], query: ProcessedQuery, context: Dict[str, Any]
     ) -> RankedDocument:
         """Calculate ranking signals for a single document."""
-        content = document.get(
-            "content", ""
-        )  # Keep .get() - document data from external sources
-        metadata = document.get(
-            "metadata", {}
-        )  # Keep .get() - document data from external sources
+        content = document.get("content", "")  # Keep .get() - document data from external sources
+        metadata = document.get("metadata", {})  # Keep .get() - document data from external sources
         original_score = document.get(
             "relevance_score", 0.0
         )  # Keep .get() - document data from external sources
@@ -712,9 +693,7 @@ class DocumentRanker:
         ranking_signals.append(semantic_signal)
 
         # Signal 2: Keyword relevance
-        keyword_score, keyword_metadata = calculate_keyword_relevance_score(
-            content, query.keywords
-        )
+        keyword_score, keyword_metadata = calculate_keyword_relevance_score(content, query.keywords)
         keyword_signal = RankingSignal(
             name="keyword_relevance",
             score=keyword_score,
@@ -778,9 +757,7 @@ class DocumentRanker:
         }
 
         return RankedDocument(
-            id=document.get(
-                "id", "unknown"
-            ),  # Keep .get() - document data from external sources
+            id=document.get("id", "unknown"),  # Keep .get() - document data from external sources
             content=content,
             metadata=metadata,
             original_score=original_score,

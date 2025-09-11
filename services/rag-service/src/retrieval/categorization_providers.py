@@ -19,9 +19,7 @@ class ProductionConfigProvider:
 
     def get_categorization_config(self, language: str) -> Dict[str, Any]:
         """Get categorization configuration for specified language."""
-        return self._config_loader.get_language_specific_config(
-            "categorization", language
-        )
+        return self._config_loader.get_language_specific_config("categorization", language)
 
 
 class MockConfigProvider:
@@ -32,9 +30,7 @@ class MockConfigProvider:
         self.mock_configs = mock_configs or {}
         self._default_config = self._create_default_test_config()
 
-    def set_categorization_config(
-        self, language: str, config_data: Dict[str, Any]
-    ) -> None:
+    def set_categorization_config(self, language: str, config_data: Dict[str, Any]) -> None:
         """Set mock categorization configuration for specified language."""
         self.mock_configs[f"categorization_{language}"] = config_data
 
@@ -87,9 +83,7 @@ class MockConfigProvider:
 
         if language == "hr":
             # Croatian-specific test patterns
-            base_config["patterns"]["cultural"].extend(
-                ["hrvatska", "dubrovnik", "split", "zagreb"]
-            )
+            base_config["patterns"]["cultural"].extend(["hrvatska", "dubrovnik", "split", "zagreb"])
             base_config["cultural_keywords"]["croatian_test"] = [
                 "test_hr",
                 "test_croatia",
@@ -97,9 +91,7 @@ class MockConfigProvider:
             ]
         elif language == "en":
             # English-specific test patterns
-            base_config["patterns"]["cultural"].extend(
-                ["england", "london", "british", "american"]
-            )
+            base_config["patterns"]["cultural"].extend(["england", "london", "british", "american"])
             base_config["cultural_keywords"]["english_test"] = [
                 "test_en",
                 "test_uk",

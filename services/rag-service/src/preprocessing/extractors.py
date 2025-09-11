@@ -133,9 +133,7 @@ def extract_text_from_pdf_binary(pdf_binary: bytes) -> Tuple[str, int]:
         ImportError: If pypdf is not available
     """
     if not PYPDF_AVAILABLE:
-        raise ImportError(
-            "pypdf is required for PDF extraction. Install with: pip install pypdf"
-        )
+        raise ImportError("pypdf is required for PDF extraction. Install with: pip install pypdf")
 
     from io import BytesIO
 
@@ -302,9 +300,7 @@ class DocumentExtractor:
             )
 
         # Format validation
-        is_valid, error_msg = validate_file_format(
-            file_path, self._config.supported_formats
-        )
+        is_valid, error_msg = validate_file_format(file_path, self._config.supported_formats)
         if not is_valid:
             raise ValueError(error_msg)
 

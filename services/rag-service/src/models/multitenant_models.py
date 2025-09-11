@@ -197,9 +197,7 @@ class Document:
 
     def can_be_promoted_to_tenant(self) -> bool:
         """Check if document can be promoted to tenant scope."""
-        return (
-            self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
-        )
+        return self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
 
     def get_display_name(self) -> str:
         """Get human-readable display name."""
@@ -256,9 +254,7 @@ class SearchQuery:
 
     def add_timing(self, start_time: datetime):
         """Add response timing to query."""
-        self.response_time_ms = int(
-            (datetime.now() - start_time).total_seconds() * 1000
-        )
+        self.response_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
 
 @dataclass
@@ -288,9 +284,7 @@ class CategorizationTemplate:
         score = 0.0
 
         # Check keyword matches
-        keyword_matches = sum(
-            1 for keyword in self.keywords if keyword.lower() in query_lower
-        )
+        keyword_matches = sum(1 for keyword in self.keywords if keyword.lower() in query_lower)
         if self.keywords:
             score += (keyword_matches / len(self.keywords)) * 0.6
 

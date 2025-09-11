@@ -195,8 +195,7 @@ class ProductionConfigProvider:
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language settings: {e}. "
-                f"Please check your configuration files."
+                f"Failed to load language settings: {e}. " f"Please check your configuration files."
             )
 
 
@@ -266,15 +265,12 @@ class ProductionPatternProvider:
                         f"Please check configuration for {lang_code}"
                     )
 
-            return LanguagePatterns(
-                detection_patterns=detection_patterns, stopwords=stopwords
-            )
+            return LanguagePatterns(detection_patterns=detection_patterns, stopwords=stopwords)
 
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language patterns: {e}. "
-                f"Please check your configuration files."
+                f"Failed to load language patterns: {e}. " f"Please check your configuration files."
             )
 
 

@@ -28,9 +28,7 @@ class ConfigProvider(Protocol):
         """Get configuration for specified language."""
         ...
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get specific configuration section for specified language."""
         ...
 
@@ -60,9 +58,7 @@ class ProductionConfigProvider:
         """Get configuration for specified language."""
         return self._config_loader.get_language_config(language)
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get specific configuration section for specified language."""
         return self._config_loader.get_language_specific_config(section, language)
 
@@ -111,15 +107,11 @@ class MockConfigProvider:
             raise KeyError(f"Mock language config '{language}' not found")
         return self.mock_language_configs[language]
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get mock language-specific configuration section."""
         language_config = self.get_language_config(language)
         if section not in language_config:
-            raise KeyError(
-                f"Mock section '{section}' not found in language '{language}'"
-            )
+            raise KeyError(f"Mock section '{section}' not found in language '{language}'")
         return language_config[section]
 
 

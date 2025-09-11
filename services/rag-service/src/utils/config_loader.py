@@ -81,9 +81,7 @@ class ConfigLoader:
 
         # Use dynamic language config file mapping
         language_config_files = self._get_language_config_files()
-        language_file_names = [
-            f.replace(".toml", "") for f in language_config_files.values()
-        ]
+        language_file_names = [f.replace(".toml", "") for f in language_config_files.values()]
 
         if config_name in language_file_names:
             # This is a language-specific config (croatian, english, etc.)
@@ -541,9 +539,7 @@ def get_language_ranking_features(language: str) -> Dict[str, Any]:
     except ConfigError:
         raise
     except Exception as e:
-        raise ConfigError(
-            f"Failed to load language ranking features for '{language}': {e}"
-        )
+        raise ConfigError(f"Failed to load language ranking features for '{language}': {e}")
 
 
 def get_reranking_config() -> Dict[str, Any]:

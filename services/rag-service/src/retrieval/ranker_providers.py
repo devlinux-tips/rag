@@ -104,9 +104,7 @@ class MockConfigProvider(ConfigProvider):
             },
         )
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get language-specific configuration for testing."""
         return self.language_configs.get(language, {})
 
@@ -271,15 +269,11 @@ class ProductionConfigProvider(ConfigProvider):
             raise ValueError("Missing ranking configuration in config files")
         return config
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> Dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         """Get language-specific configuration from config files."""
         config = self._get_language_specific_config(section, language)
         if not config:
-            raise ValueError(
-                f"Missing {section} configuration for language '{language}'"
-            )
+            raise ValueError(f"Missing {section} configuration for language '{language}'")
         return config
 
 
@@ -341,12 +335,16 @@ class ProductionLanguageProvider(LanguageProvider):
 
         # Quality indicators from configuration
         quality_indicators = {
-            "positive": morphology["quality_positive"]
-            if "quality_positive" in morphology
-            else self._get_default_quality_positive(language),
-            "negative": morphology["quality_negative"]
-            if "quality_negative" in morphology
-            else self._get_default_quality_negative(language),
+            "positive": (
+                morphology["quality_positive"]
+                if "quality_positive" in morphology
+                else self._get_default_quality_positive(language)
+            ),
+            "negative": (
+                morphology["quality_negative"]
+                if "quality_negative" in morphology
+                else self._get_default_quality_negative(language)
+            ),
         }
 
         # Cultural patterns from configuration

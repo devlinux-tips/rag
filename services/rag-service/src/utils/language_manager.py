@@ -320,9 +320,7 @@ def get_embedding_model_for_language(
     return config.embedding_model
 
 
-def get_display_name_for_language(
-    languages: Dict[str, LanguageConfig], language_code: str
-) -> str:
+def get_display_name_for_language(languages: Dict[str, LanguageConfig], language_code: str) -> str:
     """Pure function to get human-readable language name."""
     if language_code not in languages:
         raise ValueError(f"Language {language_code} not supported")
@@ -414,9 +412,7 @@ class _LanguageManager:
                 f"Detected language: {result.detected_language} (scores: {result.scores})"
             )
         elif result.fallback_used:
-            self._log_debug(
-                f"No language detected, using default: {result.detected_language}"
-            )
+            self._log_debug(f"No language detected, using default: {result.detected_language}")
 
         return result.detected_language
 
@@ -449,9 +445,7 @@ class _LanguageManager:
         )
 
         if suffix != language_code and language_code not in ["auto", "multilingual"]:
-            self._log_warning(
-                f"Unsupported language {language_code}, using fallback {suffix}"
-            )
+            self._log_warning(f"Unsupported language {language_code}, using fallback {suffix}")
 
         return suffix
 
@@ -464,9 +458,7 @@ class _LanguageManager:
         )
 
         if not is_valid and language_code != "auto":
-            self._log_warning(
-                f"Language {language_code} not supported, using default {normalized}"
-            )
+            self._log_warning(f"Language {language_code} not supported, using default {normalized}")
 
         return normalized
 

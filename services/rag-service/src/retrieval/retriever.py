@@ -316,9 +316,7 @@ def filter_results_by_threshold(
     return [doc for doc in documents if doc.score >= threshold]
 
 
-def limit_results(
-    documents: List[RetrievedDocument], max_results: int
-) -> List[RetrievedDocument]:
+def limit_results(documents: List[RetrievedDocument], max_results: int) -> List[RetrievedDocument]:
     """
     Limit number of results.
 
@@ -358,9 +356,9 @@ def add_query_match_analysis(
         doc.query_match_info.update(
             {
                 "keyword_matches": list(keyword_matches),
-                "keyword_match_ratio": len(keyword_matches) / len(query_terms)
-                if query_terms
-                else 0,
+                "keyword_match_ratio": (
+                    len(keyword_matches) / len(query_terms) if query_terms else 0
+                ),
                 "content_length": len(doc.content),
                 "query_type": query.query_type.value,
                 "language": query.language,
@@ -475,9 +473,7 @@ class DocumentRetriever:
             selected_strategy = select_retrieval_strategy(processed_query)
 
             # Execute retrieval based on strategy
-            documents = await self._execute_retrieval_strategy(
-                processed_query, selected_strategy
-            )
+            documents = await self._execute_retrieval_strategy(processed_query, selected_strategy)
 
             # Apply post-processing
             documents = self._post_process_results(processed_query, documents)
@@ -519,14 +515,10 @@ class DocumentRetriever:
         elif strategy == RetrievalStrategy.MULTI_PASS:
             return await self._multi_pass_retrieval(query)
         else:
-            self.logger.warning(
-                f"Unknown strategy {strategy}, falling back to semantic"
-            )
+            self.logger.warning(f"Unknown strategy {strategy}, falling back to semantic")
             return await self._semantic_retrieval(query)
 
-    async def _semantic_retrieval(
-        self, query: RetrievalQuery
-    ) -> List[RetrievedDocument]:
+    async def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
         """Execute semantic similarity retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
@@ -551,9 +543,7 @@ class DocumentRetriever:
 
         return documents
 
-    async def _keyword_retrieval(
-        self, query: RetrievalQuery
-    ) -> List[RetrievedDocument]:
+    async def _keyword_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
         """Execute keyword-based retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
@@ -602,13 +592,9 @@ class DocumentRetriever:
         # Get weights from config - validate required keys
         strategy_config = self.config.get_strategy_config(RetrievalStrategy.HYBRID)
         if "semantic_weight" not in strategy_config:
-            raise ValueError(
-                "Missing 'semantic_weight' in hybrid strategy configuration"
-            )
+            raise ValueError("Missing 'semantic_weight' in hybrid strategy configuration")
         if "keyword_weight" not in strategy_config:
-            raise ValueError(
-                "Missing 'keyword_weight' in hybrid strategy configuration"
-            )
+            raise ValueError("Missing 'keyword_weight' in hybrid strategy configuration")
         semantic_weight = strategy_config["semantic_weight"]
         keyword_weight = strategy_config["keyword_weight"]
 
@@ -619,9 +605,7 @@ class DocumentRetriever:
 
         return merged_docs
 
-    async def _adaptive_retrieval(
-        self, query: RetrievalQuery
-    ) -> List[RetrievedDocument]:
+    async def _adaptive_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
         """Execute adaptive retrieval based on query characteristics."""
         # Get adaptive configuration
         adaptive_config = self.config.get_adaptive_config(query.query_type)
@@ -634,9 +618,7 @@ class DocumentRetriever:
         else:
             return await self._hybrid_retrieval(query)
 
-    async def _multi_pass_retrieval(
-        self, query: RetrievalQuery
-    ) -> List[RetrievedDocument]:
+    async def _multi_pass_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
         """Execute multi-pass retrieval with progressive refinement."""
         # First pass: broad semantic search
         broad_query = RetrievalQuery(
@@ -653,9 +635,7 @@ class DocumentRetriever:
         first_pass = await self._semantic_retrieval(broad_query)
 
         # If we have enough high-quality results, return them
-        high_quality = [
-            doc for doc in first_pass if doc.score >= query.similarity_threshold
-        ]
+        high_quality = [doc for doc in first_pass if doc.score >= query.similarity_threshold]
         if len(high_quality) >= query.max_results:
             return high_quality[: query.max_results]
 

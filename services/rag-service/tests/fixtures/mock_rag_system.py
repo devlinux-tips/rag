@@ -69,9 +69,7 @@ class MockVectorStorage:
     def __init__(self):
         self._documents = []
 
-    def add_documents(
-        self, documents: List[str], metadatas: List[Dict], embeddings: List
-    ) -> None:
+    def add_documents(self, documents: List[str], metadatas: List[Dict], embeddings: List) -> None:
         for doc, meta, emb in zip(documents, metadatas, embeddings):
             self._documents.append({"content": doc, "metadata": meta, "embedding": emb})
 
@@ -128,9 +126,7 @@ class MockResponseParser:
 class MockPromptBuilder:
     """Mock prompt builder for testing."""
 
-    def build_prompt(
-        self, query: str, context_chunks: List[str], **kwargs
-    ) -> Tuple[str, str]:
+    def build_prompt(self, query: str, context_chunks: List[str], **kwargs) -> Tuple[str, str]:
         system_prompt = "You are a helpful assistant."
         user_prompt = f"Query: {query}\nContext: {' '.join(context_chunks[:2])}"
         return system_prompt, user_prompt
@@ -166,9 +162,7 @@ class MockRetriever:
         return MockResults()
 
 
-def create_mock_rag_system(
-    language: str = "hr", config: Optional[Dict[str, Any]] = None
-):
+def create_mock_rag_system(language: str = "hr", config: Optional[Dict[str, Any]] = None):
     """Create a fully mocked RAG system for testing."""
     from src.pipeline.rag_system import create_rag_system
 

@@ -143,9 +143,7 @@ def check_no_answer_patterns(text: str, no_answer_patterns: List[str]) -> bool:
         raise ValueError(f"Text must be string, got {type(text)}")
 
     if not isinstance(no_answer_patterns, list):
-        raise ValueError(
-            f"No answer patterns must be list, got {type(no_answer_patterns)}"
-        )
+        raise ValueError(f"No answer patterns must be list, got {type(no_answer_patterns)}")
 
     text_lower = text.lower()
 
@@ -202,9 +200,7 @@ def extract_source_references(text: str, source_patterns: List[str]) -> List[str
     return list(dict.fromkeys(sources))
 
 
-def calculate_confidence_score(
-    text: str, confidence_indicators: Dict[str, List[str]]
-) -> float:
+def calculate_confidence_score(text: str, confidence_indicators: Dict[str, List[str]]) -> float:
     """
     Calculate confidence score based on language indicators.
     Pure function - no side effects, deterministic output.
@@ -223,9 +219,7 @@ def calculate_confidence_score(
         raise ValueError(f"Text must be string, got {type(text)}")
 
     if not isinstance(confidence_indicators, dict):
-        raise ValueError(
-            f"Confidence indicators must be dict, got {type(confidence_indicators)}"
-        )
+        raise ValueError(f"Confidence indicators must be dict, got {type(confidence_indicators)}")
 
     text_lower = text.lower()
 
@@ -267,9 +261,7 @@ def calculate_confidence_score(
         return 0.5  # Neutral confidence
 
     # Weight: high=1.0, medium=0.6, low=0.2
-    weighted_score = (
-        high_count * 1.0 + medium_count * 0.6 + low_count * 0.2
-    ) / total_indicators
+    weighted_score = (high_count * 1.0 + medium_count * 0.6 + low_count * 0.2) / total_indicators
 
     return min(max(weighted_score, 0.0), 1.0)
 
@@ -298,16 +290,12 @@ def detect_language_by_patterns(
         raise ValueError(f"Text must be string, got {type(text)}")
 
     if not isinstance(language_patterns, dict):
-        raise ValueError(
-            f"Language patterns must be dict, got {type(language_patterns)}"
-        )
+        raise ValueError(f"Language patterns must be dict, got {type(language_patterns)}")
 
     text_lower = text.lower()
 
     # Count diacritics (Unicode-based detection)
-    diacritic_count = sum(
-        1 for char in text if unicodedata.normalize("NFD", char) != char
-    )
+    diacritic_count = sum(1 for char in text if unicodedata.normalize("NFD", char) != char)
 
     # Score each language
     language_scores = {}
@@ -372,9 +360,7 @@ def format_display_text(
             raise ValueError(f"Confidence must be numeric, got {type(confidence)}")
 
         if confidence < 0.0 or confidence > 1.0:
-            raise ValueError(
-                f"Confidence must be between 0.0 and 1.0, got {confidence}"
-            )
+            raise ValueError(f"Confidence must be between 0.0 and 1.0, got {confidence}")
 
         confidence_labels = confidence_labels or {
             "high": "High Confidence",
@@ -555,17 +541,11 @@ class MultilingualResponseParser:
         )
 
         # Analyze response characteristics
-        has_answer = not check_no_answer_patterns(
-            cleaned_content, self._config.no_answer_patterns
-        )
+        has_answer = not check_no_answer_patterns(cleaned_content, self._config.no_answer_patterns)
 
-        sources = extract_source_references(
-            cleaned_content, self._config.source_patterns
-        )
+        sources = extract_source_references(cleaned_content, self._config.source_patterns)
 
-        confidence = calculate_confidence_score(
-            cleaned_content, self._config.confidence_indicators
-        )
+        confidence = calculate_confidence_score(cleaned_content, self._config.confidence_indicators)
 
         detected_language = detect_language_by_patterns(
             cleaned_content,

@@ -79,9 +79,7 @@ class MockConfigProvider:
             self.config.category_templates[category] = {}
         self.config.category_templates[category][prompt_type] = template
 
-    def remove_template(
-        self, category: DocumentCategory, prompt_type: PromptType
-    ) -> None:
+    def remove_template(self, category: DocumentCategory, prompt_type: PromptType) -> None:
         """Remove a template (for testing missing template scenarios)."""
         if category in self.config.category_templates:
             if prompt_type in self.config.category_templates[category]:
@@ -422,7 +420,7 @@ def create_test_prompt_builder(
 
 
 def build_category_templates(
-    templates: Dict[str, str]
+    templates: Dict[str, str],
 ) -> Dict[DocumentCategory, Dict[PromptType, str]]:
     """Helper to build category templates from flat dictionary."""
     result = {}
@@ -448,9 +446,7 @@ def build_category_templates(
     return result
 
 
-def create_template_variants(
-    base_template: str, variants: Dict[str, str]
-) -> Dict[str, str]:
+def create_template_variants(base_template: str, variants: Dict[str, str]) -> Dict[str, str]:
     """Create template variants by substituting parts of base template."""
     result = {"base": base_template}
 

@@ -182,9 +182,7 @@ def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> s
         if query_type in keyword_patterns:
             keywords = keyword_patterns[query_type]
             if isinstance(keywords, list) and any(
-                keyword.lower() in query_lower
-                for keyword in keywords
-                if isinstance(keyword, str)
+                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
             ):
                 return query_type
 
@@ -192,9 +190,7 @@ def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> s
     for query_type, keywords in keyword_patterns.items():
         if query_type not in priority_order and isinstance(keywords, list):
             if any(
-                keyword.lower() in query_lower
-                for keyword in keywords
-                if isinstance(keyword, str)
+                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
             ):
                 return query_type
 
@@ -387,9 +383,7 @@ class MultilingualRAGPrompts:
         """
         if template_name not in self._config.templates:
             available = list(self._config.templates.keys())
-            raise KeyError(
-                f"Template '{template_name}' not found. Available: {available}"
-            )
+            raise KeyError(f"Template '{template_name}' not found. Available: {available}")
 
         return self._config.templates[template_name]
 

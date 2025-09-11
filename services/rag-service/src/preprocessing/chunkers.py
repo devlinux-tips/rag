@@ -47,12 +47,7 @@ def sliding_window_chunk_positions(
         end = min(start + chunk_size, text_length)
 
         # Adjust to sentence boundary if requested and boundaries available
-        if (
-            end < text_length
-            and respect_sentences
-            and sentence_boundaries
-            and sentence_boundaries
-        ):
+        if end < text_length and respect_sentences and sentence_boundaries and sentence_boundaries:
             # Find nearest sentence boundary within reasonable range
             search_range = min(200, text_length - end)  # Configurable range
             best_end = end
@@ -466,9 +461,7 @@ class DocumentChunker:
             return []
 
         strategy = strategy or self.config.strategy
-        self.logger.info(
-            f"Chunking document {source_file} with strategy '{strategy.value}'"
-        )
+        self.logger.info(f"Chunking document {source_file} with strategy '{strategy.value}'")
 
         # Clean text if cleaner available
         cleaned_text = text
@@ -548,9 +541,7 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(
-            chunk_positions
-        ):
+        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(chunk_positions):
             chunk_text = " ".join(sentence_group).strip()
             start_char = char_offset
             end_char = char_offset + len(chunk_text)
@@ -585,18 +576,11 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(
-            chunk_positions
-        ):
+        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(chunk_positions):
             # Handle oversized paragraph (needs sliding window)
-            if (
-                len(paragraph_group) == 1
-                and len(paragraph_group[0]) > self.config.chunk_size * 1.5
-            ):
+            if len(paragraph_group) == 1 and len(paragraph_group[0]) > self.config.chunk_size * 1.5:
                 # Use sliding window for this paragraph
-                para_chunks = self._sliding_window_chunking(
-                    paragraph_group[0], source_file
-                )
+                para_chunks = self._sliding_window_chunking(paragraph_group[0], source_file)
                 for para_chunk in para_chunks:
                     para_chunk.chunk_index = len(chunks)
                     chunks.append(para_chunk)

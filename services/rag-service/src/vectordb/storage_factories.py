@@ -38,8 +38,7 @@ class ChromaDBCollection(VectorCollection):
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings
                 ]
                 add_kwargs["embeddings"] = embedding_lists
 
@@ -69,8 +68,7 @@ class ChromaDBCollection(VectorCollection):
             if query_embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in query_embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in query_embeddings
                 ]
                 query_kwargs["query_embeddings"] = embedding_lists
 
@@ -149,8 +147,7 @@ class ChromaDBCollection(VectorCollection):
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings
                 ]
                 update_kwargs["embeddings"] = embedding_lists
 
@@ -236,9 +233,7 @@ class ChromaDBDatabase(VectorDatabase):
 
             if self.persist:
                 client = chromadb.PersistentClient(path=self.db_path, settings=settings)
-                self.logger.info(
-                    f"Created persistent ChromaDB client at {self.db_path}"
-                )
+                self.logger.info(f"Created persistent ChromaDB client at {self.db_path}")
             else:
                 client = chromadb.EphemeralClient(settings=settings)
                 self.logger.info("Created ephemeral ChromaDB client")
@@ -249,9 +244,7 @@ class ChromaDBDatabase(VectorDatabase):
             self.logger.error(f"Failed to create ChromaDB client: {e}")
             raise
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
         """Create or get collection."""
         try:
             if reset_if_exists:
@@ -259,18 +252,14 @@ class ChromaDBDatabase(VectorDatabase):
                     self._client.delete_collection(name)
                     self.logger.info(f"Deleted existing collection: {name}")
                 except Exception as e:
-                    self.logger.debug(
-                        f"Collection {name} did not exist for deletion: {e}"
-                    )
+                    self.logger.debug(f"Collection {name} did not exist for deletion: {e}")
 
             # Create or get collection
             collection = self._client.get_or_create_collection(
                 name=name, metadata={"hnsw:space": self.distance_metric}
             )
 
-            self.logger.info(
-                f"Collection '{name}' ready with {self.distance_metric} metric"
-            )
+            self.logger.info(f"Collection '{name}' ready with {self.distance_metric} metric")
             return ChromaDBCollection(collection)
 
         except Exception as e:
@@ -314,9 +303,7 @@ class ChromaDBDatabase(VectorDatabase):
         """Reset entire database."""
         try:
             if not self.allow_reset:
-                raise ValueError(
-                    "Database reset not allowed - check allow_reset setting"
-                )
+                raise ValueError("Database reset not allowed - check allow_reset setting")
 
             self._client.reset()
             self.logger.warning("Database reset - all collections deleted")
@@ -398,9 +385,7 @@ class MockCollection(VectorCollection):
 
         if ids:
             doc_items = [
-                (doc_id, self._documents[doc_id])
-                for doc_id in ids
-                if doc_id in self._documents
+                (doc_id, self._documents[doc_id]) for doc_id in ids if doc_id in self._documents
             ]
         else:
             doc_items = list(self._documents.items())
@@ -480,9 +465,7 @@ class MockDatabase(VectorDatabase):
         self._collections: Dict[str, MockCollection] = {}
         self.logger = logging.getLogger(__name__)
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
         """Create or get mock collection."""
         if reset_if_exists and name in self._collections:
             del self._collections[name]

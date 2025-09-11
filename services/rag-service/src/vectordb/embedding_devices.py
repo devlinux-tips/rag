@@ -256,9 +256,7 @@ class MockDeviceDetector:
 
     def detect_best_device(self, preferred_device: str = "auto") -> DeviceInfo:
         """Mock device detection."""
-        self.call_log.append(
-            {"method": "detect_best_device", "preferred_device": preferred_device}
-        )
+        self.call_log.append({"method": "detect_best_device", "preferred_device": preferred_device})
 
         if self.should_raise:
             exception = self.should_raise

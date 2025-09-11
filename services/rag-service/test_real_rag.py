@@ -56,9 +56,7 @@ async def test_real_document_processing():
             print(f"   Preview: {chunk.content[:100]}...")
 
         print(f"\n🎉 SUCCESS! Real document processed with actual components")
-        print(
-            f"📊 Final result: {len(chunks)} chunks from {len(extracted_text)} characters"
-        )
+        print(f"📊 Final result: {len(chunks)} chunks from {len(extracted_text)} characters")
 
     except Exception as e:
         print(f"❌ Error during processing: {e}")

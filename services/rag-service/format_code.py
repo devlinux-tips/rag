@@ -27,7 +27,7 @@ def run_command(cmd, description):
 
 def main():
     """Format all Python files in the project."""
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent.parent
     venv_python = project_root / "venv" / "bin" / "python"
     venv_black = project_root / "venv" / "bin" / "black"
     venv_isort = project_root / "venv" / "bin" / "isort"
