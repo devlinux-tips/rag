@@ -1,9 +1,7 @@
 """
-Complete Multilingual RAG System V2 - 100% Testable Architecture
-Orchestrates all components through pure functions and dependency injection.
-
-This version separates business logic from framework dependencies, making
-every function testable in isolation.
+Multilingual RAG System orchestrating document processing, retrieval, and generation.
+Coordinates preprocessing, vector storage, semantic search, and LLM generation
+for multilingual document question-answering workflows.
 """
 
 import asyncio
@@ -12,6 +10,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
+
+from ..utils.config_models import EmbeddingConfig, OllamaConfig, ProcessingConfig, RetrievalConfig
 
 
 # Pure data structures
@@ -226,7 +226,12 @@ def create_language_collection_name(language: str) -> str:
         "en": "english_documents",
         "multilingual": "multilingual_documents",
     }
-    return language_collection_map.get(language, f"{language}_documents")
+    # FAIL FAST: Language must be configured
+    if language not in language_collection_map:
+        raise ConfigurationError(
+            f"Unsupported language '{language}'. Supported: {list(language_collection_map.keys())}"
+        )
+    return language_collection_map[language]
 
 
 def validate_document_paths(document_paths: List[str]) -> List[Path]:
@@ -318,8 +323,16 @@ def extract_sources_from_chunks(retrieved_chunks: List[Dict[str, Any]]) -> List[
     """Extract unique sources from retrieved document chunks."""
     sources = set()
     for chunk in retrieved_chunks:
-        metadata = chunk.get("metadata", {})
-        source = metadata.get("source", "Unknown")
+        # FAIL FAST: Chunk must have proper metadata structure
+        if "metadata" not in chunk:
+            raise ValueError(f"Chunk missing required 'metadata' field: {chunk}")
+        metadata = chunk["metadata"]
+
+        if "source" not in metadata:
+            raise ValueError(
+                f"Chunk metadata missing required 'source' field: {metadata}"
+            )
+        source = metadata["source"]
         if source and source != "Unknown":
             sources.add(source)
 
@@ -334,8 +347,12 @@ def prepare_chunk_info(
         "content": chunk_result["content"],
         "similarity_score": chunk_result["similarity_score"],
         "final_score": chunk_result["final_score"],
-        "source": chunk_result["metadata"].get("source", "Unknown"),
-        "chunk_index": chunk_result["metadata"].get("chunk_index", 0),
+        "source": chunk_result["metadata"]["source"]
+        if "source" in chunk_result["metadata"]
+        else "Unknown",
+        "chunk_index": chunk_result["metadata"]["chunk_index"]
+        if "chunk_index" in chunk_result["metadata"]
+        else 0,
     }
 
     if return_debug_info:
@@ -343,7 +360,9 @@ def prepare_chunk_info(
         chunk_info.update(
             {
                 "metadata": result_metadata,
-                "signals": result_metadata.get("ranking_signals", {}),
+                "signals": result_metadata["ranking_signals"]
+                if "ranking_signals" in result_metadata
+                else {},
             }
         )
 
@@ -496,8 +515,8 @@ def calculate_overall_health(component_healths: Dict[str, ComponentHealth]) -> s
 
 
 # Main testable RAG system class
-class RAGSystemV2:
-    """100% testable multilingual RAG system with dependency injection."""
+class RAGSystem:
+    """Multilingual RAG system coordinating document processing, retrieval, and generation."""
 
     def __init__(
         self,
@@ -516,12 +535,20 @@ class RAGSystemV2:
         generation_client: GenerationClientProtocol,
         response_parser: ResponseParserProtocol,
         prompt_builder: PromptBuilderProtocol,
-        # Configuration
-        config: Optional[Dict[str, Any]] = None,
+        # Configuration - validated config objects instead of raw dict
+        embedding_config: Optional[EmbeddingConfig] = None,
+        ollama_config: Optional[OllamaConfig] = None,
+        processing_config: Optional[ProcessingConfig] = None,
+        retrieval_config: Optional[RetrievalConfig] = None,
     ):
         """Initialize with all dependencies injected."""
         self.language = validate_language_code(language)
-        self.config = config or {}
+
+        # Store validated config objects
+        self.embedding_config = embedding_config
+        self.ollama_config = ollama_config
+        self.processing_config = processing_config
+        self.retrieval_config = retrieval_config
 
         # Injected dependencies
         self._document_extractor = document_extractor
@@ -548,6 +575,9 @@ class RAGSystemV2:
         if self._initialized:
             return
 
+        # ConfigValidator integration - validate configs at startup
+        await self._validate_configuration()
+
         # Setup language environment
         self._text_cleaner.setup_language_environment()
 
@@ -558,6 +588,38 @@ class RAGSystemV2:
         self._vector_storage.create_collection()
 
         self._initialized = True
+
+    async def _validate_configuration(self) -> None:
+        """Validate configuration using ConfigValidator - minimal integration."""
+        try:
+            from ..utils.config_loader import get_language_config, load_config
+            from ..utils.config_validator import ConfigurationError, ConfigValidator
+
+            # Load current configs
+            main_config = load_config("config")
+            language_config = get_language_config(self.language)
+
+            # Try ConfigValidator - log result but don't break system
+            try:
+                ConfigValidator.validate_startup_config(
+                    main_config, {self.language: language_config}
+                )
+                logger.info(
+                    "✅ ConfigValidator: All configuration keys validated successfully"
+                )
+            except ConfigurationError as e:
+                # Log warning but continue - development system
+                logger.warning(
+                    f"⚠️  ConfigValidator found missing keys (development mode): {e}"
+                )
+                logger.info("🔧 System will continue with current configuration")
+
+        except ImportError:
+            # ConfigValidator not available - continue normally
+            logger.debug("ConfigValidator not available, skipping validation")
+        except Exception as e:
+            # Any other error - log but don't break startup
+            logger.warning(f"Configuration validation failed: {e}")
 
     async def add_documents(
         self, document_paths: List[str], batch_size: int = 10
@@ -660,13 +722,12 @@ class RAGSystemV2:
         if not self._initialized:
             await self.initialize()
 
-        # Validate query using pure function
-        validated_query = validate_query(query)
-
         start_time = time.time()
         self._query_count += 1
 
         try:
+            # Validate query using pure function
+            validated_query = validate_query(query)
             # Step 1: Hierarchical retrieval
             query_start = time.time()
             hierarchical_results = await self._hierarchical_retriever.retrieve(
@@ -757,7 +818,7 @@ class RAGSystemV2:
             )
 
         except Exception as e:
-            return create_error_response(validated_query, e, start_time)
+            return create_error_response(query, e, start_time)
 
     async def health_check(self) -> SystemHealth:
         """Perform comprehensive health check using pure functions."""
@@ -791,9 +852,10 @@ class RAGSystemV2:
             )
 
             # Check generation components
+            model_name = self.ollama_config.model if self.ollama_config else "unknown"
             generation_health = evaluate_ollama_health(
                 self._generation_client,
-                self.config.get("ollama", {}).get("model", "unknown"),
+                model_name,
             )
 
             components = {
@@ -851,21 +913,21 @@ class RAGSystemV2:
                 "collection_type": f"{self.language}_documents",
             },
             models={
-                "embedding_model": self.config.get("embedding", {}).get(
-                    "model_name", "unknown"
-                ),
-                "llm_model": self.config.get("ollama", {}).get("model", "unknown"),
+                "embedding_model": self.embedding_config.model_name
+                if self.embedding_config
+                else "unknown",
+                "llm_model": self.ollama_config.model
+                if self.ollama_config
+                else "unknown",
                 "device": "auto",
             },
             performance={
-                "chunk_size": self.config.get("processing", {}).get(
-                    "max_chunk_size", 1000
-                ),
-                "max_retrieval": self.config.get("retrieval", {}).get("max_k", 10),
-                "similarity_threshold": self.config.get("retrieval", {}).get(
-                    "min_similarity_score", 0.0
-                ),
-                "timeout": self.config.get("ollama", {}).get("timeout", 60),
+                "chunk_size": 1000,  # Default value - processing config not used for chunk size in stats
+                "max_retrieval": self.retrieval_config.max_k
+                if self.retrieval_config
+                else 10,
+                "similarity_threshold": 0.0,  # Default - retrieval config doesn't have min_similarity_score field
+                "timeout": self.ollama_config.timeout if self.ollama_config else 60,
             },
         )
 
@@ -879,7 +941,7 @@ class RAGSystemV2:
 
 
 # Factory functions for creating instances
-def create_rag_system_v2(
+def create_rag_system(
     language: str,
     document_extractor: DocumentExtractorProtocol,
     text_cleaner: TextCleanerProtocol,
@@ -894,10 +956,13 @@ def create_rag_system_v2(
     generation_client: GenerationClientProtocol,
     response_parser: ResponseParserProtocol,
     prompt_builder: PromptBuilderProtocol,
-    config: Optional[Dict[str, Any]] = None,
-) -> RAGSystemV2:
-    """Factory function to create RAG system with dependency injection."""
-    return RAGSystemV2(
+    embedding_config: Optional[EmbeddingConfig] = None,
+    ollama_config: Optional[OllamaConfig] = None,
+    processing_config: Optional[ProcessingConfig] = None,
+    retrieval_config: Optional[RetrievalConfig] = None,
+) -> RAGSystem:
+    """Factory function to create RAG system with validated config dependency injection."""
+    return RAGSystem(
         language=language,
         document_extractor=document_extractor,
         text_cleaner=text_cleaner,
@@ -912,189 +977,11 @@ def create_rag_system_v2(
         generation_client=generation_client,
         response_parser=response_parser,
         prompt_builder=prompt_builder,
-        config=config,
+        embedding_config=embedding_config,
+        ollama_config=ollama_config,
+        processing_config=processing_config,
+        retrieval_config=retrieval_config,
     )
 
 
-# Mock implementations for testing
-class MockDocumentExtractor:
-    """Mock document extractor for testing."""
-
-    def extract_text(self, file_path: Path) -> str:
-        return f"Mock content from {file_path.name}"
-
-
-class MockTextCleaner:
-    """Mock text cleaner for testing."""
-
-    def clean_text(self, text: str) -> str:
-        return text.strip()
-
-    def setup_language_environment(self) -> None:
-        pass
-
-
-class MockDocumentChunker:
-    """Mock document chunker for testing."""
-
-    def chunk_document(self, content: str, source_file: str) -> List[Any]:
-        # Create simple mock chunks
-        class MockChunk:
-            def __init__(self, content: str, idx: int):
-                self.content = content
-                self.chunk_id = f"chunk_{idx}"
-                self.start_char = 0
-                self.end_char = len(content)
-                self.word_count = len(content.split())
-                self.char_count = len(content)
-
-        # Split content into chunks of ~100 chars
-        chunks = []
-        chunk_size = 100
-        for i in range(0, len(content), chunk_size):
-            chunk_content = content[i : i + chunk_size]
-            chunks.append(MockChunk(chunk_content, i // chunk_size))
-
-        return chunks
-
-
-class MockEmbeddingModel:
-    """Mock embedding model for testing."""
-
-    def encode_text(self, text: str) -> List[float]:
-        # Return deterministic mock embeddings based on text hash
-        import hashlib
-
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        # Convert hash to numbers
-        numbers = [ord(c) / 255.0 for c in text_hash[:10]]  # 10-dim embedding
-        return numbers
-
-    def load_model(self) -> None:
-        pass
-
-
-class MockVectorStorage:
-    """Mock vector storage for testing."""
-
-    def __init__(self):
-        self._documents = []
-
-    def add_documents(
-        self, documents: List[str], metadatas: List[Dict], embeddings: List
-    ) -> None:
-        for doc, meta, emb in zip(documents, metadatas, embeddings):
-            self._documents.append({"content": doc, "metadata": meta, "embedding": emb})
-
-    def create_collection(self) -> None:
-        pass
-
-    def get_document_count(self) -> int:
-        return len(self._documents)
-
-    async def close(self) -> None:
-        pass
-
-
-class MockGenerationClient:
-    """Mock generation client for testing."""
-
-    def __init__(self, healthy: bool = True, available_models: List[str] = None):
-        self.healthy = healthy
-        self.available_models = available_models or ["mock-model"]
-
-    async def generate_text_async(self, request: Any) -> Any:
-        class MockResponse:
-            text = "Mock generated response"
-            model = "mock-model"
-            tokens_used = 50
-            confidence = 0.8
-            metadata = {}
-
-        return MockResponse()
-
-    def health_check(self) -> bool:
-        return self.healthy
-
-    def get_available_models(self) -> List[str]:
-        return self.available_models
-
-    async def close(self) -> None:
-        pass
-
-
-class MockResponseParser:
-    """Mock response parser for testing."""
-
-    def parse_response(self, text: str, query: str, context: List[str]) -> Any:
-        class MockParsedResponse:
-            content = text
-            confidence = 0.8
-            language = "en"
-            sources_mentioned = []
-
-        return MockParsedResponse()
-
-
-class MockPromptBuilder:
-    """Mock prompt builder for testing."""
-
-    def build_prompt(
-        self, query: str, context_chunks: List[str], **kwargs
-    ) -> Tuple[str, str]:
-        system_prompt = "You are a helpful assistant."
-        user_prompt = f"Query: {query}\nContext: {' '.join(context_chunks[:2])}"
-        return system_prompt, user_prompt
-
-
-class MockRetriever:
-    """Mock retriever for testing."""
-
-    async def retrieve(
-        self, query: str, max_results: int = 5, context: Optional[Dict] = None
-    ) -> Any:
-        class MockCategory:
-            value = "general"
-
-        class MockStrategy:
-            value = "standard"
-
-        class MockResults:
-            category = MockCategory()
-            strategy_used = MockStrategy()
-            confidence = 0.8
-            routing_metadata = {}
-            retrieval_time = 0.1
-            documents = [
-                {
-                    "content": f"Mock retrieved content for query: {query}",
-                    "similarity_score": 0.9,
-                    "final_score": 0.9,
-                    "metadata": {"source": "mock_doc.txt", "chunk_index": 0},
-                }
-            ]
-
-        return MockResults()
-
-
-def create_mock_rag_system(
-    language: str = "hr", config: Optional[Dict[str, Any]] = None
-) -> RAGSystemV2:
-    """Create a fully mocked RAG system for testing."""
-    return create_rag_system_v2(
-        language=language,
-        document_extractor=MockDocumentExtractor(),
-        text_cleaner=MockTextCleaner(),
-        document_chunker=MockDocumentChunker(),
-        embedding_model=MockEmbeddingModel(),
-        vector_storage=MockVectorStorage(),
-        search_engine=None,  # Not used directly in current implementation
-        query_processor=None,  # Not used directly in current implementation
-        retriever=MockRetriever(),
-        hierarchical_retriever=MockRetriever(),
-        ranker=None,  # Not used directly in current implementation
-        generation_client=MockGenerationClient(),
-        response_parser=MockResponseParser(),
-        prompt_builder=MockPromptBuilder(),
-        config=config,
-    )
+# Note: Mock implementations have been moved to tests/fixtures/mock_rag_system.py

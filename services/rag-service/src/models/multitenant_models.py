@@ -137,7 +137,9 @@ class User:
         from src.utils.config_loader import get_shared_config
 
         config = get_shared_config()
-        default_lang = config["languages"].get("default", "en")
+        if "default" not in config["languages"]:
+            raise ValueError("Missing 'default' in languages configuration")
+        default_lang = config["languages"]["default"]
         return [default_lang]
 
     def can_upload_documents(self) -> bool:

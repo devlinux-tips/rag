@@ -258,8 +258,10 @@ class ChromaDBDatabase(VectorDatabase):
                 try:
                     self._client.delete_collection(name)
                     self.logger.info(f"Deleted existing collection: {name}")
-                except Exception:
-                    pass  # Collection might not exist
+                except Exception as e:
+                    self.logger.debug(
+                        f"Collection {name} did not exist for deletion: {e}"
+                    )
 
             # Create or get collection
             collection = self._client.get_or_create_collection(

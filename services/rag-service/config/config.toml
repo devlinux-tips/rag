@@ -95,7 +95,7 @@ log_to_file = true
 [embeddings]
 # Primary embedding model settings
 model_name = "BAAI/bge-m3"  # Primary multilingual model
-device = "auto"  # Uses shared.default_device
+device = "cpu"  # Uses shared.default_device
 max_seq_length = 512
 batch_size = 32  # Uses shared.default_batch_size
 normalize_embeddings = true

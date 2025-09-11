@@ -449,8 +449,7 @@ class ProductionConfigProvider(ConfigProvider):
         else:
             # Use default config loader if available
             try:
-                from ..utils.config_loader import (get_search_config,
-                                                   get_shared_config)
+                from ..utils.config_loader import get_search_config, get_shared_config
 
                 self.get_search_config_func = get_search_config
                 self.get_shared_config_func = get_shared_config
@@ -479,10 +478,21 @@ class ProductionConfigProvider(ConfigProvider):
     def get_scoring_weights(self) -> Dict[str, float]:
         """Get scoring weights from configuration."""
         search_config = self.get_search_config()
-        weights = search_config.get("weights", {})
+        if "weights" not in search_config:
+            raise ValueError("Missing 'weights' section in search configuration")
+        weights = search_config["weights"]
+
+        # Validate required weight keys
+        if "semantic_weight" not in weights:
+            raise ValueError(
+                "Missing 'semantic_weight' in search weights configuration"
+            )
+        if "keyword_weight" not in weights:
+            raise ValueError("Missing 'keyword_weight' in search weights configuration")
+
         return {
-            "semantic": weights.get("semantic_weight", 0.7),
-            "keyword": weights.get("keyword_weight", 0.3),
+            "semantic": weights["semantic_weight"],
+            "keyword": weights["keyword_weight"],
         }
 
 

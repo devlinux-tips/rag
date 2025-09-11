@@ -2,7 +2,7 @@
 Multilingual document preprocessing pipeline for RAG.
 """
 
-from .chunkers import DocumentChunker, TextChunk, chunk_document
+from .chunkers import DocumentChunker, TextChunk
 from .cleaners import (
     MultilingualTextCleaner,
     detect_language_content,
@@ -21,5 +21,4 @@ __all__ = [
     "setup_language_environment",
     "DocumentChunker",
     "TextChunk",
-    "chunk_document",
 ]

@@ -1,14 +1,17 @@
 """
 Provider implementations for enhanced prompt templates dependency injection.
-Production and mock providers for 100% testable prompt template system.
+Production and mock providers for configurable prompt template system.
 """
 
 import logging
 from typing import Dict, List, Optional
 
-from src.generation.enhanced_prompt_templates import (ConfigProvider,
-                                                      LoggerProvider,
-                                                      PromptConfig, PromptType)
+from src.generation.enhanced_prompt_templates import (
+    ConfigProvider,
+    LoggerProvider,
+    PromptConfig,
+    PromptType,
+)
 from src.retrieval.categorization import DocumentCategory
 
 # ================================
@@ -134,7 +137,9 @@ class MockLoggerProvider:
     def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
         """Get captured messages by level or all messages."""
         if level:
-            return self.messages.get(level, [])
+            if level not in self.messages:
+                return []
+            return self.messages[level]
         return self.messages
 
 
@@ -195,35 +200,9 @@ class ProductionConfigProvider:
             )
 
         except Exception as e:
-            # Fallback to basic configuration if loading fails
-            return self._create_fallback_config(language)
-
-    def _create_fallback_config(self, language: str) -> PromptConfig:
-        """Create fallback configuration when system config fails."""
-        category_templates = {
-            DocumentCategory.GENERAL: {
-                PromptType.SYSTEM: "You are a helpful assistant. Answer questions based on the provided context.",
-                PromptType.USER: "Question: {query}\n\nContext: {context}\n\nPlease provide a helpful answer based on the context above.",
-            }
-        }
-
-        messages = {
-            "no_context": "No relevant context available.",
-            "error_template_missing": "Template not found.",
-        }
-
-        formatting = {
-            "source_label": "Source",
-            "truncation_indicator": "...",
-            "min_chunk_size": "100",
-        }
-
-        return PromptConfig(
-            category_templates=category_templates,
-            messages=messages,
-            formatting=formatting,
-            language=language,
-        )
+            raise RuntimeError(
+                f"Failed to load prompt configuration for language '{language}': {e}"
+            )
 
 
 class StandardLoggerProvider:

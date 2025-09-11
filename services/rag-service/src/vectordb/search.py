@@ -1,5 +1,5 @@
 """
-100% testable similarity search implementation for multilingual RAG system.
+Similarity search implementation for multilingual RAG system.
 Clean slate architecture with pure functions and dependency injection.
 """
 
@@ -79,7 +79,7 @@ class SearchMethod(Enum):
     HYBRID = "hybrid"
 
 
-# Protocol-based Dependencies (100% testable interfaces)
+# Protocol-based Dependencies (testable interfaces)
 class EmbeddingProvider(Protocol):
     """Protocol for embedding generation."""
 
@@ -128,7 +128,7 @@ class ConfigProvider(Protocol):
         ...
 
 
-# Pure Functions (100% testable)
+# Pure Functions (testable utilities)
 def validate_search_query(query: SearchQuery) -> List[str]:
     """
     Validate search query parameters.
@@ -337,23 +337,41 @@ def rerank_results_by_relevance(
             term_overlap = len(query_terms.intersection(content_terms)) / len(
                 query_terms
             )
-            overlap_boost = 1 + (term_overlap * boost_factors.get("term_overlap", 0.2))
+            if "term_overlap" not in boost_factors:
+                raise ValueError(
+                    "Missing 'term_overlap' in boost_factors configuration"
+                )
+            overlap_boost = 1 + (term_overlap * boost_factors["term_overlap"])
         else:
             overlap_boost = 1.0
 
         # Content length scoring
         content_length = len(result.content)
         if content_length < 100:
-            length_boost = boost_factors.get("length_short", 0.8)
+            if "length_short" not in boost_factors:
+                raise ValueError(
+                    "Missing 'length_short' in boost_factors configuration"
+                )
+            length_boost = boost_factors["length_short"]
         elif content_length > 1000:
-            length_boost = boost_factors.get("length_long", 0.9)
+            if "length_long" not in boost_factors:
+                raise ValueError("Missing 'length_long' in boost_factors configuration")
+            length_boost = boost_factors["length_long"]
         else:
-            length_boost = boost_factors.get("length_optimal", 1.0)
+            if "length_optimal" not in boost_factors:
+                raise ValueError(
+                    "Missing 'length_optimal' in boost_factors configuration"
+                )
+            length_boost = boost_factors["length_optimal"]
 
         # Title/metadata boost
+        if "title_boost" not in boost_factors:
+            raise ValueError("Missing 'title_boost' in boost_factors configuration")
         title_boost = (
-            boost_factors.get("title_boost", 1.1)
-            if result.metadata.get("title")
+            boost_factors["title_boost"]
+            if result.metadata.get(
+                "title"
+            )  # Keep .get() - metadata from external sources
             else 1.0
         )
 
@@ -439,7 +457,7 @@ def extract_context_from_results(
 # Main Search Engine Class
 class SemanticSearchEngine:
     """
-    100% testable semantic search engine using dependency injection.
+    Semantic search engine using dependency injection for testability.
     """
 
     def __init__(
@@ -577,16 +595,23 @@ class SemanticSearchEngine:
 
         except Exception as e:
             self.logger.error(f"Keyword search failed: {e}")
-            # Fallback to semantic search
-            return await self._semantic_search(query)
+            raise
 
     async def _hybrid_search(self, query: SearchQuery) -> List[SearchResult]:
         """Execute hybrid search combining semantic and keyword methods."""
         try:
-            # Get weights from config
+            # Get weights from config - validate required keys
             weights = self.config_provider.get_scoring_weights()
-            semantic_weight = weights.get("semantic", 0.7)
-            keyword_weight = weights.get("keyword", 0.3)
+            if "semantic" not in weights:
+                raise ValueError(
+                    "Missing 'semantic' weight in scoring weights configuration"
+                )
+            if "keyword" not in weights:
+                raise ValueError(
+                    "Missing 'keyword' weight in scoring weights configuration"
+                )
+            semantic_weight = weights["semantic"]
+            keyword_weight = weights["keyword"]
 
             # Execute both searches concurrently
             semantic_query = SearchQuery(
@@ -663,8 +688,7 @@ class SemanticSearchEngine:
 
         except Exception as e:
             self.logger.error(f"Hybrid search failed: {e}")
-            # Fallback to semantic search
-            return await self._semantic_search(query)
+            raise
 
     async def find_similar_documents(
         self, document_id: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None

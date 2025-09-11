@@ -1,16 +1,22 @@
 """
 Provider implementations for hierarchical retriever dependency injection.
-Production and mock providers for 100% testable hierarchical retrieval system.
+Production and mock providers for testable hierarchical retrieval system.
 """
 
 import time
 from typing import Any, Dict, List, Optional
 
 from .categorization import CategoryMatch, CategoryType, QueryComplexity
-from .hierarchical_retriever import (Categorizer, LoggerProvider,
-                                     ProcessedQuery, QueryProcessor, Reranker,
-                                     RetrievalConfig, SearchEngine,
-                                     SearchResult)
+from .hierarchical_retriever import (
+    Categorizer,
+    LoggerProvider,
+    ProcessedQuery,
+    QueryProcessor,
+    Reranker,
+    RetrievalConfig,
+    SearchEngine,
+    SearchResult,
+)
 
 
 class MockQueryProcessor:
@@ -231,8 +237,7 @@ class ProductionQueryProcessor:
     def __init__(self, language: str = "hr"):
         """Initialize with production query processor."""
         # Import at runtime to avoid circular dependencies
-        from .query_processor import (MultilingualQueryProcessor,
-                                      create_query_processor)
+        from .query_processor import MultilingualQueryProcessor, create_query_processor
 
         try:
             # Try to use the new factory function if available
@@ -253,32 +258,21 @@ class ProductionQueryProcessor:
         self, query: str, context: Optional[Dict[str, Any]] = None
     ) -> ProcessedQuery:
         """Process query using production processor."""
-        try:
-            # Handle case where processor couldn't be initialized
-            if self._processor is None:
-                raise Exception("Query processor not available")
+        # Handle case where processor couldn't be initialized
+        if self._processor is None:
+            raise Exception("Query processor not available")
 
-            result = self._processor.process_query(query, context or {})
+        result = self._processor.process_query(query, context or {})
 
-            # Convert to our ProcessedQuery format
-            return ProcessedQuery(
-                original=query,
-                processed=getattr(result, "processed", query),
-                query_type=getattr(result, "query_type", "general"),
-                keywords=getattr(result, "keywords", query.split()),
-                expanded_terms=getattr(result, "expanded_terms", []),
-                metadata=getattr(result, "metadata", {}),
-            )
-        except Exception as e:
-            # Fallback to basic processing
-            return ProcessedQuery(
-                original=query,
-                processed=query.lower(),
-                query_type="general",
-                keywords=query.split(),
-                expanded_terms=[],
-                metadata={"error": str(e)},
-            )
+        # Convert to our ProcessedQuery format
+        return ProcessedQuery(
+            original=query,
+            processed=getattr(result, "processed", query),
+            query_type=getattr(result, "query_type", "general"),
+            keywords=getattr(result, "keywords", query.split()),
+            expanded_terms=getattr(result, "expanded_terms", []),
+            metadata=getattr(result, "metadata", {}),
+        )
 
 
 class ProductionCategorizer:
@@ -311,44 +305,39 @@ class ProductionSearchEngineAdapter:
         self, query_text: str, k: int = 5, similarity_threshold: float = 0.3
     ) -> List[SearchResult]:
         """Adapt production search engine to our interface."""
-        try:
-            # Assuming production search engine has similar interface
-            results = await self._search_engine.search(
-                query_text=query_text, k=k, similarity_threshold=similarity_threshold
+        # Assuming production search engine has similar interface
+        results = await self._search_engine.search(
+            query_text=query_text, k=k, similarity_threshold=similarity_threshold
+        )
+
+        # Convert to our SearchResult format
+        adapted_results = []
+        for result in results:
+            # Handle different result formats
+            if hasattr(result, "content"):
+                content = result.content
+                metadata = getattr(result, "metadata", {})
+                similarity = getattr(result, "similarity_score", 0.5)
+            elif isinstance(result, dict):
+                content = result.get("content", "")
+                metadata = result.get("metadata", {})
+                similarity = result.get("similarity_score", 0.5)
+            else:
+                content = str(result)
+                metadata = {}
+                similarity = 0.5
+
+            adapted_results.append(
+                SearchResult(
+                    content=content,
+                    metadata=metadata,
+                    similarity_score=similarity,
+                    final_score=similarity,
+                    boosts={},
+                )
             )
 
-            # Convert to our SearchResult format
-            adapted_results = []
-            for result in results:
-                # Handle different result formats
-                if hasattr(result, "content"):
-                    content = result.content
-                    metadata = getattr(result, "metadata", {})
-                    similarity = getattr(result, "similarity_score", 0.5)
-                elif isinstance(result, dict):
-                    content = result.get("content", "")
-                    metadata = result.get("metadata", {})
-                    similarity = result.get("similarity_score", 0.5)
-                else:
-                    content = str(result)
-                    metadata = {}
-                    similarity = 0.5
-
-                adapted_results.append(
-                    SearchResult(
-                        content=content,
-                        metadata=metadata,
-                        similarity_score=similarity,
-                        final_score=similarity,
-                        boosts={},
-                    )
-                )
-
-            return adapted_results
-
-        except Exception as e:
-            # Return empty results on error
-            return []
+        return adapted_results
 
 
 class ProductionRerankerAdapter:
@@ -366,13 +355,9 @@ class ProductionRerankerAdapter:
         category: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Adapt production reranker to our interface."""
-        try:
-            return await self._reranker.rerank(
-                query=query, documents=documents, category=category
-            )
-        except Exception as e:
-            # Return original documents on error
-            return documents
+        return await self._reranker.rerank(
+            query=query, documents=documents, category=category
+        )
 
 
 # ================================

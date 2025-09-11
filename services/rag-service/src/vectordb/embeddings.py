@@ -1,6 +1,6 @@
 """
-Clean slate testable embedding system for multilingual RAG.
-Implements 100% testable architecture with dependency injection and pure functions.
+Multilingual embedding system for RAG applications.
+Implements dependency injection and pure functions for robust embedding generation.
 """
 
 import logging
@@ -335,10 +335,10 @@ def choose_model_for_language(language: str) -> str:
 
 class MultilingualEmbeddingGenerator:
     """
-    Testable multilingual embedding generator with dependency injection.
+    Multilingual embedding generator with dependency injection.
 
     All external dependencies (model loading, device detection) are injected,
-    enabling 100% testable architecture.
+    enabling modular and testable architecture.
     """
 
     def __init__(
@@ -608,4 +608,4 @@ def create_embedding_generator(
 
 
 # Backward compatibility aliases
-EmbeddingModelV2 = MultilingualEmbeddingGenerator
+EmbeddingModel = MultilingualEmbeddingGenerator

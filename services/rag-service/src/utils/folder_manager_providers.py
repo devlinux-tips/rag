@@ -1,6 +1,6 @@
 """
 Provider implementations for folder manager dependency injection.
-Production and mock providers for 100% testable folder management system.
+Production and mock providers for testable folder management system.
 """
 
 import logging
@@ -8,8 +8,13 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .folder_manager import (ConfigProvider, FileSystemProvider, FolderConfig,
-                             FolderStats, LoggerProvider)
+from .folder_manager import (
+    ConfigProvider,
+    FileSystemProvider,
+    FolderConfig,
+    FolderStats,
+    LoggerProvider,
+)
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -60,7 +65,10 @@ class MockFileSystemProvider:
         self.call_history.append(
             {"operation": "folder_exists", "path": str(folder_path)}
         )
-        return self.existing_folders.get(str(folder_path), False)
+        path_str = str(folder_path)
+        if path_str not in self.existing_folders:
+            raise ValueError(f"Mock folder existence not configured for {folder_path}")
+        return self.existing_folders[path_str]
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Mock folder removal."""
@@ -85,7 +93,9 @@ class MockFileSystemProvider:
         )
 
         path_str = str(folder_path)
-        return self.folder_stats.get(path_str, FolderStats(count=0, size_bytes=0))
+        if path_str not in self.folder_stats:
+            raise ValueError(f"Mock folder stats not configured for {folder_path}")
+        return self.folder_stats[path_str]
 
     def clear_history(self) -> None:
         """Clear operation history."""
@@ -166,7 +176,9 @@ class MockLoggerProvider:
     def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
         """Get captured messages by level or all messages."""
         if level:
-            return self.messages.get(level, [])
+            if level not in self.messages:
+                raise ValueError(f"Unknown log level: {level}")
+            return self.messages[level]
         return self.messages
 
 
@@ -184,15 +196,11 @@ class ProductionFileSystemProvider:
 
     def create_folder(self, folder_path: Path) -> bool:
         """Create a folder if it doesn't exist."""
-        try:
-            if not folder_path.exists():
-                folder_path.mkdir(parents=True, exist_ok=True)
-                self.logger.debug(f"Created folder: {folder_path}")
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to create folder {folder_path}: {e}")
-            return False
+        if not folder_path.exists():
+            folder_path.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Created folder: {folder_path}")
+            return True
+        return False
 
     def folder_exists(self, folder_path: Path) -> bool:
         """Check if folder exists."""
@@ -200,28 +208,21 @@ class ProductionFileSystemProvider:
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Remove folder and all contents."""
-        try:
-            if folder_path.exists():
-                shutil.rmtree(folder_path)
-                self.logger.info(f"Removed folder: {folder_path}")
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Failed to remove folder {folder_path}: {e}")
-            return False
+        if folder_path.exists():
+            shutil.rmtree(folder_path)
+            self.logger.info(f"Removed folder: {folder_path}")
+            return True
+        return False
 
     def get_folder_stats(self, folder_path: Path) -> FolderStats:
         """Get file count and size statistics for folder."""
         stats = FolderStats(count=0, size_bytes=0)
 
-        try:
-            if folder_path.exists():
-                for file_path in folder_path.rglob("*"):
-                    if file_path.is_file():
-                        stats.count += 1
-                        stats.size_bytes += file_path.stat().st_size
-        except Exception as e:
-            self.logger.error(f"Error getting stats for {folder_path}: {e}")
+        if folder_path.exists():
+            for file_path in folder_path.rglob("*"):
+                if file_path.is_file():
+                    stats.count += 1
+                    stats.size_bytes += file_path.stat().st_size
 
         return stats
 
@@ -261,20 +262,7 @@ class ProductionConfigProvider:
                 collection_name_template=config["collection_name_template"],
             )
         except Exception as e:
-            # Fallback to sensible defaults if config loading fails
-            return FolderConfig(
-                data_base_dir="./data",
-                models_base_dir="./models",
-                system_dir="./system",
-                tenant_root_template="{data_base_dir}/tenants/{tenant_slug}",
-                user_documents_template="{data_base_dir}/tenants/{tenant_slug}/users/{user_id}/documents/{language}",
-                tenant_shared_template="{data_base_dir}/tenants/{tenant_slug}/shared/documents/{language}",
-                user_processed_template="{data_base_dir}/tenants/{tenant_slug}/users/{user_id}/processed/{language}",
-                tenant_processed_template="{data_base_dir}/tenants/{tenant_slug}/shared/processed/{language}",
-                chromadb_path_template="{data_base_dir}/vectordb/{tenant_slug}",
-                models_path_template="{models_base_dir}/{tenant_slug}/{language}",
-                collection_name_template="{tenant_slug}_{scope}_{language}",
-            )
+            raise RuntimeError(f"Failed to load folder configuration from system: {e}")
 
 
 class StandardLoggerProvider:

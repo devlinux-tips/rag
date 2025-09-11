@@ -1,0 +1,43 @@
+What is a RAG System?
+
+A Retrieval-Augmented Generation (RAG) system is an advanced AI architecture that combines two powerful techniques: information retrieval and language generation. This hybrid approach allows AI systems to access and utilize external knowledge sources when generating responses, making them more accurate and informative.
+
+How RAG Works
+
+The RAG process involves several key steps:
+1. Document Processing: Raw documents are processed and converted into searchable chunks
+2. Vector Embeddings: Text chunks are converted into numerical representations using embedding models
+3. Vector Storage: Embeddings are stored in a vector database for efficient similarity search
+4. Query Processing: User questions are processed and converted into embeddings
+5. Retrieval: The system searches for the most relevant document chunks
+6. Generation: A language model generates responses using the retrieved context
+
+Key Components
+
+Document Extractor: Processes various file formats (PDF, DOCX, TXT) and extracts clean text
+Text Cleaner: Normalizes and cleans extracted text for better processing
+Document Chunker: Splits large documents into manageable pieces
+Embedding Model: Converts text into numerical vectors (e.g., BGE-M3 for multilingual support)
+Vector Database: Stores and indexes embeddings for fast similarity search (e.g., ChromaDB)
+Search Engine: Finds the most relevant chunks for a given query
+Language Model: Generates natural language responses (e.g., using Ollama with qwen2.5)
+
+Benefits of RAG
+
+RAG systems offer several advantages over traditional language models:
+- Access to up-to-date information from external sources
+- Reduced hallucination by grounding responses in actual documents
+- Ability to work with domain-specific knowledge
+- Transparency through source attribution
+- Cost-effective compared to training massive models
+
+Use Cases
+
+RAG systems are particularly useful for:
+- Question answering over company documents
+- Customer support with knowledge base integration
+- Research assistance with academic papers
+- Legal document analysis
+- Technical documentation queries
+
+This makes RAG an excellent choice for applications requiring accurate, source-backed responses from large document collections.

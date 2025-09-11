@@ -1,5 +1,5 @@
 """
-100% testable prompt templates for RAG system using local LLM.
+Prompt templates for RAG system with local LLM integration.
 Clean architecture with dependency injection and pure functions.
 """
 
@@ -170,8 +170,8 @@ def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> s
 
     # Check patterns in priority order
     priority_order = [
-        "cultural",
         "tourism",
+        "cultural",
         "summarization",
         "comparison",
         "explanatory",
@@ -403,12 +403,8 @@ class MultilingualRAGPrompts:
         Returns:
             Query type string
         """
-        try:
-            validated_query = validate_query_for_prompt(query)
-            return classify_query_type(validated_query, self._config.keyword_patterns)
-        except Exception as e:
-            self.logger.error(f"Failed to classify query: {e}")
-            return "default"
+        validated_query = validate_query_for_prompt(query)
+        return classify_query_type(validated_query, self._config.keyword_patterns)
 
     def get_template_for_query(self, query: str) -> PromptTemplate:
         """
@@ -433,7 +429,11 @@ class MultilingualRAGPrompts:
             "default": "question_answering",
         }
 
-        template_name = template_mapping.get(query_type, "question_answering")
+        if query_type not in template_mapping:
+            raise ValueError(
+                f"Unknown query type '{query_type}'. Supported types: {list(template_mapping.keys())}"
+            )
+        template_name = template_mapping[query_type]
 
         try:
             return self.get_template(template_name)
@@ -477,30 +477,25 @@ class PromptBuilder:
         Raises:
             ValueError: If inputs are invalid
         """
-        try:
-            # Validate query
-            validated_query = validate_query_for_prompt(query)
+        # Validate query
+        validated_query = validate_query_for_prompt(query)
 
-            # Process context
-            context_text = ""
-            if context:
-                context_text = self._format_context(context, max_context_length)
+        # Process context
+        context_text = ""
+        if context:
+            context_text = self._format_context(context, max_context_length)
 
-            # Build complete prompt
-            system_prompt, user_prompt = build_complete_prompt(
-                system_prompt=self.template.system_prompt,
-                user_template=self.template.user_template,
-                context_template=self.template.context_template,
-                query=validated_query,
-                context_text=context_text,
-            )
+        # Build complete prompt
+        system_prompt, user_prompt = build_complete_prompt(
+            system_prompt=self.template.system_prompt,
+            user_template=self.template.user_template,
+            context_template=self.template.context_template,
+            query=validated_query,
+            context_text=context_text,
+        )
 
-            self.logger.debug(f"Built prompt for query length: {len(validated_query)}")
-            return system_prompt, user_prompt
-
-        except Exception as e:
-            self.logger.error(f"Failed to build prompt: {e}")
-            raise
+        self.logger.debug(f"Built prompt for query length: {len(validated_query)}")
+        return system_prompt, user_prompt
 
     def _format_context(self, context: List[str], max_length: int) -> str:
         """
@@ -516,31 +511,25 @@ class PromptBuilder:
         if not context:
             return ""
 
-        try:
-            # Get formatting configuration
-            header_template = self.config.formatting["header_template"]
-            chunk_separator = self.config.formatting["chunk_separator"]
+        # Get formatting configuration
+        header_template = self.config.formatting["header_template"]
+        chunk_separator = self.config.formatting["chunk_separator"]
 
-            # Truncate chunks to fit length limit
-            truncated_chunks = truncate_context_chunks(
-                chunks=context,
-                max_total_length=max_length,
-                chunk_separator=chunk_separator,
-            )
+        # Truncate chunks to fit length limit
+        truncated_chunks = truncate_context_chunks(
+            chunks=context,
+            max_total_length=max_length,
+            chunk_separator=chunk_separator,
+        )
 
-            # Format with headers
-            formatted_context = format_context_with_headers(
-                chunks=truncated_chunks,
-                header_template=header_template,
-                chunk_separator=chunk_separator,
-            )
+        # Format with headers
+        formatted_context = format_context_with_headers(
+            chunks=truncated_chunks,
+            header_template=header_template,
+            chunk_separator=chunk_separator,
+        )
 
-            return formatted_context
-
-        except Exception as e:
-            self.logger.error(f"Failed to format context: {e}")
-            # Return simple concatenation as fallback
-            return "\n\n".join(context[:3])  # Limit to 3 chunks
+        return formatted_context
 
 
 # ===== FACTORY FUNCTIONS =====

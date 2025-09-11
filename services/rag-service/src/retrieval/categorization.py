@@ -1,6 +1,6 @@
 """
 Pure function categorization system with dependency injection.
-100% testable architecture with no side effects and deterministic output.
+Clean architecture with no side effects and deterministic output.
 """
 
 import logging
@@ -8,8 +8,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Protocol, Set, Tuple,
-                    runtime_checkable)
+from typing import Any, Dict, List, Optional, Protocol, Set, Tuple, runtime_checkable
 
 
 class CategoryType(Enum):
@@ -187,12 +186,20 @@ def calculate_query_complexity(
         + comparative_words * 0.3
     )
 
+    # Apply thresholds - validate required keys
+    if "analytical" not in complexity_thresholds:
+        raise ValueError("Missing 'analytical' threshold in complexity_thresholds")
+    if "complex" not in complexity_thresholds:
+        raise ValueError("Missing 'complex' threshold in complexity_thresholds")
+    if "moderate" not in complexity_thresholds:
+        raise ValueError("Missing 'moderate' threshold in complexity_thresholds")
+
     # Apply thresholds
-    if complexity_score >= complexity_thresholds.get("analytical", 8.0):
+    if complexity_score >= complexity_thresholds["analytical"]:
         return QueryComplexity.ANALYTICAL
-    elif complexity_score >= complexity_thresholds.get("complex", 5.0):
+    elif complexity_score >= complexity_thresholds["complex"]:
         return QueryComplexity.COMPLEX
-    elif complexity_score >= complexity_thresholds.get("moderate", 2.0):
+    elif complexity_score >= complexity_thresholds["moderate"]:
         return QueryComplexity.MODERATE
     else:
         return QueryComplexity.SIMPLE
@@ -265,23 +272,27 @@ def determine_retrieval_strategy(
     # Strategy priority: specific > cultural > complexity > default
 
     # Check for category-specific strategy
-    category_strategy = strategy_config.get(f"category_{category.value}")
-    if category_strategy:
-        return category_strategy
+    category_key = f"category_{category.value}"
+    if category_key in strategy_config:
+        return strategy_config[category_key]
 
     # Check for cultural context strategy
-    if cultural_indicators:
-        cultural_strategy = strategy_config.get("cultural_context")
-        if cultural_strategy:
-            return cultural_strategy
+    if cultural_indicators and "cultural_context" in strategy_config:
+        return strategy_config["cultural_context"]
 
     # Check for complexity-based strategy
-    complexity_strategy = strategy_config.get(f"complexity_{complexity.value}")
+    complexity_key = f"complexity_{complexity.value}"
+    if complexity_key in strategy_config:
+        return strategy_config[complexity_key]
     if complexity_strategy:
         return complexity_strategy
 
-    # Default strategy
-    return strategy_config.get("default", "hybrid")
+    # Default strategy - validate required key
+    if "default" not in strategy_config:
+        raise ValueError(
+            "Missing 'default' strategy in retrieval_strategies configuration"
+        )
+    return strategy_config["default"]
 
 
 def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryMatch:
@@ -315,9 +326,31 @@ def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryM
     # Match category patterns
     category_matches = match_category_patterns(query, config.patterns)
 
-    # Select best category match
+    # Select best category match considering both confidence and priority
     if category_matches:
-        best_category, confidence, matched_patterns = category_matches[0]
+        # Find the match with highest priority among high-confidence matches
+        best_match = None
+        best_priority = -1
+
+        for category, confidence, patterns in category_matches:
+            # Get category priority from config
+            category_priority = 0  # Default priority
+            if category.value in config.categories:
+                category_settings = config.categories[category.value]
+                if "priority" in category_settings:
+                    category_priority = category_settings["priority"]
+
+            # Choose this match if it has higher priority, or same priority but higher confidence
+            if category_priority > best_priority or (
+                category_priority == best_priority and best_match is None
+            ):
+                best_match = (category, confidence, patterns)
+                best_priority = category_priority
+
+        if best_match:
+            best_category, confidence, matched_patterns = best_match
+        else:
+            best_category, confidence, matched_patterns = category_matches[0]
     else:
         best_category = CategoryType.GENERAL
         confidence = 0.1  # Low confidence for general category
@@ -344,7 +377,7 @@ def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryM
 
 
 class QueryCategorizer:
-    """Query categorizer with dependency injection for 100% testability."""
+    """Query categorizer with dependency injection for testability."""
 
     def __init__(
         self,
@@ -359,12 +392,30 @@ class QueryCategorizer:
 
         # Load configuration once during initialization
         config_data = config_provider.get_categorization_config(language)
+        # Validate required configuration keys
+        if "categories" not in config_data:
+            raise ValueError("Missing 'categories' in categorization configuration")
+        if "patterns" not in config_data:
+            raise ValueError("Missing 'patterns' in categorization configuration")
+        if "cultural_keywords" not in config_data:
+            raise ValueError(
+                "Missing 'cultural_keywords' in categorization configuration"
+            )
+        if "complexity_thresholds" not in config_data:
+            raise ValueError(
+                "Missing 'complexity_thresholds' in categorization configuration"
+            )
+        if "retrieval_strategies" not in config_data:
+            raise ValueError(
+                "Missing 'retrieval_strategies' in categorization configuration"
+            )
+
         self._config = CategorizationConfig(
-            categories=config_data.get("categories", {}),
-            patterns=config_data.get("patterns", {}),
-            cultural_keywords=config_data.get("cultural_keywords", {}),
-            complexity_thresholds=config_data.get("complexity_thresholds", {}),
-            retrieval_strategies=config_data.get("retrieval_strategies", {}),
+            categories=config_data["categories"],
+            patterns=config_data["patterns"],
+            cultural_keywords=config_data["cultural_keywords"],
+            complexity_thresholds=config_data["complexity_thresholds"],
+            retrieval_strategies=config_data["retrieval_strategies"],
         )
 
     def categorize_query(self, query: str) -> CategoryMatch:
@@ -379,27 +430,14 @@ class QueryCategorizer:
         """
         self._log_debug(f"Categorizing query: {query[:50]}...")
 
-        try:
-            result = categorize_query_pure(query, self._config)
+        result = categorize_query_pure(query, self._config)
 
-            self._log_info(
-                f"Query categorized as {result.category.value} "
-                f"(confidence: {result.confidence:.2f}, strategy: {result.retrieval_strategy})"
-            )
+        self._log_info(
+            f"Query categorized as {result.category.value} "
+            f"(confidence: {result.confidence:.2f}, strategy: {result.retrieval_strategy})"
+        )
 
-            return result
-
-        except Exception as e:
-            self._log_warning(f"Error categorizing query: {e}")
-            # Return safe fallback
-            return CategoryMatch(
-                category=CategoryType.GENERAL,
-                confidence=0.0,
-                matched_patterns=[],
-                cultural_indicators=[],
-                complexity=QueryComplexity.SIMPLE,
-                retrieval_strategy="default",
-            )
+        return result
 
     def _log_info(self, message: str) -> None:
         """Log info message if logger available."""
@@ -451,7 +489,7 @@ def categorize_query(
 
 
 # Legacy class name for compatibility
-class EnhancedQueryCategorizerV2(QueryCategorizer):
+class EnhancedQueryCategorizer(QueryCategorizer):
     """Backward compatibility alias for QueryCategorizer."""
 
     pass
@@ -543,9 +581,11 @@ class EnhancedQueryCategorizer(QueryCategorizer):
                 CategoryType.TOURISM: DocumentCategory.TOURISM,
                 CategoryType.EDUCATION: DocumentCategory.EDUCATIONAL,
             }
-            legacy_primary = category_mapping.get(
-                modern_result.category, DocumentCategory.GENERAL
-            )
+            if modern_result.category not in category_mapping:
+                raise ValueError(
+                    f"Missing category mapping for '{modern_result.category}'"
+                )
+            legacy_primary = category_mapping[modern_result.category]
         except (KeyError, AttributeError):
             legacy_primary = DocumentCategory.GENERAL
 
@@ -561,9 +601,11 @@ class EnhancedQueryCategorizer(QueryCategorizer):
                 "hierarchical": RetrievalStrategy.COMPARATIVE_STRUCTURED,
                 "default": RetrievalStrategy.DEFAULT,
             }
-            legacy_strategy = strategy_mapping.get(
-                modern_result.retrieval_strategy, RetrievalStrategy.DEFAULT
-            )
+            if modern_result.retrieval_strategy not in strategy_mapping:
+                raise ValueError(
+                    f"Missing strategy mapping for '{modern_result.retrieval_strategy}'"
+                )
+            legacy_strategy = strategy_mapping[modern_result.retrieval_strategy]
         except (KeyError, AttributeError):
             legacy_strategy = RetrievalStrategy.DEFAULT
 

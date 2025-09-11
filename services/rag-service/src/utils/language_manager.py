@@ -1,6 +1,6 @@
 """
 Language management system with dependency injection.
-100% testable version with pure functions and dependency injection architecture.
+Testable version with pure functions and dependency injection architecture.
 """
 
 import re
@@ -137,7 +137,9 @@ def build_languages_dict(settings: LanguageSettings) -> Dict[str, LanguageConfig
     languages = {}
 
     for lang_code in settings.supported_languages:
-        name = settings.language_names.get(lang_code, lang_code.upper())
+        if lang_code not in settings.language_names:
+            raise ValueError(f"Language name missing for {lang_code} in configuration")
+        name = settings.language_names[lang_code]
 
         languages[lang_code] = create_language_config(
             code=lang_code,
@@ -300,10 +302,10 @@ def get_chunk_config_for_language(
     default_overlap: int = 50,
 ) -> Tuple[int, int]:
     """Pure function to get chunk configuration for language."""
-    config = languages.get(language_code)
-    if config:
-        return config.chunk_size, config.chunk_overlap
-    return default_chunk_size, default_overlap
+    if language_code not in languages:
+        raise ValueError(f"Language {language_code} not supported")
+    config = languages[language_code]
+    return config.chunk_size, config.chunk_overlap
 
 
 def get_embedding_model_for_language(
@@ -312,16 +314,20 @@ def get_embedding_model_for_language(
     default_model: str = "BAAI/bge-m3",
 ) -> str:
     """Pure function to get embedding model for language."""
-    config = languages.get(language_code)
-    return config.embedding_model if config else default_model
+    if language_code not in languages:
+        raise ValueError(f"Language {language_code} not supported")
+    config = languages[language_code]
+    return config.embedding_model
 
 
 def get_display_name_for_language(
     languages: Dict[str, LanguageConfig], language_code: str
 ) -> str:
     """Pure function to get human-readable language name."""
-    config = languages.get(language_code)
-    return config.native_name if config else language_code
+    if language_code not in languages:
+        raise ValueError(f"Language {language_code} not supported")
+    config = languages[language_code]
+    return config.native_name
 
 
 # ================================
@@ -330,7 +336,7 @@ def get_display_name_for_language(
 
 
 class _LanguageManager:
-    """100% testable language manager with dependency injection."""
+    """Testable language manager with dependency injection."""
 
     def __init__(
         self,
@@ -376,9 +382,11 @@ class _LanguageManager:
         """Get list of supported language codes."""
         return list(self._languages.keys())
 
-    def get_language_config(self, language_code: str) -> Optional[LanguageConfig]:
+    def get_language_config(self, language_code: str) -> LanguageConfig:
         """Get configuration for specific language."""
-        return self._languages.get(language_code)
+        if language_code not in self._languages:
+            raise ValueError(f"Language {language_code} not supported")
+        return self._languages[language_code]
 
     def is_language_supported(self, language_code: str) -> bool:
         """Check if language is supported and enabled."""
@@ -423,7 +431,9 @@ class _LanguageManager:
 
     def get_stopwords(self, language_code: str) -> Set[str]:
         """Get stopwords for specific language."""
-        return self._patterns.stopwords.get(language_code, set())
+        if language_code not in self._patterns.stopwords:
+            raise ValueError(f"Stopwords not available for language {language_code}")
+        return self._patterns.stopwords[language_code]
 
     def remove_stopwords(self, text: str, language_code: str) -> str:
         """Remove stopwords from text for specific language."""
@@ -541,142 +551,7 @@ def create_language_manager(
 
 
 # ================================
-# BACKWARD COMPATIBILITY LAYER
-# ================================
-
-
-class LegacyLanguageManager:
-    """Legacy language manager for backward compatibility."""
-
-    def __init__(self):
-        """Initialize with legacy interface pattern."""
-        from .language_manager_providers import create_production_setup
-
-        # Create DI components
-        config_provider, pattern_provider, logger_provider = create_production_setup()
-
-        # Create modern manager
-        self._manager = _LanguageManager(
-            config_provider=config_provider,
-            pattern_provider=pattern_provider,
-            logger_provider=logger_provider,
-        )
-
-        # Expose legacy attributes for compatibility
-        self.languages = self._manager._languages
-        self.detection_patterns = self._manager._patterns.detection_patterns
-        self.stopwords = self._manager._patterns.stopwords
-        self.default_language = self._manager._settings.default_language
-        self.auto_detect = self._manager._settings.auto_detect
-        self.fallback_language = self._manager._settings.fallback_language
-
-    def get_supported_languages(self) -> List[str]:
-        """Legacy method interface."""
-        return self._manager.get_supported_languages()
-
-    def get_language_config(self, language_code: str) -> Optional[LanguageConfig]:
-        """Legacy method interface."""
-        return self._manager.get_language_config(language_code)
-
-    def is_language_supported(self, language_code: str) -> bool:
-        """Legacy method interface."""
-        return self._manager.is_language_supported(language_code)
-
-    def get_default_language(self) -> str:
-        """Legacy method interface."""
-        return self._manager.get_default_language()
-
-    def get_fallback_language(self) -> str:
-        """Legacy method interface."""
-        return self._manager.get_fallback_language()
-
-    def detect_language(self, text: str) -> str:
-        """Legacy method interface."""
-        return self._manager.detect_language(text)
-
-    def get_stopwords(self, language_code: str) -> Set[str]:
-        """Legacy method interface."""
-        return self._manager.get_stopwords(language_code)
-
-    def remove_stopwords(self, text: str, language_code: str) -> str:
-        """Legacy method interface."""
-        return self._manager.remove_stopwords(text, language_code)
-
-    def get_collection_suffix(self, language_code: str) -> str:
-        """Legacy method interface."""
-        return self._manager.get_collection_suffix(language_code)
-
-    def normalize_language_code(self, language_code: str) -> str:
-        """Legacy method interface."""
-        return self._manager.normalize_language_code(language_code)
-
-    def get_language_display_name(self, language_code: str) -> str:
-        """Legacy method interface."""
-        return self._manager.get_language_display_name(language_code)
-
-    def validate_languages(self, language_codes: List[str]) -> List[str]:
-        """Legacy method interface."""
-        return self._manager.validate_languages(language_codes)
-
-    def get_embedding_model(self, language_code: str) -> str:
-        """Legacy method interface."""
-        return self._manager.get_embedding_model(language_code)
-
-    def get_chunk_config(self, language_code: str) -> Tuple[int, int]:
-        """Legacy method interface."""
-        return self._manager.get_chunk_config(language_code)
-
-    def add_language_runtime(
-        self,
-        code: str,
-        name: str,
-        native_name: str,
-        patterns: Optional[List[str]] = None,
-        stopwords: Optional[List[str]] = None,
-    ) -> None:
-        """Legacy method interface."""
-        self._manager.add_language_runtime(code, name, native_name, patterns, stopwords)
-
-
-# ================================
-# LEGACY CONVENIENCE FUNCTIONS
-# ================================
-
-
-def create_legacy_language_manager() -> LegacyLanguageManager:
-    """Create language manager using legacy interface for backward compatibility."""
-    return LegacyLanguageManager()
-
-
-# Global instance support for legacy code
-_global_manager: Optional[LegacyLanguageManager] = None
-
-
-def get_language_manager_legacy() -> LegacyLanguageManager:
-    """Get global language manager instance (legacy pattern)."""
-    global _global_manager
-    if _global_manager is None:
-        _global_manager = LegacyLanguageManager()
-    return _global_manager
-
-
-def get_supported_languages_legacy() -> List[str]:
-    """Legacy convenience function to get supported languages."""
-    return get_language_manager_legacy().get_supported_languages()
-
-
-def detect_language_legacy(text: str) -> str:
-    """Legacy convenience function to detect language."""
-    return get_language_manager_legacy().detect_language(text)
-
-
-def normalize_language_code_legacy(language_code: str) -> str:
-    """Legacy convenience function to normalize language code."""
-    return get_language_manager_legacy().normalize_language_code(language_code)
-
-
-# ================================
-# DUAL INTERFACE SUPPORT
+# PUBLIC INTERFACE
 # ================================
 
 
@@ -686,22 +561,23 @@ def LanguageManager(
     logger_provider: Optional[LoggerProvider] = None,
 ):
     """
-    Unified LanguageManager factory supporting both interfaces.
+    Create a language manager with dependency injection.
 
-    Legacy interface (for backward compatibility):
-        LanguageManager()
+    Args:
+        config_provider: Configuration provider for language settings
+        pattern_provider: Pattern provider for detection patterns and stopwords
+        logger_provider: Logger provider for debugging
 
-    New DI interface:
-        LanguageManager(config_provider=provider, pattern_provider=provider, ...)
+    Returns:
+        Configured _LanguageManager instance
     """
-    # New DI interface - all DI components provided
-    if config_provider and pattern_provider:
-        return _LanguageManager(
-            config_provider=config_provider,
-            pattern_provider=pattern_provider,
-            logger_provider=logger_provider,
-        )
+    if not config_provider or not pattern_provider:
+        from .language_manager_providers import create_production_setup
 
-    # Legacy interface - no parameters provided
-    else:
-        return LegacyLanguageManager()
+        config_provider, pattern_provider, logger_provider = create_production_setup()
+
+    return _LanguageManager(
+        config_provider=config_provider,
+        pattern_provider=pattern_provider,
+        logger_provider=logger_provider,
+    )

@@ -1,6 +1,7 @@
 """
-Enhanced Prompt Template System with dependency injection.
-100% testable version with pure functions and dependency injection architecture.
+Enhanced prompt template system for contextual query generation.
+Provides document category-aware templates and intelligent prompt building
+for multilingual question-answering scenarios.
 """
 
 from abc import ABC, abstractmethod
@@ -377,12 +378,18 @@ def suggest_template_improvements(
         suggestions.append(f"Add missing template types: {', '.join(missing_types)}")
 
     # Performance-based suggestions
-    if usage_stats.get("avg_confidence", 1.0) < 0.7:
+    if (
+        "avg_confidence" in usage_stats and usage_stats["avg_confidence"] < 0.7
+    ) or "avg_confidence" not in usage_stats:
         suggestions.append(
             "Consider more specific system prompts to improve response quality"
         )
 
-    avg_length = usage_stats.get("avg_response_length", 200)
+    avg_length = (
+        usage_stats["avg_response_length"]
+        if "avg_response_length" in usage_stats
+        else 200
+    )
     if avg_length < 100:
         suggestions.append("Templates might be generating too brief responses")
     elif avg_length > 500:
@@ -433,7 +440,7 @@ def find_template_by_content(
 
 
 class _EnhancedPromptBuilder:
-    """100% testable enhanced prompt builder with dependency injection."""
+    """Enhanced prompt builder with configurable templates and context awareness."""
 
     def __init__(
         self,
@@ -490,19 +497,27 @@ class _EnhancedPromptBuilder:
             formatting_options = ContextFormattingOptions(
                 max_length=max_context_length,
                 include_attribution=include_source_attribution,
-                source_label=self._prompt_config.formatting.get(
-                    "source_label", "Source"
+                source_label=(
+                    self._prompt_config.formatting["source_label"]
+                    if "source_label" in self._prompt_config.formatting
+                    else "Source"
                 ),
-                truncation_indicator=self._prompt_config.formatting.get(
-                    "truncation_indicator", "..."
+                truncation_indicator=(
+                    self._prompt_config.formatting["truncation_indicator"]
+                    if "truncation_indicator" in self._prompt_config.formatting
+                    else "..."
                 ),
-                min_chunk_size=self._prompt_config.formatting.get(
-                    "min_chunk_size", 100
+                min_chunk_size=(
+                    self._prompt_config.formatting["min_chunk_size"]
+                    if "min_chunk_size" in self._prompt_config.formatting
+                    else 100
                 ),
             )
 
-            no_context_message = self._prompt_config.messages.get(
-                "no_context", "No relevant context available."
+            no_context_message = (
+                self._prompt_config.messages["no_context"]
+                if "no_context" in self._prompt_config.messages
+                else "No relevant context available."
             )
 
             result = build_category_prompt(
@@ -635,83 +650,7 @@ def create_enhanced_prompt_builder(
 
 
 # ================================
-# BACKWARD COMPATIBILITY LAYER
-# ================================
-
-
-class LegacyEnhancedPromptBuilder:
-    """Legacy enhanced prompt builder for backward compatibility."""
-
-    def __init__(self, language: str):
-        """Initialize with legacy interface pattern."""
-        from .enhanced_prompt_templates_providers import \
-            create_production_setup
-
-        # Create DI components
-        config_provider, logger_provider = create_production_setup()
-
-        # Create modern builder
-        self._builder = _EnhancedPromptBuilder(
-            language=language,
-            config_provider=config_provider,
-            logger_provider=logger_provider,
-        )
-
-        # Store language for compatibility
-        self.language = language
-
-        # Expose legacy attributes for compatibility
-        self.templates = self._builder._templates
-
-    def build_prompt(
-        self,
-        query: str,
-        context_chunks: List[str],
-        category: DocumentCategory = DocumentCategory.GENERAL,
-        max_context_length: int = 2000,
-        include_source_attribution: bool = True,
-    ) -> Tuple[str, str]:
-        """Legacy method interface."""
-        return self._builder.build_prompt(
-            query=query,
-            context_chunks=context_chunks,
-            category=category,
-            max_context_length=max_context_length,
-            include_source_attribution=include_source_attribution,
-        )
-
-    def get_followup_prompt(
-        self,
-        original_query: str,
-        original_answer: str,
-        followup_query: str,
-        category: DocumentCategory = DocumentCategory.GENERAL,
-    ) -> str:
-        """Legacy method interface."""
-        return self._builder.get_followup_prompt(
-            original_query=original_query,
-            original_answer=original_answer,
-            followup_query=followup_query,
-            category=category,
-        )
-
-    def suggest_template_improvements(
-        self, category: DocumentCategory, usage_stats: Dict[str, Any]
-    ) -> List[str]:
-        """Legacy method interface."""
-        return self._builder.suggest_template_improvements(category, usage_stats)
-
-    def get_template_stats(self) -> Dict[str, Any]:
-        """Legacy method interface."""
-        return self._builder.get_template_stats()
-
-    def validate_templates(self) -> Dict[str, Any]:
-        """Legacy method interface."""
-        return self._builder.validate_templates()
-
-
-# ================================
-# DUAL INTERFACE SUPPORT
+# PUBLIC INTERFACE
 # ================================
 
 
@@ -721,28 +660,23 @@ def EnhancedPromptBuilder(
     logger_provider: Optional[LoggerProvider] = None,
 ):
     """
-    Unified EnhancedPromptBuilder factory supporting both interfaces.
+    Create an enhanced prompt builder with dependency injection.
 
-    Legacy interface (for backward compatibility):
-        EnhancedPromptBuilder(language="hr")
+    Args:
+        language: Language code (e.g., "hr", "en")
+        config_provider: Configuration provider for templates
+        logger_provider: Logger provider for debugging
 
-    New DI interface:
-        EnhancedPromptBuilder(language="hr", config_provider=provider, logger_provider=provider)
+    Returns:
+        Configured _EnhancedPromptBuilder instance
     """
-    # New DI interface - config provider provided
-    if config_provider is not None:
-        return _EnhancedPromptBuilder(
-            language=language,
-            config_provider=config_provider,
-            logger_provider=logger_provider,
-        )
+    if config_provider is None or logger_provider is None:
+        from .enhanced_prompt_templates_providers import create_production_setup
 
-    # Legacy interface - only language provided
-    else:
-        return LegacyEnhancedPromptBuilder(language)
+        config_provider, logger_provider = create_production_setup()
 
-
-# Legacy factory function for backward compatibility
-def create_enhanced_prompt_builder_legacy(language: str) -> LegacyEnhancedPromptBuilder:
-    """Create enhanced prompt builder using legacy interface for backward compatibility."""
-    return LegacyEnhancedPromptBuilder(language)
+    return _EnhancedPromptBuilder(
+        language=language,
+        config_provider=config_provider,
+        logger_provider=logger_provider,
+    )

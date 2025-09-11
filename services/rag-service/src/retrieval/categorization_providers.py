@@ -1,6 +1,6 @@
 """
 Provider implementations for categorization dependency injection.
-Production and mock providers for 100% testable categorization system.
+Production and mock providers for testable categorization system.
 """
 
 from typing import Any, Dict
@@ -19,73 +19,9 @@ class ProductionConfigProvider:
 
     def get_categorization_config(self, language: str) -> Dict[str, Any]:
         """Get categorization configuration for specified language."""
-        try:
-            return self._config_loader.get_language_specific_config(
-                "categorization", language
-            )
-        except Exception as e:
-            # Fallback to basic configuration
-            return self._get_fallback_config()
-
-    def _get_fallback_config(self) -> Dict[str, Any]:
-        """Fallback configuration when TOML loading fails."""
-        return {
-            "categories": {
-                "general": {"priority": 1},
-                "technical": {"priority": 2},
-                "cultural": {"priority": 3},
-            },
-            "patterns": {
-                "general": ["*"],
-                "technical": ["API", "kod", "programming", "software", "system"],
-                "cultural": [
-                    "kultura",
-                    "tradicija",
-                    "povijest",
-                    "culture",
-                    "tradition",
-                    "history",
-                ],
-            },
-            "cultural_keywords": {
-                "croatian_culture": [
-                    "hrvatski",
-                    "hrvatska",
-                    "zagreb",
-                    "split",
-                    "dubrovnik",
-                    "jadran",
-                ],
-                "croatian_history": [
-                    "povijest",
-                    "domovinski rat",
-                    "jugoslavija",
-                    "ndh",
-                    "partizani",
-                ],
-                "croatian_language": [
-                    "ije",
-                    "je",
-                    "kajkavski",
-                    "čakavski",
-                    "štokavski",
-                ],
-            },
-            "complexity_thresholds": {
-                "simple": 2.0,
-                "moderate": 5.0,
-                "complex": 8.0,
-                "analytical": 12.0,
-            },
-            "retrieval_strategies": {
-                "default": "hybrid",
-                "category_technical": "dense",
-                "category_cultural": "cultural_context",
-                "complexity_simple": "sparse",
-                "complexity_analytical": "hierarchical",
-                "cultural_context": "cultural_aware",
-            },
-        }
+        return self._config_loader.get_language_specific_config(
+            "categorization", language
+        )
 
 
 class MockConfigProvider:
@@ -189,7 +125,7 @@ class NoOpLoggerProvider:
         pass
 
 
-class TestLoggerProvider:
+class MockLoggerProvider:
     """Test logger that captures messages for verification."""
 
     def __init__(self):
@@ -243,7 +179,7 @@ def create_config_provider(use_mock: bool = False) -> ConfigProvider:
 
 def create_test_categorization_setup(
     language: str = "hr", custom_config: Dict[str, Any] = None
-) -> tuple[MockConfigProvider, TestLoggerProvider]:
+) -> tuple[MockConfigProvider, MockLoggerProvider]:
     """
     Create complete test setup for categorization testing.
 
@@ -259,7 +195,7 @@ def create_test_categorization_setup(
     if custom_config:
         mock_config.set_categorization_config(language, custom_config)
 
-    test_logger = TestLoggerProvider()
+    test_logger = MockLoggerProvider()
 
     return mock_config, test_logger
 

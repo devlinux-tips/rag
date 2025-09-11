@@ -10,8 +10,10 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Set,
-                    Tuple)
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Set, Tuple
+
+from ..utils.config_models import RankingConfig
+from ..utils.config_models import RankingMethod as ConfigRankingMethod
 
 if TYPE_CHECKING:
     from ..utils.config_protocol import ConfigProvider
@@ -22,28 +24,12 @@ logger = logging.getLogger(__name__)
 # ===== PURE DATA STRUCTURES =====
 
 
-class RankingMethod(Enum):
-    """Available ranking methods."""
-
-    BM25 = "bm25"
-    TF_IDF = "tf_idf"
-    SEMANTIC = "semantic"
-    HYBRID = "hybrid"
-    LANGUAGE_ENHANCED = "language_enhanced"
+# Note: RankingMethod is now imported from config_models as ConfigRankingMethod
+# Keep local alias for backward compatibility
+RankingMethod = ConfigRankingMethod
 
 
-@dataclass
-class RankingConfig:
-    """Configuration for result ranking - pure data structure."""
-
-    method: RankingMethod = RankingMethod.LANGUAGE_ENHANCED
-    enable_diversity: bool = True
-    diversity_threshold: float = 0.8
-    boost_recent: bool = False
-    boost_authoritative: bool = True
-    content_length_factor: bool = True
-    keyword_density_factor: bool = True
-    language_specific_boost: bool = True
+# Note: RankingConfig is now imported from config_models.py
 
 
 @dataclass
@@ -120,40 +106,7 @@ class LanguageProvider(Protocol):
 # ===== PURE FUNCTIONS =====
 
 
-def validate_ranking_config(config_dict: Dict[str, Any]) -> RankingConfig:
-    """
-    Validate and create ranking configuration.
-    Pure function - no side effects, deterministic output.
-
-    Args:
-        config_dict: Configuration dictionary
-
-    Returns:
-        Validated RankingConfig object
-
-    Raises:
-        ValueError: If configuration is invalid
-    """
-    if not isinstance(config_dict, dict):
-        raise ValueError("Configuration must be a dictionary")
-
-    # Handle method enum conversion
-    method_str = config_dict.get("method", "language_enhanced")
-    try:
-        method = RankingMethod(method_str)
-    except ValueError:
-        method = RankingMethod.LANGUAGE_ENHANCED
-
-    return RankingConfig(
-        method=method,
-        enable_diversity=config_dict.get("enable_diversity", True),
-        diversity_threshold=config_dict.get("diversity_threshold", 0.8),
-        boost_recent=config_dict.get("boost_recent", False),
-        boost_authoritative=config_dict.get("boost_authoritative", True),
-        content_length_factor=config_dict.get("content_length_factor", True),
-        keyword_density_factor=config_dict.get("keyword_density_factor", True),
-        language_specific_boost=config_dict.get("language_specific_boost", True),
-    )
+# validate_ranking_config function removed - now handled by ConfigValidator and RankingConfig.from_validated_config()
 
 
 def calculate_keyword_relevance_score(
@@ -239,11 +192,15 @@ def calculate_content_quality_score(
     # Check for quality indicators
     positive_matches = sum(
         len(re.findall(pattern, content_lower))
-        for pattern in quality_indicators.get("positive", [])
+        for pattern in quality_indicators.get(
+            "positive", []
+        )  # Keep .get() - quality_indicators structure not validated
     )
     negative_matches = sum(
         len(re.findall(pattern, content_lower))
-        for pattern in quality_indicators.get("negative", [])
+        for pattern in quality_indicators.get(
+            "negative", []
+        )  # Keep .get() - quality_indicators structure not validated
     )
 
     # Adjust score based on indicators
@@ -251,7 +208,9 @@ def calculate_content_quality_score(
     score -= min(0.2, negative_matches * 0.1)
 
     # Boost for having title
-    has_title = bool(metadata.get("title"))
+    has_title = bool(
+        metadata.get("title")
+    )  # Keep .get() - document metadata from external sources
     if has_title:
         score += 0.1
 
@@ -401,7 +360,9 @@ def calculate_authority_score(
     score = 0.5  # Base score
 
     # Source-based authority
-    source = metadata.get("source", "").lower()
+    source = metadata.get(
+        "source", ""
+    ).lower()  # Keep .get() - document metadata from external sources
     source_authority = 0.0
     for auth_source in authoritative_sources:
         if auth_source in source:
@@ -416,13 +377,17 @@ def calculate_authority_score(
     score += source_authority
 
     # Document type authority
-    doc_type = metadata.get("content_type", metadata.get("type", ""))
-    type_multiplier = type_weights.get(doc_type, 1.0)
+    doc_type = metadata.get(
+        "content_type", metadata.get("type", "")
+    )  # Keep .get() - document metadata from external sources
+    type_multiplier = type_weights[doc_type] if doc_type in type_weights else 1.0
     score *= type_multiplier
 
     # Metadata completeness (more complete = more authoritative)
     metadata_fields = ["title", "author", "date", "source", "language"]
-    completeness = sum(1 for field in metadata_fields if metadata.get(field))
+    completeness = sum(
+        1 for field in metadata_fields if metadata.get(field)
+    )  # Keep .get() - document metadata from external sources
     completeness_score = completeness / len(metadata_fields) * 0.2
     score += completeness_score
 
@@ -457,7 +422,9 @@ def calculate_length_appropriateness_score(
     score = 0.5
 
     # Get optimal range for query type
-    optimal_min, optimal_max = optimal_ranges.get(query_type, (100, 500))
+    optimal_min, optimal_max = (
+        optimal_ranges[query_type] if query_type in optimal_ranges else (100, 500)
+    )
 
     if optimal_min <= content_length <= optimal_max:
         score = 1.0
@@ -503,7 +470,7 @@ def calculate_query_type_match_score(
     score = 0.5  # Base score
 
     # Check type-specific patterns
-    patterns = type_patterns.get(query_type, [])
+    patterns = type_patterns[query_type] if query_type in type_patterns else []
     pattern_matches = sum(
         len(re.findall(pattern, content_lower)) for pattern in patterns
     )
@@ -647,7 +614,7 @@ def create_ranking_explanation(ranked_doc: RankedDocument) -> str:
 
 
 class DocumentRanker:
-    """100% testable document ranker with dependency injection."""
+    """Document ranker with dependency injection for testability."""
 
     def __init__(
         self,
@@ -666,13 +633,10 @@ class DocumentRanker:
         self.language_features = self.language_provider.get_language_features(language)
 
     def _load_configuration(self) -> RankingConfig:
-        """Load ranking configuration through provider."""
-        try:
-            config_dict = self.config_provider.get_ranking_config()
-            return validate_ranking_config(config_dict)
-        except Exception as e:
-            self.logger.warning(f"Failed to load ranking config: {e}, using defaults")
-            return RankingConfig()  # Default configuration
+        """Load ranking configuration through provider with validated config."""
+        # Get main config from provider - this should be pre-validated by ConfigValidator
+        main_config = self.config_provider.get_main_config()
+        return RankingConfig.from_validated_config(main_config)
 
     def rank_documents(
         self,
@@ -696,45 +660,45 @@ class DocumentRanker:
 
         context = context or {}
 
-        try:
-            self.logger.info(
-                f"Ranking {len(documents)} documents using {self.config.method.value}"
+        self.logger.info(
+            f"Ranking {len(documents)} documents using {self.config.method.value}"
+        )
+
+        # Step 1: Calculate ranking signals for each document
+        ranked_docs = []
+        for doc in documents:
+            ranked_doc = self._rank_single_document(doc, query, context)
+            ranked_docs.append(ranked_doc)
+
+        # Step 2: Apply diversity filtering if enabled
+        if self.config.enable_diversity:
+            ranked_docs = apply_diversity_filtering(
+                ranked_docs, self.config.diversity_threshold
             )
 
-            # Step 1: Calculate ranking signals for each document
-            ranked_docs = []
-            for doc in documents:
-                ranked_doc = self._rank_single_document(doc, query, context)
-                ranked_docs.append(ranked_doc)
+        # Step 3: Final sort by score
+        ranked_docs.sort(key=lambda x: x.final_score, reverse=True)
 
-            # Step 2: Apply diversity filtering if enabled
-            if self.config.enable_diversity:
-                ranked_docs = apply_diversity_filtering(
-                    ranked_docs, self.config.diversity_threshold
-                )
+        # Step 4: Update ranks
+        for i, doc in enumerate(ranked_docs):
+            doc.rank = i + 1
 
-            # Step 3: Final sort by score
-            ranked_docs.sort(key=lambda x: x.final_score, reverse=True)
-
-            # Step 4: Update ranks
-            for i, doc in enumerate(ranked_docs):
-                doc.rank = i + 1
-
-            self.logger.info(f"Ranking complete: {len(ranked_docs)} documents ranked")
-            return ranked_docs
-
-        except Exception as e:
-            self.logger.error(f"Ranking failed: {e}")
-            # Fallback: return original order
-            return self._create_fallback_ranking(documents)
+        self.logger.info(f"Ranking complete: {len(ranked_docs)} documents ranked")
+        return ranked_docs
 
     def _rank_single_document(
         self, document: Dict[str, Any], query: ProcessedQuery, context: Dict[str, Any]
     ) -> RankedDocument:
         """Calculate ranking signals for a single document."""
-        content = document.get("content", "")
-        metadata = document.get("metadata", {})
-        original_score = document.get("relevance_score", 0.0)
+        content = document.get(
+            "content", ""
+        )  # Keep .get() - document data from external sources
+        metadata = document.get(
+            "metadata", {}
+        )  # Keep .get() - document data from external sources
+        original_score = document.get(
+            "relevance_score", 0.0
+        )  # Keep .get() - document data from external sources
 
         ranking_signals = []
 
@@ -814,7 +778,9 @@ class DocumentRanker:
         }
 
         return RankedDocument(
-            id=document.get("id", "unknown"),
+            id=document.get(
+                "id", "unknown"
+            ),  # Keep .get() - document data from external sources
             content=content,
             metadata=metadata,
             original_score=original_score,
@@ -823,27 +789,6 @@ class DocumentRanker:
             ranking_signals=ranking_signals,
             ranking_metadata=ranking_metadata,
         )
-
-    def _create_fallback_ranking(
-        self, documents: List[Dict[str, Any]]
-    ) -> List[RankedDocument]:
-        """Create fallback ranking when main ranking fails."""
-        ranked_docs = []
-
-        for i, doc in enumerate(documents):
-            ranked_doc = RankedDocument(
-                id=doc.get("id", f"fallback_{i}"),
-                content=doc.get("content", ""),
-                metadata=doc.get("metadata", {}),
-                original_score=doc.get("relevance_score", 0.0),
-                final_score=doc.get("relevance_score", 0.0),
-                rank=i + 1,
-                ranking_signals=[],
-                ranking_metadata={"fallback": True},
-            )
-            ranked_docs.append(ranked_doc)
-
-        return ranked_docs
 
     def explain_ranking(self, ranked_doc: RankedDocument) -> str:
         """Generate human-readable explanation of document ranking."""
@@ -870,8 +815,7 @@ def create_document_ranker(
         Configured DocumentRanker
     """
     # Import here to avoid circular imports
-    from .ranker_providers import (create_config_provider,
-                                   create_language_provider)
+    from .ranker_providers import create_config_provider, create_language_provider
 
     if config_provider is None:
         config_provider = create_config_provider()
@@ -896,8 +840,7 @@ def create_mock_ranker(
         DocumentRanker with mock providers
     """
     # Import here to avoid circular imports
-    from .ranker_providers import (create_mock_config_provider,
-                                   create_mock_language_provider)
+    from .ranker_providers import create_mock_config_provider, create_mock_language_provider
 
     config_provider = create_mock_config_provider(config_dict or {})
     language_provider = create_mock_language_provider()

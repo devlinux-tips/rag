@@ -57,18 +57,9 @@ class ConfigLoader:
 
     def _get_language_config_files(self) -> Dict[str, str]:
         """Get available language config files dynamically."""
-        try:
-            # Load main config to get language mappings
-            main_config_path = self.config_dir / "config.toml"
-            if main_config_path.exists():
-                with open(main_config_path, "rb") as f:
-                    main_config = tomllib.load(f)
-                    return main_config["languages"].get("config_files", {})
-        except Exception:
-            pass
-
-        # Fallback: return known language files
-        return {"croatian": "croatian.toml", "english": "english.toml"}
+        # Convention-based approach: language code maps to filename (hr -> hr.toml, en -> en.toml)
+        # This matches the actual architecture used in the project
+        return {}
 
     def load(self, config_name: str, use_cache: bool = True) -> Dict[str, Any]:
         """
@@ -257,9 +248,14 @@ def get_language_specific_config(section: str, language: str) -> Dict[str, Any]:
 
     Returns:
         Dictionary containing language-specific section configuration
+
+    Raises:
+        ConfigError: If section not found in language configuration
     """
     config = get_language_config(language)
-    return config.get(section, {})
+    if section not in config:
+        raise ConfigError(f"Section '{section}' not found in {language}.toml")
+    return config[section]
 
 
 def get_supported_languages() -> list[str]:
@@ -268,13 +264,17 @@ def get_supported_languages() -> list[str]:
 
     Returns:
         List of supported language codes
+
+    Raises:
+        ConfigError: If languages configuration is invalid
     """
     try:
         main_config = load_config("config")
-        return main_config["languages"].get("supported", ["hr"])
-    except Exception:
-        # Fallback to Croatian only
-        return ["hr"]
+        # FAIL FAST: No fallback defaults - configuration must be complete
+        return main_config["languages"]["supported"]
+    except Exception as e:
+        # FAIL FAST: Language configuration must be valid
+        raise ConfigError(f"Failed to load supported languages: {e}")
 
 
 def get_language_config_file(language: str) -> str:
@@ -495,6 +495,55 @@ def get_ranking_config() -> Dict[str, Any]:
     """Get ranking configuration."""
     retrieval_config = get_retrieval_config()
     return retrieval_config["ranking"]
+
+
+def get_language_ranking_features(language: str) -> Dict[str, Any]:
+    """
+    Get language-specific ranking features configuration.
+
+    This function retrieves the ranking.language_features section from the
+    language-specific configuration file (hr.toml, en.toml, etc.).
+
+    Args:
+        language: Language code ('hr' for Croatian, 'en' for English)
+
+    Returns:
+        Dictionary containing language-specific ranking features configuration
+        with structure:
+        {
+            "special_characters": {"enabled": bool, "characters": list, ...},
+            "importance_words": {"enabled": bool, "words": list, ...},
+            "cultural_patterns": {"enabled": bool, "patterns": list, ...},
+            "grammar_patterns": {"enabled": bool, "patterns": list, ...},
+            "capitalization": {"enabled": bool, "proper_nouns": list, ...},
+            "vocabulary_patterns": {"enabled": bool, "patterns": list, ...}
+        }
+
+    Raises:
+        ConfigError: If language not supported or ranking features not found
+
+    Example:
+        >>> features = get_language_ranking_features("hr")
+        >>> croatian_chars = features["special_characters"]["characters"]
+        >>> print(croatian_chars)  # ["č", "ć", "š", "ž", "đ"]
+    """
+    if not is_language_supported(language):
+        raise ConfigError(f"Language '{language}' not supported")
+
+    try:
+        ranking_config = get_language_specific_config("ranking", language)
+        if "language_features" not in ranking_config:
+            raise ConfigError(
+                f"Missing 'language_features' section in ranking configuration "
+                f"for language '{language}'"
+            )
+        return ranking_config["language_features"]
+    except ConfigError:
+        raise
+    except Exception as e:
+        raise ConfigError(
+            f"Failed to load language ranking features for '{language}': {e}"
+        )
 
 
 def get_reranking_config() -> Dict[str, Any]:

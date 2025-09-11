@@ -39,21 +39,24 @@ class AsyncHttpxClient:
 
         try:
             response = await client.get(url, timeout=timeout)
+
+            json_data = None
+            if "content-type" in response.headers and response.headers[
+                "content-type"
+            ].startswith("application/json"):
+                json_data = response.json()
+
             return HttpResponse(
                 status_code=response.status_code,
                 content=response.content,
-                json_data=response.json()
-                if response.headers.get("content-type", "").startswith(
-                    "application/json"
-                )
-                else None,
+                json_data=json_data,
             )
         except httpx.ConnectError as e:
             raise ConnectionError(f"Connection failed: {e}")
         except httpx.HTTPStatusError as e:
             raise HttpError(f"HTTP error: {e}", e.response.status_code)
-        except Exception as e:
-            raise HttpError(f"Request failed: {e}", 0)
+        except httpx.TimeoutException as e:
+            raise TimeoutError(f"Request timeout: {e}")
 
     async def post(
         self, url: str, json_data: Dict[str, Any], timeout: float = 30.0
@@ -63,21 +66,24 @@ class AsyncHttpxClient:
 
         try:
             response = await client.post(url, json=json_data, timeout=timeout)
+
+            json_data_response = None
+            if "content-type" in response.headers and response.headers[
+                "content-type"
+            ].startswith("application/json"):
+                json_data_response = response.json()
+
             return HttpResponse(
                 status_code=response.status_code,
                 content=response.content,
-                json_data=response.json()
-                if response.headers.get("content-type", "").startswith(
-                    "application/json"
-                )
-                else None,
+                json_data=json_data_response,
             )
         except httpx.ConnectError as e:
             raise ConnectionError(f"Connection failed: {e}")
         except httpx.HTTPStatusError as e:
             raise HttpError(f"HTTP error: {e}", e.response.status_code)
-        except Exception as e:
-            raise HttpError(f"Request failed: {e}", 0)
+        except httpx.TimeoutException as e:
+            raise TimeoutError(f"Request timeout: {e}")
 
     async def stream_post(
         self, url: str, json_data: Dict[str, Any], timeout: float = 30.0
@@ -99,8 +105,8 @@ class AsyncHttpxClient:
             raise ConnectionError(f"Connection failed: {e}")
         except httpx.HTTPStatusError as e:
             raise HttpError(f"HTTP error: {e}", e.response.status_code)
-        except Exception as e:
-            raise HttpError(f"Streaming request failed: {e}", 0)
+        except httpx.TimeoutException as e:
+            raise TimeoutError(f"Streaming request timeout: {e}")
 
     async def close(self) -> None:
         """Close HTTP client."""
@@ -263,7 +269,10 @@ class FallbackAsyncClient:
         )
 
         # Simulate streaming by wrapping response
-        response_text = response.json().get("response", "")
+        response_json = response.json()
+        if "response" not in response_json:
+            raise ValueError("Missing 'response' in JSON response")
+        response_text = response_json["response"]
         return [f'{{"response": "{response_text}", "done": true}}']
 
     async def close(self) -> None:

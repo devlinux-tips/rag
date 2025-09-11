@@ -211,7 +211,7 @@ __marimo__/
 **/temp_cache
 **/temp_chroma_db
 **/models/embeddings
-**/data/vectordb
+**/data/**/vectordb
 **/data/chromadb
 
 
@@ -220,6 +220,7 @@ __marimo__/
 # Claude Flow generated files
 .claude/**
 .claude-flow/**
+**/.claude-flow/**
 .roo/**
 .roomodes
 memory

@@ -1,6 +1,6 @@
 """
-100% testable document retrieval system for multilingual RAG.
-Clean slate architecture with pure functions and dependency injection.
+Document retrieval system for multilingual RAG applications.
+Clean architecture with pure functions and dependency injection.
 """
 
 import asyncio
@@ -103,7 +103,7 @@ class RetrievalResult:
                 doc.rank = i + 1
 
 
-# Protocol-based Dependencies (100% testable interfaces)
+# Protocol-based Dependencies (testable interfaces)
 class QueryProcessor(Protocol):
     """Protocol for query processing."""
 
@@ -149,7 +149,7 @@ class RetrievalConfig(Protocol):
         ...
 
 
-# Pure Functions (100% testable)
+# Pure Functions (testable utilities)
 def select_retrieval_strategy(
     query: RetrievalQuery,
     default_strategy: RetrievalStrategy = RetrievalStrategy.SEMANTIC,
@@ -177,7 +177,10 @@ def select_retrieval_strategy(
         QueryType.EXPLORATORY: RetrievalStrategy.SEMANTIC,
     }
 
-    selected = strategy_map.get(query.query_type, default_strategy)
+    if query.query_type not in strategy_map:
+        selected = default_strategy
+    else:
+        selected = strategy_map[query.query_type]
 
     # Adjust based on query characteristics
     if len(query.keywords) >= 3 and selected == RetrievalStrategy.SEMANTIC:
@@ -207,7 +210,10 @@ def calculate_adaptive_top_k(query: RetrievalQuery, base_top_k: int = 10) -> int
         QueryType.EXPLORATORY: 1.5,  # Exploration needs variety
     }
 
-    multiplier = multipliers.get(query.query_type, 1.0)
+    if query.query_type not in multipliers:
+        multiplier = 1.0
+    else:
+        multiplier = multipliers[query.query_type]
 
     # Adjust for query complexity
     if len(query.keywords) > 5:
@@ -399,7 +405,7 @@ def calculate_diversity_score(documents: List[RetrievedDocument]) -> float:
 # Main Retrieval Engine Class
 class DocumentRetriever:
     """
-    100% testable document retrieval engine using dependency injection.
+    Document retrieval engine using dependency injection for testability.
     """
 
     def __init__(
@@ -593,10 +599,18 @@ class DocumentRetriever:
             self.logger.warning(f"Keyword retrieval failed: {keyword_docs}")
             keyword_docs = []
 
-        # Get weights from config
+        # Get weights from config - validate required keys
         strategy_config = self.config.get_strategy_config(RetrievalStrategy.HYBRID)
-        semantic_weight = strategy_config.get("semantic_weight", 0.7)
-        keyword_weight = strategy_config.get("keyword_weight", 0.3)
+        if "semantic_weight" not in strategy_config:
+            raise ValueError(
+                "Missing 'semantic_weight' in hybrid strategy configuration"
+            )
+        if "keyword_weight" not in strategy_config:
+            raise ValueError(
+                "Missing 'keyword_weight' in hybrid strategy configuration"
+            )
+        semantic_weight = strategy_config["semantic_weight"]
+        keyword_weight = strategy_config["keyword_weight"]
 
         # Merge results
         merged_docs = merge_retrieval_results(

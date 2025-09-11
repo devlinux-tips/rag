@@ -1,6 +1,7 @@
 """
-Clean slate testable Ollama client for local LLM integration.
-Implements 100% testable architecture with dependency injection and pure functions.
+Ollama client for local LLM integration providing text generation and streaming.
+Handles HTTP communication with Ollama API for language model inference
+with configurable parameters and error handling.
 """
 
 import asyncio
@@ -11,8 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
 
-from ..preprocessing.cleaners import (detect_language_content,
-                                      preserve_text_encoding)
+from ..preprocessing.cleaners import detect_language_content, preserve_text_encoding
 
 
 @dataclass
@@ -191,7 +191,7 @@ def enhance_prompt_with_formality(
     Returns:
         Enhanced prompt
     """
-    if not use_formal_style or not formal_prompts.get("formal_instruction"):
+    if not use_formal_style or "formal_instruction" not in formal_prompts:
         return prompt
 
     formal_instruction = formal_prompts["formal_instruction"]
@@ -239,7 +239,9 @@ def parse_streaming_response(json_lines: List[str]) -> str:
             continue
         try:
             data = json.loads(line)
-            chunk = data.get("response", "")
+            if "response" not in data:
+                continue
+            chunk = data["response"]
             if chunk:
                 generated_chunks.append(chunk)
         except json.JSONDecodeError:
@@ -259,7 +261,9 @@ def parse_non_streaming_response(response_data: Dict[str, Any]) -> str:
     Returns:
         Generated text
     """
-    return response_data.get("response", "")
+    if "response" not in response_data:
+        raise ValueError("Missing 'response' in response data")
+    return response_data["response"]
 
 
 def calculate_generation_confidence(
@@ -308,9 +312,9 @@ def calculate_generation_confidence(
             confidence += context_usage
 
     # Error indicators from config
-    error_phrases = confidence_settings.get(
-        "error_phrases", ["error", "failed", "sorry"]
-    )
+    if "error_phrases" not in confidence_settings:
+        raise ValueError("Missing 'error_phrases' in confidence_settings")
+    error_phrases = confidence_settings["error_phrases"]
     if any(phrase in generated_text.lower() for phrase in error_phrases):
         confidence -= 0.2
 
@@ -340,8 +344,15 @@ def extract_model_list(api_response: Dict[str, Any]) -> List[str]:
     Returns:
         List of model names
     """
-    models_data = api_response.get("models", [])
-    return [model.get("name", "") for model in models_data if model.get("name")]
+    if "models" not in api_response:
+        raise ValueError("Missing 'models' in API response")
+    models_data = api_response["models"]
+    result = []
+    for model in models_data:
+        if "name" not in model:
+            continue
+        result.append(model["name"])
+    return result
 
 
 def check_model_availability(model_name: str, available_models: List[str]) -> bool:
@@ -396,7 +407,7 @@ class MultilingualOllamaClient:
     Testable Ollama client with dependency injection for HTTP operations.
 
     All business logic is in pure functions, HTTP operations are injected.
-    This enables 100% testable architecture.
+    This enables flexible and configurable client architecture.
     """
 
     def __init__(
@@ -448,41 +459,40 @@ class MultilingualOllamaClient:
         """
         start_time = time.time()
 
-        try:
-            # Step 1: Check if service is available
-            if not await self.is_service_available():
-                raise ConnectionError("Ollama service is not available")
+        # Step 1: Check if service is available
+        if not await self.is_service_available():
+            raise ConnectionError("Ollama service is not available")
 
-            # Step 2: Get language-specific configuration
-            formal_prompts = self.language_config_provider.get_formal_prompts(
-                request.language
+        # Step 2: Get language-specific configuration
+        formal_prompts = self.language_config_provider.get_formal_prompts(
+            request.language
+        )
+
+        # Step 3: Build and enhance prompt
+        base_prompt = build_complete_prompt(
+            request.query, request.context, system_prompt=None
+        )
+
+        enhanced_prompt = enhance_prompt_with_formality(
+            base_prompt, formal_prompts, self.config.prefer_formal_style
+        )
+
+        # Step 4: Create API request
+        ollama_request = create_ollama_request(enhanced_prompt, self.config)
+
+        # Step 5: Make API call (streaming or non-streaming)
+        url = f"{self.config.base_url}/api/generate"
+
+        if self.config.streaming:
+            json_lines = await self.http_client.stream_post(
+                url, ollama_request, self.config.timeout
             )
-
-            # Step 3: Build and enhance prompt
-            base_prompt = build_complete_prompt(
-                request.query, request.context, system_prompt=None
+            generated_text = parse_streaming_response(json_lines)
+        else:
+            response = await self.http_client.post(
+                url, ollama_request, self.config.timeout
             )
-
-            enhanced_prompt = enhance_prompt_with_formality(
-                base_prompt, formal_prompts, self.config.prefer_formal_style
-            )
-
-            # Step 4: Create API request
-            ollama_request = create_ollama_request(enhanced_prompt, self.config)
-
-            # Step 5: Make API call (streaming or non-streaming)
-            url = f"{self.config.base_url}/api/generate"
-
-            if self.config.streaming:
-                json_lines = await self.http_client.stream_post(
-                    url, ollama_request, self.config.timeout
-                )
-                generated_text = parse_streaming_response(json_lines)
-            else:
-                response = await self.http_client.post(
-                    url, ollama_request, self.config.timeout
-                )
-                generated_text = parse_non_streaming_response(response.json())
+            generated_text = parse_non_streaming_response(response.json())
 
             # Step 6: Apply text preservation if needed
             if self.config.preserve_diacritics:
@@ -507,31 +517,15 @@ class MultilingualOllamaClient:
             if request.metadata:
                 metadata.update(request.metadata)
 
-            return GenerationResponse(
-                text=generated_text,
-                model=self.config.model,
-                tokens_used=estimate_token_count(generated_text),
-                generation_time=time.time() - start_time,
-                confidence=confidence,
-                metadata=metadata,
-                language=request.language,
-            )
-
-        except Exception as e:
-            self.logger.error(f"Generation failed ({type(e).__name__}): {e}")
-
-            error_template = self.language_config_provider.get_error_template(
-                request.language
-            )
-            error_message = f"{type(e).__name__}: {str(e)}"
-
-            return create_error_response(
-                error_message,
-                self.config.model,
-                start_time,
-                error_template,
-                request.query_type,
-            )
+        return GenerationResponse(
+            text=generated_text,
+            model=self.config.model,
+            tokens_used=estimate_token_count(generated_text),
+            generation_time=time.time() - start_time,
+            confidence=confidence,
+            metadata=metadata,
+            language=request.language,
+        )
 
     async def is_service_available(self) -> bool:
         """
@@ -540,13 +534,9 @@ class MultilingualOllamaClient:
         Returns:
             True if service is available
         """
-        try:
-            url = f"{self.config.base_url}/api/tags"
-            response = await self.http_client.get(url, timeout=5.0)
-            return response.status_code == 200
-        except Exception as e:
-            self.logger.error(f"Service availability check failed: {e}")
-            return False
+        url = f"{self.config.base_url}/api/tags"
+        response = await self.http_client.get(url, timeout=5.0)
+        return response.status_code == 200
 
     async def get_available_models(self) -> List[str]:
         """
@@ -555,13 +545,9 @@ class MultilingualOllamaClient:
         Returns:
             List of model names
         """
-        try:
-            url = f"{self.config.base_url}/api/tags"
-            response = await self.http_client.get(url, self.config.timeout)
-            return extract_model_list(response.json())
-        except Exception as e:
-            self.logger.error(f"Failed to get available models: {e}")
-            return []
+        url = f"{self.config.base_url}/api/tags"
+        response = await self.http_client.get(url, self.config.timeout)
+        return extract_model_list(response.json())
 
     async def is_model_available(self, model_name: Optional[str] = None) -> bool:
         """
@@ -589,23 +575,18 @@ class MultilingualOllamaClient:
         """
         target_model = model_name or self.config.model
 
-        try:
-            # Check if already available
-            if await self.is_model_available(target_model):
-                return True
-
-            self.logger.info(f"Pulling model {target_model}...")
-
-            url = f"{self.config.base_url}/api/pull"
-            payload = {"name": target_model}
-
-            await self.http_client.post(url, payload, self.config.timeout)
-            self.logger.info(f"Successfully pulled {target_model}")
+        # Check if already available
+        if await self.is_model_available(target_model):
             return True
 
-        except Exception as e:
-            self.logger.error(f"Failed to pull model {target_model}: {e}")
-            return False
+        self.logger.info(f"Pulling model {target_model}...")
+
+        url = f"{self.config.base_url}/api/pull"
+        payload = {"name": target_model}
+
+        await self.http_client.post(url, payload, self.config.timeout)
+        self.logger.info(f"Successfully pulled {target_model}")
+        return True
 
     def generate_response(
         self,
@@ -671,7 +652,7 @@ class MultilingualOllamaClient:
 
 
 # Factory function for convenient creation
-def create_ollama_client_v2(
+def create_ollama_client(
     config: Optional[OllamaConfig] = None,
     http_client: Optional[HttpClient] = None,
     language_config_provider: Optional[LanguageConfigProvider] = None,
@@ -701,4 +682,4 @@ def create_ollama_client_v2(
 
 
 # Backward compatibility aliases
-OllamaClientV2 = MultilingualOllamaClient
+OllamaClient = MultilingualOllamaClient

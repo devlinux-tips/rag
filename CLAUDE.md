@@ -24,7 +24,7 @@ This is a production-ready Retrieval-Augmented Generation (RAG) system for multi
 - **Multi-device support**: Auto-detection for CUDA (NVIDIA), MPS (Apple Silicon M1/M2/M3/M4), and CPU
 - Handle language-specific challenges (Croatian diacritics, English technical terms, code-switching)
 
-## Current System Status (Updated 2025-09-06)
+## Current System Status (Updated 2025-09-11)
 
 ### 🎯 **Production Readiness: FULLY OPERATIONAL**
 
@@ -124,12 +124,24 @@ multilingual-rag-platform/     # 🆕 Monorepo root
 │   │   │       ├── config_loader.py   # Config loading
 │   │   │       └── error_handler.py   # Error handling
 │   │   ├── data/
-│   │   │   ├── raw/           # Original documents
-│   │   │   │   ├── hr/        # Croatian documents
-│   │   │   │   ├── en/        # English documents
-│   │   │   │   └── multilingual/ # Mixed-language documents
-│   │   │   ├── vectordb/      # Persistent vector storage
-│   │   │   └── test/          # Test documents and queries
+│   │   │   ├── {tenant_slug}/                    # Multi-tenant data organization
+│   │   │   │   ├── users/                        # User-specific data
+│   │   │   │   │   └── {user_id}/
+│   │   │   │   │       └── documents/           # User documents
+│   │   │   │   │           ├── hr/              # Croatian documents
+│   │   │   │   │           ├── en/              # English documents
+│   │   │   │   │           └── multilingual/    # Mixed-language documents
+│   │   │   │   ├── shared/                      # Tenant-shared documents
+│   │   │   │   │   └── documents/
+│   │   │   │   │       ├── hr/
+│   │   │   │   │       ├── en/
+│   │   │   │   │       └── multilingual/
+│   │   │   │   └── vectordb/                    # Tenant-specific vector storage
+│   │   │   ├── raw/                            # Legacy: Original document structure
+│   │   │   │   ├── hr/                         # Deprecated: Use tenant structure
+│   │   │   │   ├── en/                         # Deprecated: Use tenant structure
+│   │   │   │   └── multilingual/               # Deprecated: Use tenant structure
+│   │   │   └── test/                           # Test documents and queries
 │   │   ├── models/
 │   │   │   └── embeddings/    # Cached embedding models
 │   │   ├── notebooks/         # Development notebooks
@@ -271,6 +283,25 @@ multilingual-rag-platform/     # 🆕 Monorepo root
 - **Language Initialization**: All components require language parameter: `RAGSystem(language="hr")`
 - **Environment Flexibility**: Development and production configuration separation
 
+#### **6. Multi-Tenant Data Architecture**
+- **Tenant Isolation**: `data/{tenant_slug}/` - Complete data separation per tenant
+- **User Segregation**: `data/{tenant_slug}/users/{user_id}/` - User-specific document storage
+- **Language Organization**: `/documents/{language}/` - Language-specific folders within user space
+- **Vector Database**: `data/{tenant_slug}/vectordb/` - Tenant-specific ChromaDB instances
+- **Collection Naming**: `{tenant_slug}_{user_username}_{language}_documents` - Full isolation
+- **Configuration Templates**: Path templates in `config.toml` support tenant/user variables
+- **Legacy Support**: Old `data/raw/` structure deprecated but still readable
+
+## 🚫 **CRITICAL ARCHITECTURE GOVERNANCE**
+
+**BEFORE ANY CONFIG-RELATED WORK**: Read `CONFIG_ARCHITECTURE.md` first. This document defines the immutable configuration architecture to prevent refactoring cycles.
+
+**Key Rules**:
+- ❌ **NO `.get()` fallbacks** - Use direct dictionary access after ConfigValidator
+- ❌ **NO magic defaults** in code - All defaults in config files
+- ✅ **TWO-PHASE system** - ConfigValidator → Clean DI components
+- ✅ **Fail-fast at startup** - Never silent fallbacks
+
 ## Working on this project
 
 ### **AI-First Project Management System**
@@ -350,27 +381,6 @@ chunks = chunker.chunk_document(content=text, source_file="doc.pdf")
 rag = RAGSystem()  # Will raise error - language required
 ```
 
-**Data Structure Access:**
-```python
-# ✅ Correct: RetrievalResult contains 'documents' (List[Dict])
-retrieval_result = await retriever.retrieve(query)
-chunks = [doc["content"] for doc in retrieval_result.documents]
-
-# ❌ Wrong: Old pattern that was refactored
-chunks = [doc.content for doc in retrieval_result.results]  # AttributeError
-```
-
-**Error Handling Pattern:**
-```python
-# ✅ Correct: Modern error handling
-try:
-    rag = RAGSystem(language="hr")
-    await rag.initialize()
-except Exception as e:
-    logger.error(f"Failed to initialize RAG system: {e}")
-    # Graceful fallback or exit
-```
-
 #### **Primary Interface: RAGSystem**
 ```python
 from src.pipeline.rag_system import RAGSystem, RAGQuery
@@ -381,9 +391,9 @@ rag_en = RAGSystem(language="en")  # English system
 await rag_hr.initialize()
 await rag_en.initialize()
 
-# Process documents (language-specific storage)
-await rag_hr.process_documents("data/raw/hr")  # Croatian documents
-await rag_en.process_documents("data/raw/en")  # English documents
+# Process documents (tenant/user-specific storage)
+await rag_hr.process_documents("data/development/users/dev_user/documents/hr")  # Croatian documents
+await rag_en.process_documents("data/development/users/dev_user/documents/en")  # English documents
 
 # ✅ Correct: Query with RAGQuery object
 query_hr = RAGQuery(text="Što je RAG sustav?")
@@ -411,28 +421,6 @@ results = await rag_hr.query("Što je RAG sustav?")
 - **Security**: PyTorch 2.8.0+cu128 (CUDA 12.8 support)
 - **Hardware**: CUDA (NVIDIA) + MPS (Apple Silicon M1/M2/M3/M4) + CPU fallback
 
-### Claude Model Selection Strategy
-
-**Default: Claude Sonnet 4**
-- Document processing and chunking
-- Basic embedding and retrieval implementation
-- Standard prompt engineering
-- Code debugging and refactoring
-- Configuration and setup tasks
-
-**Switch to Claude Opus 4.1 when:**
-- **Complex Architecture Decisions**: Designing multi-component integrations
-- **Advanced Retrieval Logic**: Implementing hybrid search or re-ranking algorithms
-- **Croatian Language Challenges**: Complex morphological analysis or cultural context
-- **Performance Optimization**: Algorithm optimization requiring deep reasoning
-- **Error Analysis**: Debugging complex interaction issues between components
-- **Research Questions**: Understanding theoretical RAG concepts deeply
-
-**Auto-Switching Prompts:**
-Add to your requests: "Suggest if this requires Opus-level reasoning" and Claude will recommend switching for complex tasks.
-
-**Usage Pattern:**
-Use `/model` command in Claude Code when Claude suggests switching, or when you encounter tasks requiring deep analytical thinking rather than speed.
 
 ### Technical stack
 - **Python 3.9+** with sentence-transformers, chromadb, requests
@@ -461,6 +449,13 @@ asyncio.run(main())
 
 # Configuration Testing
 python -c "from src.utils.config_loader import get_unified_config; print(get_unified_config())"
+
+# Multi-Tenant CLI Usage
+python -m src.cli.rag_cli --tenant development --user dev_user --language hr query "Što je RAG sustav?"
+python -m src.cli.rag_cli --tenant development --user dev_user --language en query "What is a RAG system?"
+python -m src.cli.rag_cli --tenant development --user dev_user --language hr process-docs data/development/users/dev_user/documents/hr/
+python -m src.cli.rag_cli --tenant development --user dev_user --language en list-collections
+python -m src.cli.rag_cli --tenant development --user dev_user --language hr status
 
 # Component Testing
 pytest tests/ -v                  # Run all tests
@@ -765,48 +760,6 @@ general_config = get_generation_config()  # Missing language-specific templates
 - **Strategy**: FastAPI + React implementation
 - **Timeline**: 3-4 weeks (as documented)
 
-#### **Mobile Application Development**
-- **Priority**: Medium 🔥
-- **Status**: Not implemented
-- **Implementation Strategy**:
-  ```
-  Option 1: React Native (Recommended)
-  - Shared codebase with web React components
-  - Native performance on iOS and Android
-  - Croatian keyboard and language support
-  - Offline capability for cached responses
-
-  Option 2: Flutter
-  - Single codebase for iOS/Android
-  - Excellent performance and Croatian text rendering
-  - Rich widget ecosystem
-
-  Option 3: Progressive Web App (PWA)
-  - Leverage existing web interface
-  - Works on all mobile browsers
-  - Push notifications and offline support
-  ```
-- **Key Mobile Features**:
-  - **Voice Input**: Croatian speech-to-text integration
-  - **Offline Mode**: Cached responses and local document storage
-  - **Camera Integration**: Document scanning and OCR for Croatian text
-  - **Push Notifications**: Query results and system updates
-  - **Responsive Croatian UI**: Proper diacritic input and display
-- **Technical Architecture**:
-  ```
-  Mobile App (React Native/Flutter/PWA)
-       ↓ HTTP/WebSocket
-  FastAPI Backend (from web interface)
-       ↓
-  RAG System (existing)
-  ```
-- **Expected Timeline**: 4-6 weeks after web interface completion
-- **Croatian-Specific Considerations**:
-  - Croatian keyboard layouts (QWERTZ with đ, č, ć, š, ž)
-  - Voice recognition for Croatian language
-  - Offline Croatian language models for basic queries
-  - Cultural UI/UX design appropriate for Croatian users
-
 #### **Advanced Croatian Language Features**
 - **Priority**: Medium ⚡
 - **Features**:
@@ -879,7 +832,7 @@ general_config = get_generation_config()  # Missing language-specific templates
 
 #### **Phase 2: Enhancement Layer (2-4 weeks)**
 **Goal**: Production-scale capabilities (parallel development)
-- **Elixir job orchestration**: Background processing, rate limiting
+- **Elixir job orchestration**: Background processing, rate limiting, config validator schema checker
 - **Real-time updates**: WebSocket job progress
 - **Result**: Production-ready platform
 

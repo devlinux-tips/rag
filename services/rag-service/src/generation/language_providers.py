@@ -5,6 +5,7 @@ Provides testable language configuration abstraction layer.
 
 from typing import Any, Dict, Optional
 
+from ..utils.config_loader import ConfigError as ConfigurationError
 from .ollama_client import LanguageConfigProvider
 
 
@@ -14,67 +15,59 @@ class DefaultLanguageProvider:
     """
 
     def get_formal_prompts(self, language: str) -> Dict[str, str]:
-        """Get formal prompt templates for language."""
+        """Get formal prompt templates for language.
+
+        Raises:
+            ConfigurationError: If language configuration is missing or invalid
+        """
         try:
             from ..utils.config_loader import get_language_specific_config
 
             language_config = get_language_specific_config("prompts", language)
-            return language_config.get("formal", {})
-        except Exception:
-            # Fallback for missing configuration
-            if language == "hr":
-                return {
-                    "formal_instruction": "Molim te odgovori ljubazno i profesionalno na hrvatskom jeziku."
-                }
-            elif language == "en":
-                return {
-                    "formal_instruction": "Please respond politely and professionally in English."
-                }
-            else:
-                return {}
+            if "formal" not in language_config:
+                raise ConfigurationError(
+                    f"Missing 'formal' prompts section in {language}.toml configuration"
+                )
+            return language_config["formal"]
+        except Exception as e:
+            raise ConfigurationError(
+                f"Failed to load formal prompts for {language}: {e}"
+            )
 
     def get_error_template(self, language: str) -> str:
-        """Get error message template for language."""
+        """Get error message template for language.
+
+        Raises:
+            ConfigurationError: If language configuration is missing or invalid
+        """
         try:
             from ..utils.config_loader import get_language_specific_config
 
             language_config = get_language_specific_config("prompts", language)
-            return language_config.get(
-                "error_message_template", "An error occurred: {error}"
+            if "error_message_template" not in language_config:
+                raise ConfigurationError(
+                    f"Missing 'error_message_template' in {language}.toml prompts configuration"
+                )
+            return language_config["error_message_template"]
+        except Exception as e:
+            raise ConfigurationError(
+                f"Failed to load error template for {language}: {e}"
             )
-        except Exception:
-            # Fallback templates
-            if language == "hr":
-                return "Dogodila se greška: {error}"
-            elif language == "en":
-                return "An error occurred: {error}"
-            else:
-                return "Error: {error}"
 
     def get_confidence_settings(self, language: str) -> Dict[str, Any]:
-        """Get confidence calculation settings for language."""
+        """Get confidence calculation settings for language.
+
+        Raises:
+            ConfigurationError: If language configuration is missing or invalid
+        """
         try:
             from ..utils.config_loader import get_language_specific_config
 
             return get_language_specific_config("confidence", language)
-        except Exception:
-            # Fallback confidence settings
-            if language == "hr":
-                return {
-                    "error_phrases": [
-                        "greška",
-                        "problem",
-                        "ne mogu",
-                        "žao mi je",
-                        "nema podataka",
-                    ]
-                }
-            elif language == "en":
-                return {
-                    "error_phrases": ["error", "failed", "sorry", "cannot", "no data"]
-                }
-            else:
-                return {"error_phrases": ["error", "failed", "sorry"]}
+        except Exception as e:
+            raise ConfigurationError(
+                f"Failed to load confidence settings for {language}: {e}"
+            )
 
 
 class MockLanguageProvider:
@@ -113,17 +106,17 @@ class MockLanguageProvider:
         """Get formal prompt templates for language."""
         self.call_log.append({"method": "get_formal_prompts", "language": language})
 
-        return self.formal_prompts.get(
-            language, {"formal_instruction": f"Mock formal instruction for {language}"}
-        )
+        if language not in self.formal_prompts:
+            return {"formal_instruction": f"Mock formal instruction for {language}"}
+        return self.formal_prompts[language]
 
     def get_error_template(self, language: str) -> str:
         """Get error message template for language."""
         self.call_log.append({"method": "get_error_template", "language": language})
 
-        return self.error_templates.get(
-            language, f"Mock error template for {language}: {{error}}"
-        )
+        if language not in self.error_templates:
+            return f"Mock error template for {language}: {{error}}"
+        return self.error_templates[language]
 
     def get_confidence_settings(self, language: str) -> Dict[str, Any]:
         """Get confidence calculation settings for language."""
@@ -131,60 +124,6 @@ class MockLanguageProvider:
             {"method": "get_confidence_settings", "language": language}
         )
 
-        return self.confidence_settings.get(
-            language, {"error_phrases": [f"mock_error_{language}", "test_failure"]}
-        )
-
-
-class StaticLanguageProvider:
-    """
-    Static language provider with predefined configurations.
-    Useful for testing and simple deployments.
-    """
-
-    def __init__(self, static_config: Optional[Dict[str, Dict[str, Any]]] = None):
-        self.config = static_config or self._get_default_config()
-
-    def _get_default_config(self) -> Dict[str, Dict[str, Any]]:
-        """Get default static configuration."""
-        return {
-            "hr": {
-                "formal_prompts": {
-                    "formal_instruction": "Molim te odgovori ljubazno i profesionalno na hrvatskom jeziku."
-                },
-                "error_template": "Dogodila se greška: {error}",
-                "confidence_settings": {
-                    "error_phrases": [
-                        "greška",
-                        "problem",
-                        "ne mogu",
-                        "žao mi je",
-                        "nema podataka",
-                    ]
-                },
-            },
-            "en": {
-                "formal_prompts": {
-                    "formal_instruction": "Please respond politely and professionally in English."
-                },
-                "error_template": "An error occurred: {error}",
-                "confidence_settings": {
-                    "error_phrases": ["error", "failed", "sorry", "cannot", "no data"]
-                },
-            },
-        }
-
-    def get_formal_prompts(self, language: str) -> Dict[str, str]:
-        """Get formal prompt templates for language."""
-        language_config = self.config.get(language, {})
-        return language_config.get("formal_prompts", {})
-
-    def get_error_template(self, language: str) -> str:
-        """Get error message template for language."""
-        language_config = self.config.get(language, {})
-        return language_config.get("error_template", "Error: {error}")
-
-    def get_confidence_settings(self, language: str) -> Dict[str, Any]:
-        """Get confidence calculation settings for language."""
-        language_config = self.config.get(language, {})
-        return language_config.get("confidence_settings", {"error_phrases": ["error"]})
+        if language not in self.confidence_settings:
+            return {"error_phrases": [f"mock_error_{language}", "test_failure"]}
+        return self.confidence_settings[language]

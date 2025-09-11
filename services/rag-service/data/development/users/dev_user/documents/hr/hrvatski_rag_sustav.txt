@@ -1,0 +1,33 @@
+Što je RAG sustav?
+
+RAG (Retrieval-Augmented Generation) sustav je napredna AI arhitektura koja kombinira dvije moćne tehnike: dohvaćanje informacija i generiranje jezika. Ovaj hibridni pristup omogućuje AI sustavima pristup vanjskim izvorima znanja kada generiraju odgovore, čineći ih točnijima i informativnijima.
+
+Kako RAG radi
+
+RAG proces uključuje nekoliko ključnih koraka:
+1. Obrada dokumenata: Sirovi dokumenti se obrađuju i pretvaraju u pretraživive dijelove
+2. Vektorske reprezentacije: Dijelovi teksta se pretvaraju u numeričke reprezentacije pomoću modela za ugrađivanje
+3. Vektorska pohrana: Ugrađivanja se pohranjuju u vektorsku bazu podataka za učinkovito pretraživanje sličnosti
+4. Obrada upita: Korisnička pitanja se obrađuju i pretvaraju u ugrađivanja
+5. Dohvaćanje: Sustav pretražuje najrelevantniji dijeli dokumenata
+6. Generiranje: Jezični model generira odgovore koristeći dohvaćeni kontekst
+
+Prednosti RAG-a
+
+RAG sustavi nude nekoliko prednosti u odnosu na tradicionalne jezične modele:
+- Pristup ažurnim informacijama iz vanjskih izvora
+- Smanjene halucinacije zasnivanjem odgovora na stvarnim dokumentima
+- Mogućnost rada s domenskim znanjem
+- Transparentnost kroz atribuciju izvora
+- Troškovno učinkovit u usporedbi s treniranjem ogromnih modela
+
+Slučajevi korištenja
+
+RAG sustavi su posebno korisni za:
+- Odgovaranje na pitanja o tvrtkinim dokumentima
+- Korisničku podršku s integracijom baze znanja
+- Pomoć u istraživanju s akademskim radovima
+- Analizu pravnih dokumenata
+- Upite o tehničkoj dokumentaciji
+
+To čini RAG izvrsnim izborom za aplikacije koje zahtijevaju točne odgovore potkrijepljene izvorima iz velikih kolekcija dokumenata.

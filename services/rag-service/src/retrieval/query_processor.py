@@ -1,6 +1,6 @@
 """
 Fully testable query processing with dependency injection.
-Clean slate recreation with 100% mockable architecture for reliable testing.
+Clean slate recreation with mockable architecture for reliable testing.
 """
 
 import logging
@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Set
+
+from ..utils.config_models import QueryProcessingConfig
 
 if TYPE_CHECKING:
     from ..utils.config_protocol import ConfigProvider
@@ -238,7 +240,9 @@ def generate_query_filters(
         filters["document_types"] = context["document_types"]
 
     # Topic filters based on keywords
-    topic_patterns = filter_config.get("topic_patterns", {})
+    if "topic_patterns" not in filter_config:
+        raise ValueError("Missing 'topic_patterns' in filter configuration")
+    topic_patterns = filter_config["topic_patterns"]
     query_lower = query.lower()
 
     for topic, patterns in topic_patterns.items():
@@ -266,50 +270,7 @@ class QueryType(Enum):
     GENERAL = "general"
 
 
-@dataclass
-class QueryProcessingConfig:
-    """Configuration for query processing with dependency injection."""
-
-    language: str
-    expand_synonyms: bool
-    normalize_case: bool
-    remove_stopwords: bool
-    min_query_length: int
-    max_expanded_terms: int
-    enable_spell_check: bool
-    min_word_length: int
-
-    @classmethod
-    def from_config(
-        cls,
-        config_dict: Optional[Dict[str, Any]] = None,
-        config_provider: Optional["ConfigProvider"] = None,
-        language: str = "hr",
-    ) -> "QueryProcessingConfig":
-        """Create config from dictionary or provider with DRY error handling."""
-        if config_dict:
-            # Direct config provided
-            query_config = config_dict.get("query_processing", config_dict)
-        else:
-            # Use dependency injection
-            if config_provider is None:
-                from ..utils.config_protocol import get_config_provider
-
-                config_provider = get_config_provider()
-
-            full_config = config_provider.load_config("config")
-            query_config = full_config.get("query_processing", {})
-
-        return cls(
-            language=language,  # Use provided language parameter
-            expand_synonyms=query_config.get("expand_synonyms", True),
-            normalize_case=query_config.get("normalize_case", True),
-            remove_stopwords=query_config.get("remove_stopwords", True),
-            min_query_length=query_config.get("min_query_length", 3),
-            max_expanded_terms=query_config.get("max_expanded_terms", 10),
-            enable_spell_check=query_config.get("enable_spell_check", False),
-            min_word_length=query_config.get("min_word_length", 2),
-        )
+# Note: QueryProcessingConfig is now imported from config_models.py
 
 
 @dataclass
@@ -409,103 +370,96 @@ class MultilingualQueryProcessor:
         context = context or {}
         original_query = query
 
-        try:
-            # Validate query length
-            if len(query.strip()) < self.config.min_query_length:
-                return self._create_empty_result(query)
+        # Validate query length
+        if len(query.strip()) < self.config.min_query_length:
+            return self._create_empty_result(query)
 
-            # Step 1: Preprocess text using pure function
-            processed_query = normalize_text(
-                query,
-                normalize_case=self.config.normalize_case,
-                normalize_quotes=True,
-                normalize_punctuation=True,
+        # Step 1: Preprocess text using pure function
+        processed_query = normalize_text(
+            query,
+            normalize_case=self.config.normalize_case,
+            normalize_quotes=True,
+            normalize_punctuation=True,
+        )
+
+        # Step 2: Spell check if enabled and available
+        if self.config.enable_spell_check and self.spell_checker:
+            processed_query = self.spell_checker.check_and_correct(
+                processed_query, self.config.language
             )
 
-            # Step 2: Spell check if enabled and available
-            if self.config.enable_spell_check and self.spell_checker:
-                processed_query = self.spell_checker.check_and_correct(
-                    processed_query, self.config.language
-                )
+        # Step 3: Classify query type using pure function
+        question_patterns = self._get_question_patterns()
+        query_type_str = classify_query_by_patterns(processed_query, question_patterns)
+        query_type = QueryType(query_type_str)
 
-            # Step 3: Classify query type using pure function
-            question_patterns = self._get_question_patterns()
-            query_type_str = classify_query_by_patterns(
-                processed_query, question_patterns
-            )
-            query_type = QueryType(query_type_str)
+        # Step 4: Extract keywords using pure function
+        stop_words = self._get_stop_words()
+        keywords = extract_keywords_from_text(
+            processed_query,
+            stop_words=stop_words,
+            min_word_length=2,  # Default value since min_word_length not in validated config
+            remove_stopwords=self.config.remove_stopwords,
+        )
 
-            # Step 4: Extract keywords using pure function
-            stop_words = self._get_stop_words()
-            keywords = extract_keywords_from_text(
-                processed_query,
-                stop_words=stop_words,
-                min_word_length=self.config.min_word_length,
-                remove_stopwords=self.config.remove_stopwords,
-            )
-
-            # Step 5: Expand terms using pure function
-            expanded_terms = []
-            if self.config.expand_synonyms:
-                synonym_groups = self._get_synonym_groups()
-                expanded_terms = expand_terms_with_synonyms(
-                    keywords,
-                    synonym_groups=synonym_groups,
-                    max_expanded_terms=self.config.max_expanded_terms,
-                )
-
-            # Step 6: Generate filters using pure function
-            filters = generate_query_filters(
-                processed_query, context, filter_config=self.filter_config
+        # Step 5: Expand terms using pure function
+        expanded_terms = []
+        if self.config.expand_synonyms:
+            synonym_groups = self._get_synonym_groups()
+            expanded_terms = expand_terms_with_synonyms(
+                keywords,
+                synonym_groups=synonym_groups,
+                max_expanded_terms=self.config.max_expanded_terms,
             )
 
-            # Step 7: Calculate confidence using pure function
-            confidence = calculate_query_confidence(
-                original_query=original_query,
-                processed_query=processed_query,
-                keywords=keywords,
-                query_type=query_type_str,
-                patterns_matched=1 if query_type != QueryType.GENERAL else 0,
-            )
+        # Step 6: Generate filters using pure function
+        filters = generate_query_filters(
+            processed_query, context, filter_config=self.filter_config
+        )
 
-            # Create metadata
-            metadata = {
-                "processing_steps": [
-                    "preprocess",
-                    "classify",
-                    "extract",
-                    "expand",
-                    "filter",
-                ],
-                "language": self.config.language,
-                "original_length": len(original_query),
-                "processed_length": len(processed_query),
-                "keyword_count": len(keywords),
-                "expanded_count": len(expanded_terms),
-            }
+        # Step 7: Calculate confidence using pure function
+        confidence = calculate_query_confidence(
+            original_query=original_query,
+            processed_query=processed_query,
+            keywords=keywords,
+            query_type=query_type_str,
+            patterns_matched=1 if query_type != QueryType.GENERAL else 0,
+        )
 
-            result = ProcessedQuery(
-                original=original_query,
-                processed=processed_query,
-                query_type=query_type,
-                keywords=keywords,
-                expanded_terms=expanded_terms,
-                filters=filters,
-                confidence=confidence,
-                metadata=metadata,
-            )
+        # Create metadata
+        metadata = {
+            "processing_steps": [
+                "preprocess",
+                "classify",
+                "extract",
+                "expand",
+                "filter",
+            ],
+            "language": self.config.language,
+            "original_length": len(original_query),
+            "processed_length": len(processed_query),
+            "keyword_count": len(keywords),
+            "expanded_count": len(expanded_terms),
+        }
 
-            self.logger.info(
-                f"Processed query: '{original_query[:50]}...' "
-                f"-> {len(keywords)} keywords, type: {query_type.value}, "
-                f"confidence: {confidence:.2f}"
-            )
+        result = ProcessedQuery(
+            original=original_query,
+            processed=processed_query,
+            query_type=query_type,
+            keywords=keywords,
+            expanded_terms=expanded_terms,
+            filters=filters,
+            confidence=confidence,
+            metadata=metadata,
+        )
 
-            return result
+        self.logger.info(
+            f"Processed query: '{original_query[:50]}...' "
+            f"-> {len(keywords)} keywords, type: {query_type.value}, "
+            f"confidence: {confidence:.2f}"
+        )
 
-        except Exception as e:
-            self.logger.error(f"Error processing query '{query}': {e}")
-            return self._create_error_result(query, str(e))
+        return result
 
     def _get_stop_words(self) -> Set[str]:
         """Get stop words with caching."""
@@ -599,24 +553,24 @@ class MultilingualQueryProcessor:
 
 
 def create_query_processor(
-    config_dict: Optional[Dict[str, Any]] = None,
-    config_provider: Optional["ConfigProvider"] = None,
+    main_config: Dict[str, Any],
     language: str = "hr",
+    config_provider: Optional["ConfigProvider"] = None,
 ) -> MultilingualQueryProcessor:
     """
-    Create a MultilingualQueryProcessor with default dependencies.
+    Create a MultilingualQueryProcessor with validated configuration.
 
     Args:
-        config_dict: Configuration dictionary (optional)
-        config_provider: Configuration provider (optional)
+        main_config: Validated main configuration dictionary
         language: Language code for language-specific behavior
+        config_provider: Configuration provider (optional, for language data)
 
     Returns:
         Configured MultilingualQueryProcessor instance
     """
-    # Create configuration
-    config = QueryProcessingConfig.from_config(
-        config_dict=config_dict, config_provider=config_provider, language=language
+    # Create configuration from validated config - no fallbacks needed
+    config = QueryProcessingConfig.from_validated_config(
+        main_config=main_config, language=language
     )
 
     # Create language data provider (can be mocked in tests)
@@ -636,11 +590,13 @@ def create_query_processor(
             language_config = config_provider.get_language_specific_config(
                 "query_filters", language
             )
-            filter_config = language_config.get("filters", {})
+            if "filters" not in language_config:
+                raise ValueError("Missing 'filters' in language configuration")
+            filter_config = language_config["filters"]
         except (KeyError, AttributeError):
             pass
-    elif config_dict and "query_filters" in config_dict:
-        filter_config = config_dict["query_filters"]
+    elif main_config and "query_filters" in main_config:
+        filter_config = main_config["query_filters"]
 
     return MultilingualQueryProcessor(
         config=config,
@@ -666,7 +622,9 @@ class ProductionLanguageDataProvider:
         if cache_key not in self._cache:
             try:
                 shared_config = self.config_provider.get_language_shared(language)
-                words = shared_config.get("stopwords", {}).get("words", [])
+                # Direct access - ConfigValidator guarantees existence
+                stopwords_config = shared_config["stopwords"]
+                words = stopwords_config["words"]
                 self._cache[cache_key] = set(words)
             except (KeyError, AttributeError):
                 self._cache[cache_key] = set()
@@ -679,7 +637,8 @@ class ProductionLanguageDataProvider:
         if cache_key not in self._cache:
             try:
                 shared_config = self.config_provider.get_language_shared(language)
-                self._cache[cache_key] = shared_config.get("question_patterns", {})
+                # Direct access - ConfigValidator guarantees existence
+                self._cache[cache_key] = shared_config["question_patterns"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
@@ -691,7 +650,10 @@ class ProductionLanguageDataProvider:
         if cache_key not in self._cache:
             try:
                 shared_config = self.config_provider.get_language_shared(language)
-                self._cache[cache_key] = shared_config.get("synonym_groups", {})
+                # Direct access - ConfigValidator guarantees existence if synonym_groups exists in config
+                if "synonym_groups" not in shared_config:
+                    raise ValueError("Missing 'synonym_groups' in shared configuration")
+                self._cache[cache_key] = shared_config["synonym_groups"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
@@ -703,7 +665,12 @@ class ProductionLanguageDataProvider:
         if cache_key not in self._cache:
             try:
                 shared_config = self.config_provider.get_language_shared(language)
-                self._cache[cache_key] = shared_config.get("morphological_patterns", {})
+                # Direct access - ConfigValidator guarantees existence if morphological_patterns exists in config
+                if "morphological_patterns" not in shared_config:
+                    raise ValueError(
+                        "Missing 'morphological_patterns' in shared configuration"
+                    )
+                self._cache[cache_key] = shared_config["morphological_patterns"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
@@ -714,18 +681,22 @@ class ProductionLanguageDataProvider:
 
 
 def process_query(
-    query: str, language: str = "hr", context: Optional[Dict[str, Any]] = None
+    query: str,
+    main_config: Dict[str, Any],
+    language: str = "hr",
+    context: Optional[Dict[str, Any]] = None,
 ) -> ProcessedQuery:
     """
-    Process query with backward compatibility.
+    Process query with validated configuration.
 
     Args:
         query: Query text to process
+        main_config: Validated main configuration dictionary
         language: Language code
         context: Additional context
 
     Returns:
         ProcessedQuery result
     """
-    processor = create_query_processor(language=language)
+    processor = create_query_processor(main_config=main_config, language=language)
     return processor.process_query(query, context)

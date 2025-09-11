@@ -1,6 +1,6 @@
 """
 Provider implementations for multilingual text cleaning dependency injection.
-Enables 100% testable architecture with mock providers for testing.
+Production and mock providers for configurable text cleaning operations.
 """
 
 import locale
@@ -36,8 +36,7 @@ class ProductionConfigProvider:
 
     def get_chunking_config(self, language: str) -> Dict[str, Any]:
         """Get chunking configuration (merged)."""
-        from ..utils.config_loader import (get_chunking_config,
-                                           get_language_specific_config)
+        from ..utils.config_loader import get_chunking_config, get_language_specific_config
 
         # Load main chunking config
         main_chunking_config = get_chunking_config()

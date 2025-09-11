@@ -1,5 +1,5 @@
 """
-100% testable response parser for processing LLM outputs in multilingual RAG system.
+Response parser for processing LLM outputs in multilingual RAG system.
 Clean architecture with dependency injection and pure functions.
 """
 
@@ -250,9 +250,16 @@ def calculate_confidence_score(
         indicator_counts[level] = count
 
     # Calculate weighted score
-    high_count = indicator_counts.get("high", 0)
-    medium_count = indicator_counts.get("medium", 0)
-    low_count = indicator_counts.get("low", 0)
+    if "high" not in indicator_counts:
+        raise ValueError("Missing 'high' in confidence indicators")
+    if "medium" not in indicator_counts:
+        raise ValueError("Missing 'medium' in confidence indicators")
+    if "low" not in indicator_counts:
+        raise ValueError("Missing 'low' in confidence indicators")
+
+    high_count = indicator_counts["high"]
+    medium_count = indicator_counts["medium"]
+    low_count = indicator_counts["low"]
 
     total_indicators = high_count + medium_count + low_count
 
@@ -376,11 +383,17 @@ def format_display_text(
         }
 
         if confidence >= 0.8:
-            label = confidence_labels.get("high", "High Confidence")
+            if "high" not in confidence_labels:
+                raise ValueError("Missing 'high' confidence label")
+            label = confidence_labels["high"]
         elif confidence >= 0.5:
-            label = confidence_labels.get("medium", "Medium Confidence")
+            if "medium" not in confidence_labels:
+                raise ValueError("Missing 'medium' confidence label")
+            label = confidence_labels["medium"]
         else:
-            label = confidence_labels.get("low", "Low Confidence")
+            if "low" not in confidence_labels:
+                raise ValueError("Missing 'low' confidence label")
+            label = confidence_labels["low"]
 
         result_parts.append(f"\n\n[{label}]")
 
@@ -524,71 +537,59 @@ class MultilingualResponseParser:
         Raises:
             ValueError: If raw_response is invalid
         """
-        try:
-            # Handle empty response
-            if not raw_response or not raw_response.strip():
-                no_answer_message = self._config.display_settings.get(
-                    "no_answer_message", "No answer available."
-                )
-                return ParsedResponse(
-                    content=no_answer_message,
-                    has_answer=False,
-                    confidence=0.0,
-                    language=self.language,
-                )
-
-            # Clean response text
-            cleaned_content = clean_response_text(
-                raw_response, prefixes_to_remove=self._config.cleaning_prefixes
-            )
-
-            # Analyze response characteristics
-            has_answer = not check_no_answer_patterns(
-                cleaned_content, self._config.no_answer_patterns
-            )
-
-            sources = extract_source_references(
-                cleaned_content, self._config.source_patterns
-            )
-
-            confidence = calculate_confidence_score(
-                cleaned_content, self._config.confidence_indicators
-            )
-
-            detected_language = detect_language_by_patterns(
-                cleaned_content,
-                self._config.language_patterns,
-                default_language=self.language,
-            )
-
-            # Build metadata
-            metadata = {
-                "original_length": len(raw_response),
-                "cleaned_length": len(cleaned_content),
-                "query_length": len(query),
-                "context_chunks_count": len(context_chunks) if context_chunks else 0,
-                "processing_language": self.language,
-            }
-
+        # Handle empty response
+        if not raw_response or not raw_response.strip():
+            if "no_answer_message" not in self._config.display_settings:
+                raise ValueError("Missing 'no_answer_message' in display settings")
+            no_answer_message = self._config.display_settings["no_answer_message"]
             return ParsedResponse(
-                content=cleaned_content,
-                confidence=confidence,
-                sources_mentioned=sources,
-                has_answer=has_answer,
-                language=detected_language,
-                metadata=metadata,
-            )
-
-        except Exception as e:
-            self.logger.error(f"Failed to parse response: {e}")
-            # Return error response instead of raising
-            return ParsedResponse(
-                content="Error processing response.",
+                content=no_answer_message,
                 has_answer=False,
                 confidence=0.0,
                 language=self.language,
-                metadata={"error": str(e)},
             )
+
+        # Clean response text
+        cleaned_content = clean_response_text(
+            raw_response, prefixes_to_remove=self._config.cleaning_prefixes
+        )
+
+        # Analyze response characteristics
+        has_answer = not check_no_answer_patterns(
+            cleaned_content, self._config.no_answer_patterns
+        )
+
+        sources = extract_source_references(
+            cleaned_content, self._config.source_patterns
+        )
+
+        confidence = calculate_confidence_score(
+            cleaned_content, self._config.confidence_indicators
+        )
+
+        detected_language = detect_language_by_patterns(
+            cleaned_content,
+            self._config.language_patterns,
+            default_language=self.language,
+        )
+
+        # Build metadata
+        metadata = {
+            "original_length": len(raw_response),
+            "cleaned_length": len(cleaned_content),
+            "query_length": len(query),
+            "context_chunks_count": len(context_chunks) if context_chunks else 0,
+            "processing_language": self.language,
+        }
+
+        return ParsedResponse(
+            content=cleaned_content,
+            confidence=confidence,
+            sources_mentioned=sources,
+            has_answer=has_answer,
+            language=detected_language,
+            metadata=metadata,
+        )
 
     def format_for_display(self, parsed_response: ParsedResponse) -> str:
         """
@@ -603,35 +604,33 @@ class MultilingualResponseParser:
         Raises:
             ValueError: If parsed_response is invalid
         """
-        try:
-            confidence_labels = {
-                "high": self._config.display_settings.get(
-                    "high_confidence_label", "High Confidence"
-                ),
-                "medium": self._config.display_settings.get(
-                    "medium_confidence_label", "Medium Confidence"
-                ),
-                "low": self._config.display_settings.get(
-                    "low_confidence_label", "Low Confidence"
-                ),
-            }
+        # Validate display settings
+        required_labels = [
+            "high_confidence_label",
+            "medium_confidence_label",
+            "low_confidence_label",
+        ]
+        for label in required_labels:
+            if label not in self._config.display_settings:
+                raise ValueError(f"Missing '{label}' in display settings")
 
-            sources_prefix = self._config.display_settings.get(
-                "sources_prefix", "Sources"
-            )
+        confidence_labels = {
+            "high": self._config.display_settings["high_confidence_label"],
+            "medium": self._config.display_settings["medium_confidence_label"],
+            "low": self._config.display_settings["low_confidence_label"],
+        }
 
-            return format_display_text(
-                content=parsed_response.content,
-                confidence=parsed_response.confidence,
-                sources=parsed_response.sources_mentioned,
-                confidence_labels=confidence_labels,
-                sources_prefix=sources_prefix,
-            )
+        if "sources_prefix" not in self._config.display_settings:
+            raise ValueError("Missing 'sources_prefix' in display settings")
+        sources_prefix = self._config.display_settings["sources_prefix"]
 
-        except Exception as e:
-            self.logger.error(f"Failed to format response for display: {e}")
-            # Return original content as fallback
-            return parsed_response.content
+        return format_display_text(
+            content=parsed_response.content,
+            confidence=parsed_response.confidence,
+            sources=parsed_response.sources_mentioned,
+            confidence_labels=confidence_labels,
+            sources_prefix=sources_prefix,
+        )
 
 
 # ===== FACTORY FUNCTIONS =====

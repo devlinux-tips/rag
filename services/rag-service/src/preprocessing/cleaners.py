@@ -1,6 +1,7 @@
 """
-Pure function multilingual text cleaning system with dependency injection.
-100% testable architecture with no side effects and deterministic output.
+Multilingual text cleaning system with language-aware preprocessing.
+Provides deterministic text normalization and cleaning with configurable
+language-specific rules and encoding preservation.
 """
 
 import locale
@@ -471,7 +472,7 @@ def clean_text_comprehensive(
 
 
 class MultilingualTextCleaner:
-    """Multilingual text cleaner with dependency injection for 100% testability."""
+    """Multilingual text cleaner with configurable language-aware preprocessing."""
 
     def __init__(
         self,
@@ -493,11 +494,21 @@ class MultilingualTextCleaner:
         """Load all required configurations."""
         # Language-specific configuration
         language_data = self._config_provider.get_language_config(self.language)
+        # Validate required language configuration keys
+        if "word_char_pattern" not in language_data:
+            raise ValueError("Missing 'word_char_pattern' in language configuration")
+        if "locale" not in language_data:
+            raise ValueError("Missing 'locale' in language configuration")
+        if "primary" not in language_data["locale"]:
+            raise ValueError("Missing 'primary' in locale configuration")
+        if "fallback" not in language_data["locale"]:
+            raise ValueError("Missing 'fallback' in locale configuration")
+
         self.language_config = LanguageConfig(
             diacritic_map=language_data["diacritic_map"],
-            word_char_pattern=language_data.get("word_char_pattern", r"[a-zA-Z]"),
-            locale_primary=language_data.get("locale", {}).get("primary"),
-            locale_fallback=language_data.get("locale", {}).get("fallback", "C.UTF-8"),
+            word_char_pattern=language_data["word_char_pattern"],
+            locale_primary=language_data["locale"]["primary"],
+            locale_fallback=language_data["locale"]["fallback"],
         )
 
         # General cleaning configuration
@@ -527,9 +538,13 @@ class MultilingualTextCleaner:
 
         # Shared language configuration
         shared_data = self._config_provider.get_shared_language_config(self.language)
+        # Validate shared language configuration
+        if "chars_pattern" not in shared_data:
+            raise ValueError("Missing 'chars_pattern' in shared language configuration")
+
         self.shared_config = SharedLanguageConfig(
             stopwords=shared_data["stopwords"]["words"],
-            chars_pattern=shared_data.get("chars_pattern", r"[^\w\s.,!?:;()-]"),
+            chars_pattern=shared_data["chars_pattern"],
         )
 
     def clean_text(self, text: str, preserve_structure: bool = True) -> CleaningResult:
@@ -597,19 +612,11 @@ class MultilingualTextCleaner:
         # Set UTF-8 encoding
         self._environment.set_environment_variable("PYTHONIOENCODING", "utf-8")
 
-        # Try to set language-specific locale
+        # Set language-specific locale (fail-fast approach)
         if self.language_config.locale_primary:
-            try:
-                self._environment.set_locale(
-                    locale.LC_ALL, self.language_config.locale_primary
-                )
-            except Exception:
-                try:
-                    self._environment.set_locale(
-                        locale.LC_ALL, self.language_config.locale_fallback
-                    )
-                except Exception:
-                    pass  # Use default locale
+            self._environment.set_locale(
+                locale.LC_ALL, self.language_config.locale_primary
+            )
 
     def _log_debug(self, message: str) -> None:
         """Log debug message if logger available."""
@@ -703,8 +710,7 @@ def setup_language_environment(
         language: Language code
         config_provider: Optional config provider (uses production if None)
     """
-    from .cleaners_providers import (create_config_provider,
-                                     create_environment_provider)
+    from .cleaners_providers import create_config_provider, create_environment_provider
 
     config_prov = config_provider or create_config_provider()
     env_prov = create_environment_provider()
@@ -713,15 +719,3 @@ def setup_language_environment(
     )
 
     cleaner.setup_language_environment()
-
-
-# ================================
-# BACKWARD COMPATIBILITY ALIASES
-# ================================
-
-
-# Legacy class name for compatibility
-class MultilingualTextCleanerV2(MultilingualTextCleaner):
-    """Backward compatibility alias for MultilingualTextCleaner."""
-
-    pass

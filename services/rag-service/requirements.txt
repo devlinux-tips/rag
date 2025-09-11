@@ -40,3 +40,5 @@ pytest
 pytest-asyncio
 black
 flake8
+coverage
+pytest-cov

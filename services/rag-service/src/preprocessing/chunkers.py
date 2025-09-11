@@ -1,6 +1,7 @@
 """
-Fully testable document chunking with dependency injection.
-Clean slate recreation with 100% mockable architecture for reliable testing.
+Document chunking system with configurable strategies and language awareness.
+Provides intelligent text segmentation for multilingual documents with
+configurable chunk sizes and overlap handling.
 """
 
 import logging
@@ -309,8 +310,14 @@ class ChunkingConfig:
     ) -> "ChunkingConfig":
         """Create config from dictionary or provider with DRY error handling."""
         if config_dict:
-            chunking_config = config_dict.get("chunking", config_dict)
-            shared_config = config_dict.get("shared", {})
+            if "chunking" not in config_dict:
+                chunking_config = config_dict
+            else:
+                chunking_config = config_dict["chunking"]
+
+            if "shared" not in config_dict:
+                raise ValueError("Missing 'shared' section in configuration")
+            shared_config = config_dict["shared"]
         else:
             # Use dependency injection
             if config_provider is None:
@@ -322,21 +329,57 @@ class ChunkingConfig:
             chunking_config = full_config["chunking"]
             shared_config = config_provider.get_shared_config()
 
+        # Validate required configuration keys
+        required_chunking_keys = [
+            "chunk_size",
+            "overlap_size",
+            "min_chunk_size",
+            "preserve_sentence_boundaries",
+            "sentence_search_range",
+            "strategy",
+        ]
+        for key in required_chunking_keys:
+            if key not in chunking_config:
+                if key == "chunk_size" and "default_chunk_size" in shared_config:
+                    continue  # Will use shared value
+                elif key == "overlap_size" and "default_chunk_overlap" in shared_config:
+                    continue  # Will use shared value
+                elif key == "min_chunk_size" and "min_chunk_size" in shared_config:
+                    continue  # Will use shared value
+                else:
+                    raise ValueError(f"Missing '{key}' in chunking configuration")
+
+        # Get chunk size
+        if "chunk_size" in chunking_config:
+            chunk_size = chunking_config["chunk_size"]
+        elif "default_chunk_size" in shared_config:
+            chunk_size = shared_config["default_chunk_size"]
+        else:
+            raise ValueError("Missing 'chunk_size' or 'default_chunk_size'")
+
+        # Get overlap
+        if "overlap_size" in chunking_config:
+            overlap = chunking_config["overlap_size"]
+        elif "default_chunk_overlap" in shared_config:
+            overlap = shared_config["default_chunk_overlap"]
+        else:
+            raise ValueError("Missing 'overlap_size' or 'default_chunk_overlap'")
+
+        # Get min chunk size
+        if "min_chunk_size" in chunking_config:
+            min_chunk_size = chunking_config["min_chunk_size"]
+        elif "min_chunk_size" in shared_config:
+            min_chunk_size = shared_config["min_chunk_size"]
+        else:
+            raise ValueError("Missing 'min_chunk_size' in configuration")
+
         return cls(
-            chunk_size=chunking_config.get(
-                "chunk_size", shared_config.get("default_chunk_size", 1000)
-            ),
-            overlap=chunking_config.get(
-                "overlap_size", shared_config.get("default_chunk_overlap", 100)
-            ),
-            min_chunk_size=chunking_config.get(
-                "min_chunk_size", shared_config.get("min_chunk_size", 100)
-            ),
-            respect_sentences=chunking_config.get("preserve_sentence_boundaries", True),
-            sentence_search_range=chunking_config.get("sentence_search_range", 200),
-            strategy=ChunkingStrategy(
-                chunking_config.get("strategy", "sliding_window")
-            ),
+            chunk_size=chunk_size,
+            overlap=overlap,
+            min_chunk_size=min_chunk_size,
+            respect_sentences=chunking_config["preserve_sentence_boundaries"],
+            sentence_search_range=chunking_config["sentence_search_range"],
+            strategy=ChunkingStrategy(chunking_config["strategy"]),
         )
 
 
@@ -649,11 +692,15 @@ def create_document_chunker(
             language_config = config_provider.get_language_specific_config(
                 "text_processing", language
             )
-            language_patterns = language_config.get("patterns", {})
+            if "patterns" not in language_config:
+                raise ValueError("Missing 'patterns' in language configuration")
+            language_patterns = language_config["patterns"]
         except (KeyError, AttributeError):
             pass
     elif config_dict and "language_specific" in config_dict:
-        language_patterns = config_dict["language_specific"].get("patterns", {})
+        if "patterns" not in config_dict["language_specific"]:
+            raise ValueError("Missing 'patterns' in language_specific configuration")
+        language_patterns = config_dict["language_specific"]["patterns"]
 
     return DocumentChunker(
         config=config,
@@ -661,52 +708,3 @@ def create_document_chunker(
         sentence_extractor=text_cleaner,  # Same object implements both protocols
         language_patterns=language_patterns,
     )
-
-
-# Convenience function for backward compatibility
-
-
-def chunk_document(
-    text: str,
-    source_file: str,
-    chunk_size: Optional[int] = None,
-    overlap: Optional[int] = None,
-    strategy: Optional[str] = None,
-    language: str = "hr",
-) -> List[TextChunk]:
-    """
-    Chunk document with backward compatibility.
-
-    Args:
-        text: Document text
-        source_file: Source file path
-        chunk_size: Target chunk size in characters
-        overlap: Overlap between chunks
-        strategy: Chunking strategy
-        language: Language code
-
-    Returns:
-        List of text chunks
-    """
-    # Create config from parameters
-    config_dict = {}
-    if chunk_size is not None:
-        config_dict["chunk_size"] = chunk_size
-    if overlap is not None:
-        config_dict["overlap_size"] = overlap
-    if strategy is not None:
-        config_dict["strategy"] = strategy
-
-    chunker = create_document_chunker(
-        config_dict={"chunking": config_dict}, language=language
-    )
-
-    strategy_enum = None
-    if strategy:
-        try:
-            strategy_enum = ChunkingStrategy(strategy)
-        except ValueError:
-            # Use default
-            pass
-
-    return chunker.chunk_document(text, source_file, strategy_enum)

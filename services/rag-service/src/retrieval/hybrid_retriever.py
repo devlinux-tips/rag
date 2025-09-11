@@ -1,6 +1,6 @@
 """
-100% testable hybrid retrieval system combining dense and sparse search.
-Clean architecture with dependency injection and pure functions.
+Hybrid retrieval system combining dense and sparse search methods.
+Clean architecture with dependency injection and modular components.
 """
 
 import logging
@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import numpy as np
+
+from ..utils.config_models import HybridRetrievalConfig
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +119,9 @@ def calculate_bm25_score(
     # Count term frequencies in document
     doc_term_freq = {}
     for token in doc_tokens:
-        doc_term_freq[token] = doc_term_freq.get(token, 0) + 1
+        if token not in doc_term_freq:
+            doc_term_freq[token] = 0
+        doc_term_freq[token] += 1
 
     score = 0.0
 
@@ -301,9 +305,11 @@ def calculate_corpus_statistics(documents: List[List[str]]) -> Dict[str, float]:
 # ===== DATA STRUCTURES =====
 
 
+# Note: HybridRetrievalConfig is now imported from config_models.py
+# Keep local HybridConfig for internal processing configuration
 @dataclass
 class HybridConfig:
-    """Configuration for hybrid retrieval."""
+    """Internal configuration for hybrid retrieval processing."""
 
     dense_weight: float = 0.7
     sparse_weight: float = 0.3
@@ -312,6 +318,22 @@ class HybridConfig:
     min_token_length: int = 3
     normalize_scores: bool = True
     min_score_threshold: float = 0.0
+
+    @classmethod
+    def from_validated_config(
+        cls, hybrid_config: HybridRetrievalConfig
+    ) -> "HybridConfig":
+        """Create HybridConfig from validated HybridRetrievalConfig."""
+        return cls(
+            dense_weight=hybrid_config.dense_weight,
+            sparse_weight=hybrid_config.sparse_weight,
+            bm25_k1=hybrid_config.bm25_k1,
+            bm25_b=hybrid_config.bm25_b,
+            # Set defaults for fields not in HybridRetrievalConfig
+            min_token_length=3,
+            normalize_scores=True,
+            min_score_threshold=0.0,
+        )
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -425,15 +447,9 @@ class BM25Scorer:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
-        # Get stop words
-        try:
-            self.stop_words = stop_words_provider.get_stop_words(language)
-            self.logger.debug(
-                f"Loaded {len(self.stop_words)} stop words for {language}"
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to load stop words for {language}: {e}")
-            self.stop_words = set()
+        # Get stop words (fail-fast approach)
+        self.stop_words = stop_words_provider.get_stop_words(language)
+        self.logger.debug(f"Loaded {len(self.stop_words)} stop words for {language}")
 
         # Initialize corpus data
         self.documents = []
@@ -622,7 +638,11 @@ class HybridRetriever:
                 dense_score = dense_result.score
 
                 # Get BM25 score for this content
-                bm25_score = content_to_bm25.get(content, 0.0)
+                if content not in content_to_bm25:
+                    raise ValueError(
+                        f"Content not indexed in BM25 scorer: {content[:100]}..."
+                    )
+                bm25_score = content_to_bm25[content]
 
                 # Calculate hybrid score
                 hybrid_score = combine_hybrid_scores(
@@ -706,7 +726,7 @@ def create_hybrid_retriever(
     bm25_b: float = 0.75,
 ) -> HybridRetriever:
     """
-    Factory function to create hybrid retriever.
+    Factory function to create hybrid retriever (legacy).
 
     Args:
         stop_words_provider: Provider for stop words
@@ -725,6 +745,31 @@ def create_hybrid_retriever(
         bm25_k1=bm25_k1,
         bm25_b=bm25_b,
     )
+
+    return HybridRetriever(stop_words_provider, language, config)
+
+
+def create_hybrid_retriever_from_config(
+    main_config: Dict[str, Any],
+    stop_words_provider: StopWordsProvider,
+    language: str = "hr",
+) -> HybridRetriever:
+    """
+    Factory function to create hybrid retriever from validated configuration.
+
+    Args:
+        main_config: Validated main configuration dictionary
+        stop_words_provider: Provider for stop words
+        language: Language code
+
+    Returns:
+        Configured HybridRetriever instance
+    """
+    # Create validated config from main config
+    hybrid_config = HybridRetrievalConfig.from_validated_config(main_config)
+
+    # Convert to internal HybridConfig
+    config = HybridConfig.from_validated_config(hybrid_config)
 
     return HybridRetriever(stop_words_provider, language, config)
 

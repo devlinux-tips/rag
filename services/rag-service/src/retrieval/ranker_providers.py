@@ -258,36 +258,29 @@ class ProductionConfigProvider(ConfigProvider):
     def __init__(self):
         """Initialize production config provider."""
         # Import here to avoid circular imports
-        from ..utils.config_loader import (get_language_specific_config,
-                                           get_ranking_config)
-        from ..utils.error_handler import handle_config_error
+        from ..utils.config_loader import get_language_specific_config, get_ranking_config
 
         self._get_ranking_config = get_ranking_config
         self._get_language_specific_config = get_language_specific_config
-        self._handle_config_error = handle_config_error
         self.logger = logging.getLogger(__name__)
 
     def get_ranking_config(self) -> Dict[str, Any]:
         """Get ranking configuration from config files."""
-        return self._handle_config_error(
-            operation=self._get_ranking_config,
-            fallback_value={},
-            config_file="config/config.toml",
-            section="ranking",
-            logger=self.logger,
-        )
+        config = self._get_ranking_config()
+        if not config:
+            raise ValueError("Missing ranking configuration in config files")
+        return config
 
     def get_language_specific_config(
         self, section: str, language: str
     ) -> Dict[str, Any]:
         """Get language-specific configuration from config files."""
-        return self._handle_config_error(
-            operation=lambda: self._get_language_specific_config(section, language),
-            fallback_value={"morphology": {}},
-            config_file=f"config/{language}.toml",
-            section=f"{language} {section}",
-            logger=self.logger,
-        )
+        config = self._get_language_specific_config(section, language)
+        if not config:
+            raise ValueError(
+                f"Missing {section} configuration for language '{language}'"
+            )
+        return config
 
 
 class ProductionLanguageProvider(LanguageProvider):
@@ -315,7 +308,11 @@ class ProductionLanguageProvider(LanguageProvider):
                 "retrieval", language
             )
 
-            morphology = language_config.get("morphology", {})
+            if "morphology" not in language_config:
+                raise ValueError(
+                    f"Missing 'morphology' section in language config for '{language}'"
+                )
+            morphology = language_config["morphology"]
 
             # Build language features from configuration
             features = self._build_language_features(language, morphology)
@@ -325,8 +322,7 @@ class ProductionLanguageProvider(LanguageProvider):
 
         except Exception as e:
             self.logger.error(f"Failed to load language features for {language}: {e}")
-            # Return fallback features
-            return self._create_fallback_features(language)
+            raise
 
     def _build_language_features(
         self, language: str, morphology: Dict[str, Any]
@@ -343,24 +339,28 @@ class ProductionLanguageProvider(LanguageProvider):
         if not importance_words:
             importance_words = self._get_default_importance_words(language)
 
-        # Quality indicators - use config or defaults
+        # Quality indicators from configuration
         quality_indicators = {
-            "positive": morphology.get(
-                "quality_positive", self._get_default_quality_positive(language)
-            ),
-            "negative": morphology.get(
-                "quality_negative", self._get_default_quality_negative(language)
-            ),
+            "positive": morphology["quality_positive"]
+            if "quality_positive" in morphology
+            else self._get_default_quality_positive(language),
+            "negative": morphology["quality_negative"]
+            if "quality_negative" in morphology
+            else self._get_default_quality_negative(language),
         }
 
-        # Cultural patterns
-        cultural_patterns = morphology.get(
-            "cultural_patterns", self._get_default_cultural_patterns(language)
+        # Cultural patterns from configuration
+        cultural_patterns = (
+            morphology["cultural_patterns"]
+            if "cultural_patterns" in morphology
+            else self._get_default_cultural_patterns(language)
         )
 
-        # Grammar patterns
-        grammar_patterns = morphology.get(
-            "grammar_patterns", self._get_default_grammar_patterns(language)
+        # Grammar patterns from configuration
+        grammar_patterns = (
+            morphology["grammar_patterns"]
+            if "grammar_patterns" in morphology
+            else self._get_default_grammar_patterns(language)
         )
 
         # Type weights
@@ -476,26 +476,6 @@ class ProductionLanguageProvider(LanguageProvider):
             "en": [r"\b\w+ing\b", r"\b\w+ly\b", r"\b\w+tion\b", r"\b\w+ness\b"],
         }
         return defaults.get(language, [])
-
-    def _create_fallback_features(self, language: str) -> LanguageFeatures:
-        """Create fallback features when config loading fails."""
-        return LanguageFeatures(
-            importance_words=self._get_default_importance_words(language),
-            quality_indicators={
-                "positive": self._get_default_quality_positive(language),
-                "negative": self._get_default_quality_negative(language),
-            },
-            cultural_patterns=self._get_default_cultural_patterns(language),
-            grammar_patterns=self._get_default_grammar_patterns(language),
-            type_weights={
-                "encyclopedia": 1.2,
-                "academic": 1.1,
-                "news": 1.0,
-                "blog": 0.9,
-                "forum": 0.8,
-                "social": 0.7,
-            },
-        )
 
     def detect_language_content(self, text: str) -> Dict[str, Any]:
         """Detect language from content."""

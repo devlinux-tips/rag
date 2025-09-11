@@ -172,12 +172,32 @@ remove_diacritics = false  # Keep foreign diacritics in English text
 normalize_case = true
 # Note: Uppercase chars derived programmatically from lowercase_diacritics
 
+# English diacritic mapping (minimal for English - mostly preserve original)
+diacritic_map = {}  # Empty for English - preserve foreign diacritics as-is
+
+# Word character pattern for English
+word_char_pattern = "[a-zA-Z0-9]"
+
+# Locale settings for English
+[text_processing.locale]
+primary = "en_US.UTF-8"
+fallback = "C.UTF-8"
+
 # Text file encoding support for English documents
 text_encodings = ["utf-8", "cp1252", "iso-8859-1"]
 
 # ============================================================================
 # DOCUMENT PROCESSING
 # ============================================================================
+
+# Text cleaning configuration for English
+[text_cleaning]
+# General cleaning settings
+multiple_whitespace = true
+multiple_linebreaks = true
+min_meaningful_words = 3
+min_word_char_ratio = 0.6
+
 [chunking]
 # English sentence and paragraph detection
 # Note: paragraph_separators, min_sentence_length inherited from config.toml [chunking] section
@@ -392,3 +412,74 @@ regional_content_preference = "international"
 
 # English-specific ranking patterns
 [ranking]
+
+# English language-specific ranking features for calculate_language_relevance_score
+# English language-specific ranking features for calculate_language_relevance_score
+[ranking.language_features]
+
+# English has no special characters (no diacritics)
+[ranking.language_features.special_characters]
+enabled = false
+characters = []
+max_score = 0.0
+density_factor = 0
+
+# Important English vocabulary
+[ranking.language_features.importance_words]
+enabled = true
+words = [
+    "important", "significant", "major", "key", "primary", "essential",
+    "critical", "fundamental", "notable", "prominent", "leading",
+    "advanced", "innovative", "comprehensive", "detailed", "thorough"
+]
+max_score = 0.4
+word_boost = 0.1
+
+# English cultural/geographic patterns
+[ranking.language_features.cultural_patterns]
+enabled = true
+patterns = [
+    "\\b(United States|UK|Britain|England|American|British)\\b",
+    "\\b(technology|science|research|development|innovation)\\b",
+    "\\b(academic|university|college|institute|research)\\b",
+    "\\b(international|global|worldwide|national)\\b"
+]
+max_score = 0.2
+pattern_boost = 0.1
+
+# English morphology/grammar patterns
+[ranking.language_features.grammar_patterns]
+enabled = true
+patterns = [
+    "\\b\\w+ing\\b",     # Present participle/gerund (running, thinking, working)
+    "\\b\\w+ly\\b",      # Adverbs (quickly, carefully, effectively)
+    "\\b\\w+tion\\b",    # Abstract nouns (information, organization, creation)
+    "\\b\\w+ness\\b",    # Quality nouns (happiness, effectiveness, usefulness)
+    "\\b\\w+ed\\b",      # Past participle (completed, finished, developed)
+    "\\b\\w+er\\b"       # Comparative/agent (better, faster, developer)
+]
+max_score = 0.1
+density_factor = 10
+
+# English capitalization patterns (important in English)
+[ranking.language_features.capitalization]
+enabled = true
+proper_nouns = [
+    "English", "American", "British", "European", "International",
+    "United", "States", "Kingdom", "University", "Institute", "Company",
+    "Technology", "Science", "Research", "Development", "Innovation"
+]
+max_score = 0.15
+capitalization_boost = 0.05
+
+# English vocabulary patterns
+[ranking.language_features.vocabulary_patterns]
+enabled = true
+patterns = [
+    "\\b(what|who|when|where|how|why|which|whose)\\b",        # Question words
+    "\\b(technology|computer|software|digital|internet)\\b",   # Tech terms
+    "\\b(business|economy|market|industry|company)\\b",        # Business terms
+    "\\b(education|university|research|academic|study)\\b"     # Academic terms
+]
+max_score = 0.1
+pattern_boost = 0.02

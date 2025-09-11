@@ -1,5 +1,5 @@
 """
-100% testable multilingual reranker system.
+Multilingual reranker system for document scoring and ranking.
 Clean architecture with dependency injection and pure functions.
 """
 
@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import numpy as np
+
+from ..utils.config_models import ReRankingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -267,9 +269,11 @@ def create_query_document_pairs(
 # ===== DATA STRUCTURES =====
 
 
+# Note: ReRankingConfig is now imported from config_models.py
+# Keep local RerankerConfig for internal processing with additional fields
 @dataclass
 class RerankerConfig:
-    """Configuration for reranker."""
+    """Internal configuration for reranker processing."""
 
     model_name: str = "BAAI/bge-reranker-v2-m3"
     device: str = "cpu"
@@ -277,6 +281,21 @@ class RerankerConfig:
     batch_size: int = 4
     normalize_scores: bool = True
     score_threshold: float = 0.0
+
+    @classmethod
+    def from_validated_config(
+        cls, reranking_config: ReRankingConfig
+    ) -> "RerankerConfig":
+        """Create RerankerConfig from validated ReRankingConfig."""
+        return cls(
+            model_name=reranking_config.model_name,
+            max_length=reranking_config.max_length,
+            batch_size=reranking_config.batch_size,
+            normalize_scores=reranking_config.normalize,
+            # Set defaults for fields not in ReRankingConfig
+            device="cpu",  # Default device
+            score_threshold=0.0,  # Default threshold
+        )
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -599,7 +618,7 @@ def create_multilingual_reranker(
     batch_size: int = 4,
 ) -> MultilingualReranker:
     """
-    Factory function to create multilingual reranker.
+    Factory function to create multilingual reranker (legacy).
 
     Args:
         model_loader: Model loading interface
@@ -612,6 +631,31 @@ def create_multilingual_reranker(
         Configured MultilingualReranker instance
     """
     config = RerankerConfig(model_name=model_name, device=device, batch_size=batch_size)
+
+    return MultilingualReranker(model_loader, score_calculator, config)
+
+
+def create_multilingual_reranker_from_config(
+    main_config: Dict[str, Any],
+    model_loader: ModelLoader,
+    score_calculator: ScoreCalculator,
+) -> MultilingualReranker:
+    """
+    Factory function to create multilingual reranker from validated configuration.
+
+    Args:
+        main_config: Validated main configuration dictionary
+        model_loader: Model loading interface
+        score_calculator: Score calculation interface
+
+    Returns:
+        Configured MultilingualReranker instance
+    """
+    # Create validated config from main config
+    reranking_config = ReRankingConfig.from_validated_config(main_config)
+
+    # Convert to internal RerankerConfig
+    config = RerankerConfig.from_validated_config(reranking_config)
 
     return MultilingualReranker(model_loader, score_calculator, config)
 

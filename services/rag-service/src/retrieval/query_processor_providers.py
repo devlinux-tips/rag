@@ -1,6 +1,6 @@
 """
 Provider implementations for query processor dependency injection.
-Production and mock providers for 100% testable query processing system.
+Production and mock providers for testable query processing system.
 """
 
 import logging
@@ -44,90 +44,15 @@ class ProductionLanguageDataProvider:
         """Get stop words for language."""
         cache_key = f"stop_words_{language}"
         if cache_key not in self._cache:
-            try:
-                lang_config = self.config_provider.get_language_specific_config(
-                    "language_data", language
+            lang_config = self.config_provider.get_language_specific_config(
+                "language_data", language
+            )
+            if "stop_words" not in lang_config:
+                raise ValueError(
+                    f"Missing 'stop_words' in language configuration for {language}"
                 )
-                stop_words = lang_config.get("stop_words", [])
-                self._cache[cache_key] = set(stop_words)
-            except (KeyError, AttributeError):
-                # Fallback stop words
-                if language == "hr":
-                    self._cache[cache_key] = {
-                        "i",
-                        "a",
-                        "u",
-                        "na",
-                        "za",
-                        "od",
-                        "do",
-                        "iz",
-                        "s",
-                        "sa",
-                        "se",
-                        "je",
-                        "su",
-                        "bio",
-                        "bila",
-                        "bilo",
-                        "biti",
-                        "da",
-                        "ne",
-                        "kao",
-                        "što",
-                        "koji",
-                        "koja",
-                        "koje",
-                        "ovaj",
-                        "ova",
-                        "ovo",
-                        "taj",
-                        "ta",
-                        "to",
-                        "moj",
-                        "moja",
-                        "moje",
-                        "svoj",
-                        "svoja",
-                        "svoje",
-                    }
-                else:
-                    self._cache[cache_key] = {
-                        "the",
-                        "a",
-                        "an",
-                        "and",
-                        "or",
-                        "but",
-                        "in",
-                        "on",
-                        "at",
-                        "to",
-                        "for",
-                        "of",
-                        "with",
-                        "by",
-                        "is",
-                        "are",
-                        "was",
-                        "were",
-                        "be",
-                        "been",
-                        "have",
-                        "has",
-                        "had",
-                        "do",
-                        "does",
-                        "did",
-                        "will",
-                        "would",
-                        "could",
-                        "should",
-                        "may",
-                        "might",
-                        "can",
-                        "must",
-                    }
+            stop_words = lang_config["stop_words"]
+            self._cache[cache_key] = set(stop_words)
 
         return self._cache[cache_key]
 
@@ -135,42 +60,15 @@ class ProductionLanguageDataProvider:
         """Get question patterns for language."""
         cache_key = f"question_patterns_{language}"
         if cache_key not in self._cache:
-            try:
-                lang_config = self.config_provider.get_language_specific_config(
-                    "language_data", language
+            lang_config = self.config_provider.get_language_specific_config(
+                "language_data", language
+            )
+            if "question_patterns" not in lang_config:
+                raise ValueError(
+                    f"Missing 'question_patterns' in language configuration for {language}"
                 )
-                patterns = lang_config.get("question_patterns", [])
-                self._cache[cache_key] = patterns
-            except (KeyError, AttributeError):
-                # Fallback patterns
-                if language == "hr":
-                    self._cache[cache_key] = [
-                        r"^što\s",
-                        r"^šta\s",
-                        r"^kako\s",
-                        r"^kada\s",
-                        r"^gdje\s",
-                        r"^zašto\s",
-                        r"^tko\s",
-                        r"^koji\s",
-                        r"^koliko\s",
-                        r"^čiji\s",
-                        r"\?$",
-                    ]
-                else:
-                    self._cache[cache_key] = [
-                        r"^what\s",
-                        r"^how\s",
-                        r"^when\s",
-                        r"^where\s",
-                        r"^why\s",
-                        r"^who\s",
-                        r"^which\s",
-                        r"^how many\s",
-                        r"^how much\s",
-                        r"^whose\s",
-                        r"\?$",
-                    ]
+            patterns = lang_config["question_patterns"]
+            self._cache[cache_key] = patterns
 
         return self._cache[cache_key]
 
@@ -178,30 +76,15 @@ class ProductionLanguageDataProvider:
         """Get synonym groups for language."""
         cache_key = f"synonym_groups_{language}"
         if cache_key not in self._cache:
-            try:
-                lang_config = self.config_provider.get_language_specific_config(
-                    "language_data", language
+            lang_config = self.config_provider.get_language_specific_config(
+                "language_data", language
+            )
+            if "synonym_groups" not in lang_config:
+                raise ValueError(
+                    f"Missing 'synonym_groups' in language configuration for {language}"
                 )
-                synonyms = lang_config.get("synonym_groups", {})
-                self._cache[cache_key] = synonyms
-            except (KeyError, AttributeError):
-                # Fallback synonyms
-                if language == "hr":
-                    self._cache[cache_key] = {
-                        "brz": ["brži", "brzo", "hitno", "brzina"],
-                        "dobro": ["odlično", "izvrsno", "super", "kvalitetno"],
-                        "loše": ["loš", "ružno", "grozno", "slabo"],
-                        "veliki": ["velik", "ogroman", "enorman", "golem"],
-                        "mali": ["malen", "sićušan", "minijaturan", "drobni"],
-                    }
-                else:
-                    self._cache[cache_key] = {
-                        "fast": ["quick", "rapid", "swift", "speedy"],
-                        "good": ["great", "excellent", "awesome", "quality"],
-                        "bad": ["poor", "terrible", "awful", "horrible"],
-                        "big": ["large", "huge", "enormous", "massive"],
-                        "small": ["tiny", "little", "miniature", "compact"],
-                    }
+            synonyms = lang_config["synonym_groups"]
+            self._cache[cache_key] = synonyms
 
         return self._cache[cache_key]
 
@@ -209,33 +92,15 @@ class ProductionLanguageDataProvider:
         """Get morphological patterns for language."""
         cache_key = f"morphological_patterns_{language}"
         if cache_key not in self._cache:
-            try:
-                lang_config = self.config_provider.get_language_specific_config(
-                    "language_data", language
+            lang_config = self.config_provider.get_language_specific_config(
+                "language_data", language
+            )
+            if "morphological_patterns" not in lang_config:
+                raise ValueError(
+                    f"Missing 'morphological_patterns' in language configuration for {language}"
                 )
-                patterns = lang_config.get("morphological_patterns", {})
-                self._cache[cache_key] = patterns
-            except (KeyError, AttributeError):
-                # Fallback patterns
-                if language == "hr":
-                    self._cache[cache_key] = {
-                        "plural_endings": [r"i$", r"ovi$", r"evi$", r"aci$", r"e$"],
-                        "verb_endings": [r"iti$", r"ati$", r"eti$", r"uti$", r"ovati$"],
-                        "adjective_endings": [
-                            r"ni$",
-                            r"ski$",
-                            r"čki$",
-                            r"ški$",
-                            r"na$",
-                            r"no$",
-                        ],
-                    }
-                else:
-                    self._cache[cache_key] = {
-                        "plural_endings": [r"s$", r"es$", r"ies$", r"ves$"],
-                        "verb_endings": [r"ing$", r"ed$", r"er$", r"est$"],
-                        "adjective_endings": [r"ly$", r"ful$", r"less$", r"able$"],
-                    }
+            patterns = lang_config["morphological_patterns"]
+            self._cache[cache_key] = patterns
 
         return self._cache[cache_key]
 
@@ -354,10 +219,9 @@ def create_default_config(
 
     # Use config provider if available
     if config_provider:
-        try:
-            config_dict = config_provider.load_config("config")
-        except (KeyError, AttributeError):
-            config_dict = default_config
+        config_dict = config_provider.load_config("config")
+        if not config_dict:
+            raise ValueError("Failed to load configuration from config provider")
     else:
         config_dict = default_config
 

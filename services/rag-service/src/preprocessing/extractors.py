@@ -1,13 +1,13 @@
 """
-Pure function document text extraction system with dependency injection.
-100% testable architecture with no side effects and deterministic output.
+Document text extraction system supporting multiple file formats.
+Provides reliable text extraction from PDF, DOCX, and plain text files
+with proper encoding handling and error recovery.
 """
 
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Protocol, Tuple,
-                    runtime_checkable)
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 # Optional dependencies - handle gracefully if not available
 try:
@@ -247,7 +247,7 @@ def post_process_extracted_text(text: str) -> str:
 
 
 class DocumentExtractor:
-    """Document extractor with dependency injection for 100% testability."""
+    """Document extractor with dependency injection for testability."""
 
     def __init__(
         self,
@@ -262,11 +262,18 @@ class DocumentExtractor:
 
         # Load configuration once during initialization
         config_data = config_provider.get_extraction_config()
+
+        # Validate required configuration keys
+        if "max_file_size_mb" not in config_data:
+            raise ValueError("Missing 'max_file_size_mb' in extraction configuration")
+        if "enable_logging" not in config_data:
+            raise ValueError("Missing 'enable_logging' in extraction configuration")
+
         self._config = ExtractionConfig(
             supported_formats=config_data["supported_formats"],
             text_encodings=config_data["text_encodings"],
-            max_file_size_mb=config_data.get("max_file_size_mb", 50),
-            enable_logging=config_data.get("enable_logging", True),
+            max_file_size_mb=config_data["max_file_size_mb"],
+            enable_logging=config_data["enable_logging"],
         )
 
     def extract_text(self, file_path: Path) -> ExtractionResult:
@@ -305,25 +312,14 @@ class DocumentExtractor:
 
         suffix = file_path.suffix.lower()
 
-        try:
-            if suffix == ".pdf":
-                return self._extract_pdf(file_path)
-            elif suffix == ".docx":
-                return self._extract_docx(file_path)
-            elif suffix == ".txt":
-                return self._extract_txt(file_path)
-            else:
-                raise ValueError(f"Unsupported format: {suffix}")
-
-        except Exception as e:
-            error_msg = f"Error extracting from {suffix.upper()} {file_path}: {e}"
-            self._log_error(error_msg)
-            return ExtractionResult(
-                text="",
-                character_count=0,
-                extraction_method=suffix[1:].upper(),
-                error_details=str(e),
-            )
+        if suffix == ".pdf":
+            return self._extract_pdf(file_path)
+        elif suffix == ".docx":
+            return self._extract_docx(file_path)
+        elif suffix == ".txt":
+            return self._extract_txt(file_path)
+        else:
+            raise ValueError(f"Unsupported format: {suffix}")
 
     def _extract_pdf(self, file_path: Path) -> ExtractionResult:
         """Extract text from PDF using pure function."""
@@ -406,8 +402,7 @@ def extract_document_text(
     Returns:
         Extracted text content
     """
-    from .extractors_providers import (create_config_provider,
-                                       create_file_system_provider)
+    from .extractors_providers import create_config_provider, create_file_system_provider
 
     if isinstance(file_path, str):
         file_path = Path(file_path)
@@ -420,15 +415,3 @@ def extract_document_text(
     result = extractor.extract_text(file_path)
 
     return result.text
-
-
-# ================================
-# BACKWARD COMPATIBILITY ALIASES
-# ================================
-
-
-# Legacy class name for compatibility
-class DocumentExtractorV2(DocumentExtractor):
-    """Backward compatibility alias for DocumentExtractor."""
-
-    pass

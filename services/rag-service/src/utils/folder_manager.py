@@ -1,6 +1,6 @@
 """
 Multi-tenant folder management utilities with dependency injection.
-100% testable version with pure functions and dependency injection architecture.
+Testable version with pure functions and dependency injection architecture.
 """
 
 import logging
@@ -9,8 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Tuple
 
-from ..models.multitenant_models import (DocumentScope, Tenant,
-                                         TenantUserContext, User)
+from ..models.multitenant_models import DocumentScope, Tenant, TenantUserContext, User
 
 # ================================
 # DATA CLASSES & CONFIGURATION
@@ -369,7 +368,7 @@ def calculate_usage_stats_paths(
 
 
 class _TenantFolderManager:
-    """100% testable tenant folder manager with dependency injection."""
+    """Testable tenant folder manager with dependency injection."""
 
     def __init__(
         self,
@@ -462,7 +461,7 @@ class _TenantFolderManager:
 
         except Exception as e:
             self._log_error(f"Failed to create tenant folder structure: {e}")
-            return False, created_folders
+            raise
 
     def get_tenant_document_path(
         self,
@@ -550,7 +549,7 @@ class _TenantFolderManager:
 
         except Exception as e:
             self._log_error(f"Error ensuring context folders: {e}")
-            return False
+            raise
 
     def cleanup_tenant_folders(self, tenant: Tenant, confirm: bool = False) -> bool:
         """Clean up all folders for a tenant. USE WITH CAUTION."""
@@ -576,7 +575,7 @@ class _TenantFolderManager:
 
         except Exception as e:
             self._log_error(f"Failed to cleanup tenant folders: {e}")
-            return False
+            raise
 
     def get_folder_usage_stats(self, tenant: Tenant) -> TenantStats:
         """Get storage usage statistics for tenant."""
@@ -601,12 +600,7 @@ class _TenantFolderManager:
 
         except Exception as e:
             self._log_error(f"Error getting folder stats: {e}")
-            return TenantStats(
-                documents=FolderStats(),
-                processed=FolderStats(),
-                models=FolderStats(),
-                chromadb=FolderStats(),
-            )
+            raise
 
 
 # ================================
@@ -628,261 +622,10 @@ def create_tenant_folder_manager(
 
 
 # ================================
-# BACKWARD COMPATIBILITY LAYER
+# PUBLIC INTERFACE
 # ================================
 
 
-class LegacyTenantFolderManager:
-    """Legacy folder manager for backward compatibility."""
-
-    def __init__(self, base_config: Optional[Dict] = None):
-        """Initialize with legacy interface pattern."""
-        from .folder_manager_providers import create_production_setup
-
-        # Create DI components
-        (
-            config_provider,
-            filesystem_provider,
-            logger_provider,
-        ) = create_production_setup()
-
-        # Create modern manager
-        self._manager = _TenantFolderManager(
-            config_provider=config_provider,
-            filesystem_provider=filesystem_provider,
-            logger_provider=logger_provider,
-        )
-
-        # Store legacy config for compatibility
-        self.config = base_config
-        if base_config:
-            # If custom config provided, we'd need to create a custom config provider
-            # For now, use the default production setup
-            pass
-
-    def get_tenant_folder_structure(
-        self,
-        tenant: Tenant,
-        user: Optional[User] = None,
-        language: Optional[str] = None,
-    ) -> Dict[str, Path]:
-        """Legacy method that returns Dict[str, Path] instead of FolderPaths."""
-        folder_paths = self._manager.get_tenant_folder_structure(tenant, user, language)
-
-        # Convert FolderPaths to legacy Dict[str, Path] format
-        result = {}
-        for field_name, field_value in folder_paths.__dict__.items():
-            if field_value is not None:
-                result[field_name] = field_value
-
-        return result
-
-    def create_tenant_folder_structure(
-        self,
-        tenant: Tenant,
-        user: Optional[User] = None,
-        languages: Optional[List[str]] = None,
-    ) -> Tuple[bool, List[str]]:
-        """Legacy method interface."""
-        return self._manager.create_tenant_folder_structure(tenant, user, languages)
-
-    def get_tenant_document_path(
-        self,
-        context: TenantUserContext,
-        language: str,
-        scope: DocumentScope,
-        create_if_missing: bool = True,
-    ) -> Path:
-        """Legacy method interface."""
-        return self._manager.get_tenant_document_path(
-            context, language, scope, create_if_missing
-        )
-
-    def get_tenant_processed_path(
-        self,
-        context: TenantUserContext,
-        language: str,
-        scope: DocumentScope,
-        create_if_missing: bool = True,
-    ) -> Path:
-        """Legacy method interface."""
-        return self._manager.get_tenant_processed_path(
-            context, language, scope, create_if_missing
-        )
-
-    def get_tenant_chromadb_path(
-        self, tenant: Tenant, create_if_missing: bool = True
-    ) -> Path:
-        """Legacy method interface."""
-        return self._manager.get_tenant_chromadb_path(tenant, create_if_missing)
-
-    def get_tenant_models_path(
-        self,
-        tenant: Tenant,
-        language: str,
-        model_type: str = "embeddings",
-        create_if_missing: bool = True,
-    ) -> Path:
-        """Legacy method interface."""
-        return self._manager.get_tenant_models_path(
-            tenant, language, model_type, create_if_missing
-        )
-
-    def get_collection_storage_paths(
-        self, context: TenantUserContext, language: str
-    ) -> Dict[str, Path]:
-        """Legacy method that returns paths in dict format."""
-        collection_paths = self._manager.get_collection_storage_paths(context, language)
-
-        return {
-            "user_collection_name": collection_paths.user_collection_name,
-            "tenant_collection_name": collection_paths.tenant_collection_name,
-            "user_collection_path": collection_paths.user_collection_path,
-            "tenant_collection_path": collection_paths.tenant_collection_path,
-            "base_path": collection_paths.base_path,
-        }
-
-    def ensure_context_folders(self, context: TenantUserContext, language: str) -> bool:
-        """Legacy method interface."""
-        return self._manager.ensure_context_folders(context, language)
-
-    def cleanup_tenant_folders(self, tenant: Tenant, confirm: bool = False) -> bool:
-        """Legacy method interface."""
-        return self._manager.cleanup_tenant_folders(tenant, confirm)
-
-    def get_folder_usage_stats(self, tenant: Tenant) -> Dict[str, Dict[str, int]]:
-        """Legacy method that returns stats in dict format."""
-        tenant_stats = self._manager.get_folder_usage_stats(tenant)
-
-        return {
-            "documents": {
-                "count": tenant_stats.documents.count,
-                "size_bytes": tenant_stats.documents.size_bytes,
-            },
-            "processed": {
-                "count": tenant_stats.processed.count,
-                "size_bytes": tenant_stats.processed.size_bytes,
-            },
-            "models": {
-                "count": tenant_stats.models.count,
-                "size_bytes": tenant_stats.models.size_bytes,
-            },
-            "chromadb": {
-                "count": tenant_stats.chromadb.count,
-                "size_bytes": tenant_stats.chromadb.size_bytes,
-            },
-        }
-
-
-# ================================
-# LEGACY CONVENIENCE FUNCTIONS
-# ================================
-
-
-def create_development_structure() -> bool:
-    """Create default development tenant/user structure for testing."""
-    from ..models.multitenant_models import (DEFAULT_DEVELOPMENT_TENANT,
-                                             DEFAULT_DEVELOPMENT_USER)
-    from .folder_manager_providers import create_production_setup
-
-    config_provider, filesystem_provider, logger_provider = create_production_setup()
-    folder_manager = _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
-    )
-
-    # Create structure for development tenant with default user
-    success, folders = folder_manager.create_tenant_folder_structure(
-        tenant=DEFAULT_DEVELOPMENT_TENANT,
-        user=DEFAULT_DEVELOPMENT_USER,
-        languages=["hr", "en", "multilingual"],
-    )
-
-    if success and logger_provider:
-        logger_provider.info(
-            f"Created development structure with {len(folders)} folders"
-        )
-        logger_provider.info("Ready for user-level multi-tenant testing")
-    elif not success and logger_provider:
-        logger_provider.error("Failed to create development structure")
-
-    return success
-
-
-def ensure_tenant_context_ready(context: TenantUserContext, language: str) -> bool:
-    """Ensure all folders are ready for a specific tenant/user/language context."""
-    from .folder_manager_providers import create_production_setup
-
-    config_provider, filesystem_provider, logger_provider = create_production_setup()
-    folder_manager = _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
-    )
-    return folder_manager.ensure_context_folders(context, language)
-
-
-def get_user_document_folder(context: TenantUserContext, language: str) -> Path:
-    """Get user's document folder path."""
-    from .folder_manager_providers import create_production_setup
-
-    config_provider, filesystem_provider, logger_provider = create_production_setup()
-    folder_manager = _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
-    )
-    return folder_manager.get_tenant_document_path(
-        context, language, DocumentScope.USER
-    )
-
-
-def get_tenant_document_folder(context: TenantUserContext, language: str) -> Path:
-    """Get tenant's shared document folder path."""
-    from .folder_manager_providers import create_production_setup
-
-    config_provider, filesystem_provider, logger_provider = create_production_setup()
-    folder_manager = _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
-    )
-    return folder_manager.get_tenant_document_path(
-        context, language, DocumentScope.TENANT
-    )
-
-
-def get_user_chromadb_collections(
-    context: TenantUserContext, language: str
-) -> Dict[str, str]:
-    """Get ChromaDB collection names for user context."""
-    return {
-        "user_collection": context.get_user_collection_name(language),
-        "tenant_collection": context.get_tenant_collection_name(language),
-        "search_collections": context.get_search_collections(language),
-    }
-
-
-# ================================
-# BACKWARD COMPATIBILITY FACTORY
-# ================================
-
-
-def create_legacy_folder_manager(
-    base_config: Optional[Dict] = None,
-) -> LegacyTenantFolderManager:
-    """Create folder manager using legacy interface for backward compatibility."""
-    return LegacyTenantFolderManager(base_config)
-
-
-# ================================
-# DUAL INTERFACE SUPPORT
-# ================================
-
-
-# For new code: use create_tenant_folder_manager() with DI
-# For legacy code: TenantFolderManager() constructor is mapped to legacy version
 def TenantFolderManager(
     base_config: Optional[Dict] = None,
     config_provider: Optional[ConfigProvider] = None,
@@ -890,22 +633,28 @@ def TenantFolderManager(
     logger_provider: Optional[LoggerProvider] = None,
 ):
     """
-    Unified TenantFolderManager factory supporting both interfaces.
+    Create a tenant folder manager with dependency injection.
 
-    Legacy interface (for backward compatibility):
-        TenantFolderManager(base_config=None)
+    Args:
+        base_config: Legacy base configuration (deprecated, use providers)
+        config_provider: Configuration provider for folder settings
+        filesystem_provider: Filesystem provider for operations
+        logger_provider: Logger provider for debugging
 
-    New DI interface:
-        TenantFolderManager(config_provider=provider, filesystem_provider=provider, ...)
+    Returns:
+        Configured _TenantFolderManager instance
     """
-    # New DI interface - all DI components provided
-    if config_provider and filesystem_provider:
-        return _TenantFolderManager(
-            config_provider=config_provider,
-            filesystem_provider=filesystem_provider,
-            logger_provider=logger_provider,
-        )
+    if not config_provider or not filesystem_provider:
+        from .folder_manager_providers import create_production_setup
 
-    # Legacy interface - only base_config provided (or nothing)
-    else:
-        return LegacyTenantFolderManager(base_config)
+        (
+            config_provider,
+            filesystem_provider,
+            logger_provider,
+        ) = create_production_setup()
+
+    return _TenantFolderManager(
+        config_provider=config_provider,
+        filesystem_provider=filesystem_provider,
+        logger_provider=logger_provider,
+    )

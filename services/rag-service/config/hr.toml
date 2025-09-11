@@ -164,8 +164,37 @@ remove_diacritics = false  # Keep Croatian diacritics (š, ć, č, ž, đ)
 normalize_case = true
 # Note: Uppercase chars derived programmatically from lowercase_special
 
+# Croatian diacritic mapping (for normalization when needed)
+[text_processing.diacritic_map]
+"č" = "c"
+"ć" = "c"
+"š" = "s"
+"ž" = "z"
+"đ" = "d"
+
+# Word character pattern for Croatian (includes Croatian diacritics)
+word_char_pattern = "[a-zA-ZčćšžđĆČŠŽĐ]"
+
+# Locale settings for Croatian
+[text_processing.locale]
+primary = "hr_HR.UTF-8"
+fallback = "C.UTF-8"
+
+# Text file encoding support for Croatian documents
+text_encodings = ["utf-8", "cp1252", "iso-8859-2"]
+
 # ============================================================================
 # DOCUMENT PROCESSING
+# ============================================================================
+
+# Text cleaning configuration for Croatian
+[text_cleaning]
+# General cleaning settings
+multiple_whitespace = true
+multiple_linebreaks = true
+min_meaningful_words = 3
+min_word_char_ratio = 0.6
+
 # ============================================================================
 [chunking]
 # Croatian sentence and paragraph detection
@@ -381,3 +410,76 @@ regional_content_preference = "croatia"
 
 # Croatian-specific ranking patterns
 [ranking]
+
+# Croatian language-specific ranking features for calculate_language_relevance_score
+# Croatian language-specific ranking features for calculate_language_relevance_score
+[ranking.language_features]
+
+# Character-based scoring (Croatian diacritics)
+[ranking.language_features.special_characters]
+enabled = true
+characters = ["č", "ć", "š", "ž", "đ"]
+max_score = 0.3
+density_factor = 1000
+
+# Important Croatian vocabulary
+[ranking.language_features.importance_words]
+enabled = true
+words = [
+    "zagreb", "hrvatska", "dubrovnik", "split", "rijeka", "pula", "zadar",
+    "važan", "značajan", "poznati", "tradicionalni", "historijski",
+    "kulturni", "nacionalni", "hrvatski", "europski", "mediteranski"
+]
+max_score = 0.4
+word_boost = 0.1
+
+# Croatian cultural/geographic patterns
+[ranking.language_features.cultural_patterns]
+enabled = true
+patterns = [
+    "\\b(biser jadrana|perla jadrana)\\b",
+    "\\b(hrvatski?\\w* kralj|hrvatska povijest)\\b",
+    "\\b(adriatic|jadransko more)\\b",
+    "\\b(unesco|svjetska baština)\\b",
+    "\\b(plitvice|kornati|mljet|krka|paklenica)\\b",
+    "\\b(istria|istra|dalmacija|slavonija|primorje|lika)\\b",
+    "\\b(austro.?ugarska|jugoslavija|domovinski rat)\\b"
+]
+max_score = 0.2
+pattern_boost = 0.1
+
+# Croatian morphology/grammar patterns
+[ranking.language_features.grammar_patterns]
+enabled = true
+patterns = [
+    "\\b\\w+ić\\b",      # Croatian surnames (Petrić, Marić, Božić)
+    "\\b\\w+ović\\b",    # Patronymic surnames (Petrović, Janković, Nikolić)
+    "\\b\\w+ski\\b",     # Adjective endings (hrvatski, europski, gradski)
+    "\\b\\w+nja\\b",     # Noun endings (pitanja, objašnjenja, iskanja)
+    "\\b\\w+ost\\b",     # Abstract nouns (važnost, mogućnost, stvarnost)
+    "\\b\\w+stvo\\b"     # Collective nouns (gospodarstvo, društvo, bratstvo)
+]
+max_score = 0.1
+density_factor = 10
+
+# Croatian capitalization patterns
+[ranking.language_features.capitalization]
+enabled = true
+proper_nouns = [
+    "Zagreb", "Hrvatska", "Dubrovnik", "Split", "Rijeka", "Pula", "Zadar",
+    "Istra", "Dalmacija", "Slavonija", "Hrvatsko", "Hrvatski", "Europska"
+]
+max_score = 0.15
+capitalization_boost = 0.05
+
+# Croatian vocabulary patterns
+[ranking.language_features.vocabulary_patterns]
+enabled = true
+patterns = [
+    "\\b(što|tko|kada|gdje|kako|zašto|koji|koja|koje|koliko)\\b",
+    "\\b(hrvatska|croatia|zagreb|split|dubrovnik|rijeka)\\b",
+    "\\b(kultura|povijest|tradicija|jezik|narod|vjera)\\b",
+    "\\b(turizam|gospodarstvo|politika|obrazovanje)\\b"
+]
+max_score = 0.1
+pattern_boost = 0.02

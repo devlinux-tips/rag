@@ -1,6 +1,6 @@
 """
 Provider implementations for document extraction dependency injection.
-Enables 100% testable architecture with mock providers for testing.
+Production and mock providers for configurable document text extraction.
 """
 
 import logging

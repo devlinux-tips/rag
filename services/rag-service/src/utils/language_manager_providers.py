@@ -1,14 +1,19 @@
 """
 Provider implementations for language manager dependency injection.
-Production and mock providers for 100% testable language management system.
+Production and mock providers for testable language management system.
 """
 
 import logging
 from typing import Dict, List, Optional, Set
 
-from .language_manager import (ConfigProvider, LanguagePatterns,
-                               LanguageSettings, LoggerProvider,
-                               PatternProvider)
+from .config_validator import ConfigurationError
+from .language_manager import (
+    ConfigProvider,
+    LanguagePatterns,
+    LanguageSettings,
+    LoggerProvider,
+    PatternProvider,
+)
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -138,7 +143,9 @@ class MockLoggerProvider:
     def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
         """Get captured messages by level or all messages."""
         if level:
-            return self.messages.get(level, [])
+            if level not in self.messages:
+                return []
+            return self.messages[level]
         return self.messages
 
 
@@ -164,8 +171,7 @@ class ProductionConfigProvider:
         """Load settings from the real configuration system."""
         try:
             # Import at runtime to avoid circular dependencies
-            from .config_loader import (get_shared_config,
-                                        get_supported_languages, load_config)
+            from .config_loader import get_shared_config, get_supported_languages, load_config
 
             # Load configurations
             supported_langs = get_supported_languages()
@@ -187,20 +193,10 @@ class ProductionConfigProvider:
                 chunk_overlap=shared_config["default_chunk_overlap"],
             )
         except Exception as e:
-            # Fallback to sensible defaults if config loading fails
-            return LanguageSettings(
-                supported_languages=["hr", "en", "multilingual"],
-                default_language="hr",
-                auto_detect=True,
-                fallback_language="hr",
-                language_names={
-                    "hr": "Croatian",
-                    "en": "English",
-                    "multilingual": "Multilingual",
-                },
-                embedding_model="BAAI/bge-m3",
-                chunk_size=512,
-                chunk_overlap=50,
+            # FAIL FAST: No fallbacks - configuration must be valid
+            raise ConfigurationError(
+                f"Failed to load language settings: {e}. "
+                f"Please check your configuration files."
             )
 
 
@@ -221,8 +217,7 @@ class ProductionPatternProvider:
         """Load patterns from the real configuration system."""
         try:
             # Import at runtime to avoid circular dependencies
-            from .config_loader import (get_language_config,
-                                        get_supported_languages)
+            from .config_loader import get_language_config, get_supported_languages
 
             supported_langs = get_supported_languages()
             detection_patterns = {}
@@ -235,9 +230,12 @@ class ProductionPatternProvider:
                     lang_config = get_language_config(lang_code)
 
                     # Extract question patterns for detection
-                    question_patterns = lang_config["shared"].get(
-                        "question_patterns", {}
-                    )
+                    if (
+                        "shared" not in lang_config
+                        or "question_patterns" not in lang_config["shared"]
+                    ):
+                        continue  # Skip languages without question patterns
+                    question_patterns = lang_config["shared"]["question_patterns"]
                     if question_patterns:
                         # Combine different pattern types for detection
                         detection_words = []
@@ -250,29 +248,33 @@ class ProductionPatternProvider:
                             detection_patterns[lang_code] = detection_words[:8]
 
                     # Extract stopwords
-                    stopwords_list = (
-                        lang_config["shared"].get("stopwords", {}).get("words", [])
-                    )
+                    if (
+                        "shared" in lang_config
+                        and "stopwords" in lang_config["shared"]
+                        and "words" in lang_config["shared"]["stopwords"]
+                    ):
+                        stopwords_list = lang_config["shared"]["stopwords"]["words"]
+                    else:
+                        stopwords_list = []
                     if stopwords_list:
                         # Use first 20 stopwords for efficiency
                         stopwords[lang_code] = set(stopwords_list[:20])
 
                 except Exception as e:
-                    # Continue without patterns for this language
-                    pass
+                    raise ConfigurationError(
+                        f"Failed to load patterns for language '{lang_code}': {e}. "
+                        f"Please check configuration for {lang_code}"
+                    )
 
             return LanguagePatterns(
                 detection_patterns=detection_patterns, stopwords=stopwords
             )
 
         except Exception as e:
-            # Fallback to minimal patterns if loading fails
-            return LanguagePatterns(
-                detection_patterns={
-                    "hr": ["što", "kako", "gdje"],
-                    "en": ["what", "how", "where"],
-                },
-                stopwords={"hr": {"i", "u", "na"}, "en": {"a", "and", "the"}},
+            # FAIL FAST: No fallbacks - configuration must be valid
+            raise ConfigurationError(
+                f"Failed to load language patterns: {e}. "
+                f"Please check your configuration files."
             )
 
 
