@@ -378,7 +378,7 @@ class DocumentExtractor:
 
 
 # ================================
-# CONVENIENCE FUNCTIONS (Backward Compatibility)
+# CONVENIENCE FUNCTIONS
 # ================================
 
 
@@ -388,7 +388,7 @@ def extract_document_text(
     file_system_provider: Optional[FileSystemProvider] = None,
 ) -> str:
     """
-    Convenience function for backward compatibility.
+    Convenience function for document text extraction.
 
     Args:
         file_path: Path to document file

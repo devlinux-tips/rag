@@ -73,13 +73,8 @@ tenant_processed_template = "{data_base_dir}/{tenant_slug}/shared/processed/{lan
 chromadb_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 models_path_template = "{models_base_dir}/{tenant_slug}/{language}"
 
-# Legacy single-tenant directories (deprecated - use templates above)
-documents_dir = "./data/raw"           # Use user_documents_template instead
-processed_dir = "./data/processed"     # Use user_processed_template instead
-test_data_dir = "./data/test"          # Use tenant structure instead
-cache_dir = "./data/cache"             # Now per-tenant: {tenant_root}/cache
-temp_dir = "./temp"                    # System-wide temp
-export_dir = "./data/exports"          # Now per-tenant: {tenant_root}/exports
+# System-wide temp directory
+temp_dir = "./temp"
 
 # Language-specific subdirectories (handled by templates)
 use_language_subdirs = true
@@ -95,9 +90,9 @@ log_to_file = true
 [embeddings]
 # Primary embedding model settings
 model_name = "BAAI/bge-m3"  # Primary multilingual model
-device = "cpu"  # Uses shared.default_device
+device = "cpu"
 max_seq_length = 512
-batch_size = 32  # Uses shared.default_batch_size
+batch_size = 32
 normalize_embeddings = true
 
 # Security and loading preferences
@@ -129,12 +124,10 @@ top_k_default = 5
 # ============================================================================
 [storage]
 # Multi-tenant ChromaDB storage settings
-db_path = "./data/chromadb"                    # Legacy single-tenant path (deprecated)
-db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"  # Multi-tenant template
+db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 
 # Collection naming templates
-collection_name = "multilingual_documents"    # Legacy single-tenant (deprecated)
-collection_name_template = "{tenant_slug}_{scope}_{language}"  # Multi-tenant template
+collection_name_template = "{tenant_slug}_{scope}_{language}"
 # Examples: "development_user_hr", "enterprise_tenant_en", "acme_user_multilingual"
 
 distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
@@ -146,7 +139,7 @@ allow_reset = false
 content_types = ["pdf", "docx", "txt"]
 
 [search]
-# Search configuration (uses shared.default_top_k and shared.similarity_threshold)
+# Search configuration
 default_method = "semantic"  # "semantic", "keyword", "hybrid"
 max_context_length = 2000  # Specific to search display
 rerank = true
@@ -169,7 +162,7 @@ chunk_overlap = 100
 # DOCUMENT PROCESSING CONFIGURATION
 # ============================================================================
 [processing]
-# Document processing settings (uses shared chunk size standards)
+# Document processing settings
 sentence_chunk_overlap = 2
 preserve_paragraphs = true
 enable_smart_chunking = true
@@ -188,7 +181,7 @@ encoding_detection = true
 text_encodings = ["utf-8", "cp1252", "iso-8859-1", "iso-8859-2"]
 
 [chunking]
-# Text chunking configuration (uses shared chunk size standards)
+# Text chunking configuration
 strategy = "sliding_window"  # "sliding_window", "sentence", "paragraph"
 max_chunk_size = 1024  # Specific override for chunking (larger than default)
 preserve_sentence_boundaries = true
@@ -249,7 +242,7 @@ use_query_classification = true
 enable_spell_check = false
 
 [retrieval]
-# Retrieval configuration - OPTIMIZED FOR SPEED (uses shared.default_top_k)
+# Retrieval configuration - OPTIMIZED FOR SPEED
 default_k = 3                 # Reduced from 5 - fewer chunks = faster generation
 max_k = 8                     # Reduced from 10
 adaptive_retrieval = true
@@ -281,7 +274,7 @@ metadata_weight = 0.1
 freshness_weight = 0.1
 
 [reranking]
-# Cross-encoder reranking settings (uses shared.default_device)
+# Cross-encoder reranking settings
 enabled = true
 model_name = "BAAI/bge-reranker-v2-m3"  # BGE-reranker-v2-m3: Best multilingual reranker for Croatian
 max_length = 512
@@ -302,9 +295,10 @@ bm25_b = 0.75
 # GENERATION CONFIGURATION
 # ============================================================================
 [ollama]
-# Ollama LLM configuration - OPTIMIZED FOR PERFORMANCE (uses shared.generation_timeout)
+# Ollama LLM configuration - OPTIMIZED FOR PERFORMANCE
 base_url = "http://localhost:11434"
 model = "qwen2.5:7b-instruct"  # Fast multilingual model with good quality
+timeout = 120.0                # Connection and response timeout in seconds
 temperature = 0.7
 max_tokens = 800               # Reduced from 2000 for faster generation
 top_p = 0.9
@@ -342,7 +336,7 @@ include_metadata = true
 # SYSTEM CONFIGURATION
 # ============================================================================
 [system]
-# System-wide settings (uses shared directories and timeouts)
+# System-wide settings
 log_level = "INFO"
 enable_caching = true
 max_concurrent_requests = 5

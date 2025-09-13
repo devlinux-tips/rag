@@ -492,7 +492,7 @@ class MultilingualOllamaClient:
 
         # Step 6: Apply text preservation if needed
         if self.config.preserve_diacritics:
-            generated_text = preserve_text_encoding(generated_text, request.language)
+            generated_text = preserve_text_encoding(generated_text)
 
         # Step 7: Calculate confidence
         confidence_settings = self.language_config_provider.get_confidence_settings(
@@ -738,7 +738,3 @@ def create_ollama_client(
         language_config_provider=language_config_provider,
         logger=logger,
     )
-
-
-# Backward compatibility aliases
-OllamaClient = MultilingualOllamaClient

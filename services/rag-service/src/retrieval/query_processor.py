@@ -663,28 +663,3 @@ class ProductionLanguageDataProvider:
                 self._cache[cache_key] = {}
 
         return self._cache[cache_key]
-
-
-# Convenience function for backward compatibility
-
-
-def process_query(
-    query: str,
-    main_config: Dict[str, Any],
-    language: str = "hr",
-    context: Optional[Dict[str, Any]] = None,
-) -> ProcessedQuery:
-    """
-    Process query with validated configuration.
-
-    Args:
-        query: Query text to process
-        main_config: Validated main configuration dictionary
-        language: Language code
-        context: Additional context
-
-    Returns:
-        ProcessedQuery result
-    """
-    processor = create_query_processor(main_config=main_config, language=language)
-    return processor.process_query(query, context)

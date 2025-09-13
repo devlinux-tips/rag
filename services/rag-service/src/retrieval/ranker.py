@@ -24,11 +24,6 @@ logger = logging.getLogger(__name__)
 # ===== PURE DATA STRUCTURES =====
 
 
-# Note: RankingMethod is now imported from config_models as ConfigRankingMethod
-# Keep local alias for backward compatibility
-RankingMethod = ConfigRankingMethod
-
-
 # Note: RankingConfig is now imported from config_models.py
 
 
@@ -900,10 +895,3 @@ def create_mock_ranker(
     language_provider = create_mock_language_provider()
 
     return DocumentRanker(config_provider, language_provider, language)
-
-
-# ===== BACKWARD COMPATIBILITY ALIASES =====
-# These aliases maintain compatibility with existing imports
-
-ResultRanker = DocumentRanker  # Legacy class name compatibility
-create_result_ranker = create_document_ranker  # Legacy factory function compatibility

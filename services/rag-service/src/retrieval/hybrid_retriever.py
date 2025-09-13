@@ -706,7 +706,7 @@ def create_hybrid_retriever(
     bm25_b: float = 0.75,
 ) -> HybridRetriever:
     """
-    Factory function to create hybrid retriever (legacy).
+    Factory function to create hybrid retriever.
 
     Args:
         stop_words_provider: Provider for stop words

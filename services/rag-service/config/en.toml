@@ -239,6 +239,7 @@ model_name = "BAAI/bge-large-en-v1.5"  # English-specific BGE model (better than
 supports_multilingual = false           # English-specific model
 language_optimized = true              # Optimized specifically for English
 fallback_model = "BAAI/bge-m3"         # Multilingual fallback if English model unavailable
+expected_dimension = 1024             # English model embedding dimension
 # Note: device, batch_size, etc. inherited from config.toml [embeddings] section
 
 [vectordb]

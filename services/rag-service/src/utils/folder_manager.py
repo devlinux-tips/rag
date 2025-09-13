@@ -618,7 +618,7 @@ def TenantFolderManager(
     Create a tenant folder manager with dependency injection.
 
     Args:
-        base_config: Legacy base configuration (deprecated, use providers)
+        base_config: Base configuration (optional fallback)
         config_provider: Configuration provider for folder settings
         filesystem_provider: Filesystem provider for operations
         logger_provider: Logger provider for debugging

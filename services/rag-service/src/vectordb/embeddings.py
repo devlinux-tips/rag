@@ -556,7 +556,3 @@ def create_embedding_generator(
         device_detector=device_detector,
         logger=logger,
     )
-
-
-# Backward compatibility aliases
-EmbeddingModel = MultilingualEmbeddingGenerator

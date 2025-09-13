@@ -30,6 +30,9 @@ class CLIArgs:
     no_sources: bool = False
     docs_path: Optional[str] = None
     languages: Optional[List[str]] = None
+    # Data management args
+    confirm: bool = False
+    dry_run: bool = False
 
 
 @dataclass
@@ -87,7 +90,17 @@ class SystemStatus:
     folder_structure: Dict[str, bool]  # path -> exists
     config_status: str  # "loaded", "failed"
     details: Dict[str, Any]
-    error_messages: List[str]
+
+
+@dataclass
+class DataClearResult:
+    """Result of data clearing operation - pure data structure."""
+
+    success: bool
+    cleared_paths: List[str]
+    preserved_paths: List[str]
+    errors: List[str]
+    message: str
 
 
 # Protocol definitions for dependency injection
@@ -418,6 +431,138 @@ def format_create_folders_result(result: Dict[str, Any], context: TenantContext)
     return lines
 
 
+def format_clear_data_result(
+    result: DataClearResult, context: TenantContext, language: str
+) -> List[str]:
+    """Format clear-data result using pure logic."""
+    lines = [
+        f"🧹 Data Clearing Result",
+        f"🏢 Tenant: {context.tenant_slug}",
+        f"👤 User: {context.user_username}",
+        f"🌐 Language: {language}",
+        "=" * 50,
+    ]
+
+    if result.success:
+        lines.extend(
+            [
+                "✅ Data clearing completed successfully",
+                f"📝 {result.message}",
+                "",
+            ]
+        )
+
+        if result.cleared_paths:
+            lines.append(f"🗑️  Cleared paths ({len(result.cleared_paths)}):")
+            for path in result.cleared_paths[:10]:  # Show first 10
+                lines.append(f"  ✅ {path}")
+            if len(result.cleared_paths) > 10:
+                lines.append(f"  ... and {len(result.cleared_paths) - 10} more")
+            lines.append("")
+
+        if result.preserved_paths:
+            lines.append(f"🔒 Preserved paths ({len(result.preserved_paths)}):")
+            for path in result.preserved_paths[:5]:  # Show first 5
+                lines.append(f"  💾 {path}")
+            if len(result.preserved_paths) > 5:
+                lines.append(f"  ... and {len(result.preserved_paths) - 5} more")
+            lines.append("")
+
+    else:
+        lines.extend(
+            [
+                "❌ Data clearing failed",
+                f"📝 {result.message}",
+                "",
+            ]
+        )
+
+        if result.errors:
+            lines.append("❌ Errors encountered:")
+            for error in result.errors:
+                lines.append(f"  • {error}")
+
+    return lines
+
+
+def format_reprocess_result(
+    result: Dict[str, Any], context: TenantContext, language: str
+) -> List[str]:
+    """Format reprocess result using pure logic."""
+    lines = [
+        f"🔄 Document Reprocessing Result",
+        f"🏢 Tenant: {context.tenant_slug}",
+        f"👤 User: {context.user_username}",
+        f"🌐 Language: {language}",
+        "=" * 50,
+    ]
+
+    success = result.get("success", False)
+    message = result.get("message", "")
+
+    if success:
+        lines.extend(
+            [
+                "✅ Document reprocessing completed successfully",
+                f"📝 {message}",
+                "",
+            ]
+        )
+
+        # Show clear results
+        clear_result = result.get("clear_result")
+        if clear_result:
+            lines.extend(
+                [
+                    "🧹 Data Clearing Phase:",
+                    f"  ✅ Cleared {len(clear_result.cleared_paths)} paths",
+                    f"  🔒 Preserved {len(clear_result.preserved_paths)} paths",
+                    "",
+                ]
+            )
+
+        # Show process results
+        process_result = result.get("process_result")
+        if process_result:
+            lines.extend(
+                [
+                    "📄 Document Processing Phase:",
+                    f"  📝 Processing time: {process_result.processing_time:.2f}s",
+                    "",
+                ]
+            )
+
+    else:
+        lines.extend(
+            [
+                "❌ Document reprocessing failed",
+                f"📝 {message}",
+                "",
+            ]
+        )
+
+        # Show any partial results or errors
+        clear_result = result.get("clear_result")
+        if clear_result and clear_result.errors:
+            lines.extend(
+                [
+                    "❌ Clear phase errors:",
+                    *[f"  • {error}" for error in clear_result.errors],
+                    "",
+                ]
+            )
+
+    lines.extend(
+        [
+            "💡 Next steps:",
+            f"  • Query the system to verify reprocessing: --language {language} query 'test'",
+            f"  • Check collections: --language {language} list-collections",
+        ]
+    )
+
+    return lines
+
+
 def parse_cli_arguments(args: List[str]) -> CLIArgs:
     """Parse command-line arguments using pure logic."""
     parser = argparse.ArgumentParser(
@@ -425,17 +570,24 @@ def parse_cli_arguments(args: List[str]) -> CLIArgs:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Query the system (English)
-  python rag.py --language en query "What is a RAG system?"
+  # Query the system (Croatian)
+  python rag.py --tenant development --user dev_user --language hr query "Što je RAG sustav?"
 
   # Process documents (English)
-  python rag.py --language en process-docs ./data/raw/en/
+  python rag.py --tenant development --user dev_user --language en process-docs ./data/development/users/dev_user/documents/en/
 
   # Check system status
-  python rag.py --language en status
+  python rag.py --tenant development --user dev_user --language hr status
+
+  # Clear data (dry-run first to see what would be cleared)
+  python rag.py --tenant development --user dev_user --language hr clear-data --dry-run
+  python rag.py --tenant development --user dev_user --language hr clear-data --confirm
+
+  # Reprocess all documents from scratch
+  python rag.py --tenant development --user dev_user --language en reprocess --confirm
 
   # List collections
-  python rag.py --language en list-collections
+  python rag.py --tenant development --user dev_user --language hr list-collections
         """,
     )
 
@@ -489,6 +641,37 @@ Examples:
     # Status command
     subparsers.add_parser("status", help="Show system status")
 
+    # Data management commands
+    clear_parser = subparsers.add_parser(
+        "clear-data",
+        help="Clear processed data, vectors, and caches for tenant/user/language",
+    )
+    clear_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Confirm data deletion (required for safety)",
+    )
+    clear_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be cleared without actually clearing",
+    )
+
+    reprocess_parser = subparsers.add_parser(
+        "reprocess",
+        help="Clear data and reprocess all documents for tenant/user/language",
+    )
+    reprocess_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Confirm data deletion and reprocessing (required for safety)",
+    )
+    reprocess_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without actually doing it",
+    )
+
     parsed_args = parser.parse_args(args)
 
     return CLIArgs(
@@ -502,6 +685,8 @@ Examples:
         no_sources=getattr(parsed_args, "no_sources", False),
         docs_path=getattr(parsed_args, "docs_path", None),
         languages=getattr(parsed_args, "languages", None),
+        confirm=getattr(parsed_args, "confirm", False),
+        dry_run=getattr(parsed_args, "dry_run", False),
     )
 
 
@@ -734,6 +919,150 @@ class MultiTenantRAGCLI:
                 "message": f"Failed to create folders: {str(e)}",
             }
 
+    async def execute_clear_data_command(
+        self, context: TenantContext, language: str, dry_run: bool, confirm: bool
+    ) -> DataClearResult:
+        """Execute clear-data command for tenant/user/language context."""
+        import shutil
+        from pathlib import Path
+
+        if not dry_run and not confirm:
+            return DataClearResult(
+                success=False,
+                cleared_paths=[],
+                preserved_paths=[],
+                errors=["Must provide --confirm flag to actually clear data"],
+                message="Data clearing cancelled - safety confirmation required",
+            )
+
+        cleared_paths = []
+        preserved_paths = []
+        errors = []
+
+        try:
+            # Get tenant-specific paths
+            tenant_slug = context.tenant_slug
+            user_id = context.user_id if hasattr(context, "user_id") else "dev_user"
+
+            # Paths to clear (tenant/user/language specific)
+            base_path = Path("./data") / tenant_slug
+            paths_to_clear = [
+                base_path / "users" / user_id / "processed" / language,
+                base_path / "users" / user_id / "cache" / language,
+                base_path / "shared" / "processed" / language,
+                base_path / "vectordb",  # Clear entire vectordb for tenant
+                Path("./models") / tenant_slug / language,  # Language-specific models
+                Path("./temp") / tenant_slug / user_id / language,  # Temp files
+            ]
+
+            # Preserve paths (show what won't be cleared)
+            preserve_paths = [
+                base_path / "users" / user_id / "documents",  # Original documents
+                base_path / "shared" / "documents",  # Shared documents
+                Path("./config"),  # Configuration files
+                Path("./src"),  # Source code
+            ]
+
+            for path in preserve_paths:
+                if path.exists():
+                    preserved_paths.append(str(path))
+
+            # Clear data
+            for path in paths_to_clear:
+                if path.exists():
+                    if dry_run:
+                        cleared_paths.append(f"[DRY-RUN] Would clear: {path}")
+                    else:
+                        try:
+                            if path.is_file():
+                                path.unlink()
+                            else:
+                                shutil.rmtree(path)
+                            cleared_paths.append(str(path))
+                        except Exception as e:
+                            errors.append(f"Failed to clear {path}: {e}")
+
+            success = len(errors) == 0
+            action = "Would clear" if dry_run else "Cleared"
+            message = f"{action} {len(cleared_paths)} paths for {tenant_slug}/{user_id}/{language}"
+
+            return DataClearResult(
+                success=success,
+                cleared_paths=cleared_paths,
+                preserved_paths=preserved_paths,
+                errors=errors,
+                message=message,
+            )
+
+        except Exception as e:
+            return DataClearResult(
+                success=False,
+                cleared_paths=cleared_paths,
+                preserved_paths=preserved_paths,
+                errors=[f"Clear operation failed: {e}"],
+                message=f"Failed to clear data for {context.tenant_slug}/{language}",
+            )
+
+    async def execute_reprocess_command(
+        self, context: TenantContext, language: str, dry_run: bool, confirm: bool
+    ) -> Dict[str, Any]:
+        """Execute reprocess command - clear data then process documents."""
+        if not dry_run and not confirm:
+            return {
+                "success": False,
+                "clear_result": None,
+                "process_result": None,
+                "message": "Reprocessing cancelled - safety confirmation required",
+            }
+
+        try:
+            # Step 1: Clear existing data
+            clear_result = await self.execute_clear_data_command(
+                context, language, dry_run, confirm
+            )
+
+            if dry_run:
+                return {
+                    "success": True,
+                    "clear_result": clear_result,
+                    "process_result": {
+                        "message": "[DRY-RUN] Would reprocess documents after clearing"
+                    },
+                    "message": f"[DRY-RUN] Would reprocess all documents for {context.tenant_slug}/{language}",
+                }
+
+            if not clear_result.success:
+                return {
+                    "success": False,
+                    "clear_result": clear_result,
+                    "process_result": None,
+                    "message": "Reprocessing failed during clear step",
+                }
+
+            # Step 2: Process documents from scratch
+            tenant_slug = context.tenant_slug
+            user_username = context.user_username
+            docs_path = f"./data/{tenant_slug}/users/{user_username}/documents/{language}"
+
+            process_result = await self.execute_process_documents_command(
+                context, language, docs_path
+            )
+
+            return {
+                "success": process_result.success,
+                "clear_result": clear_result,
+                "process_result": process_result,
+                "message": f"Reprocessed documents for {tenant_slug}/{user_username}/{language}",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "clear_result": None,
+                "process_result": None,
+                "message": f"Reprocessing failed: {e}",
+            }
+
     async def execute_command(self, args: CLIArgs) -> None:
         """Execute the requested command using pure business logic."""
         if not args.command:
@@ -789,6 +1118,20 @@ class MultiTenantRAGCLI:
             elif args.command == "create-folders":
                 result = await self.execute_create_folders_command(context, args.languages)
                 formatted_output = format_create_folders_result(result, context)
+                self.write_output(formatted_output)
+
+            elif args.command == "clear-data":
+                result = await self.execute_clear_data_command(
+                    context, args.language, args.dry_run, args.confirm
+                )
+                formatted_output = format_clear_data_result(result, context, args.language)
+                self.write_output(formatted_output)
+
+            elif args.command == "reprocess":
+                result = await self.execute_reprocess_command(
+                    context, args.language, args.dry_run, args.confirm
+                )
+                formatted_output = format_reprocess_result(result, context, args.language)
                 self.write_output(formatted_output)
 
             else:
@@ -1082,14 +1425,36 @@ async def main():
                                 )
                                 self._model = SentenceTransformer(primary_model)
                                 self._model_name = primary_model
-                                print(f"✅ {primary_model} model loaded successfully")
+
+                                # Validate embedding dimension matches expectation
+                                actual_dim = self._model.get_sentence_embedding_dimension()
+                                expected_dim = embedding_config.get("expected_dimension")
+                                if expected_dim and actual_dim != expected_dim:
+                                    print(
+                                        f"⚠️ Dimension mismatch: {primary_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
+                                    )
+                                else:
+                                    print(
+                                        f"✅ {primary_model} model loaded successfully (dimensions: {actual_dim})"
+                                    )
                             except Exception as e:
                                 if fallback_model:
                                     print(f"⚠️ Primary model {primary_model} failed: {e}")
                                     print(f"🔧 Trying fallback model {fallback_model}...")
                                     self._model = SentenceTransformer(fallback_model)
                                     self._model_name = fallback_model
-                                    print(f"✅ Fallback model {fallback_model} loaded successfully")
+
+                                    # Validate fallback model dimension too
+                                    actual_dim = self._model.get_sentence_embedding_dimension()
+                                    expected_dim = embedding_config.get("expected_dimension")
+                                    if expected_dim and actual_dim != expected_dim:
+                                        print(
+                                            f"⚠️ Fallback dimension mismatch: {fallback_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
+                                        )
+                                    else:
+                                        print(
+                                            f"✅ {fallback_model} fallback model loaded successfully (dimensions: {actual_dim})"
+                                        )
                                 else:
                                     print(
                                         f"❌ Primary model {primary_model} failed and no fallback_model configured"

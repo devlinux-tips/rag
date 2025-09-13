@@ -227,10 +227,11 @@ fix_common_ocr_errors = true     # Generic: Fix rn->m, vv->w, etc.
 [embeddings]
 # Croatian language embeddings configuration
 # Using Croatian-optimized ELECTRA model for best Croatian performance
-model_name = "classla/bcms-bertic"  # Croatian-specific ELECTRA model (better than BGE-M3 for Croatian)
-supports_multilingual = false       # Croatian-specific model
-language_optimized = true          # Optimized specifically for Croatian
-fallback_model = "BAAI/bge-m3"     # Multilingual fallback if Croatian model unavailable
+model_name = "BAAI/bge-m3"        # Test with BGE-M3 multilingual model
+supports_multilingual = true       # Multilingual model
+language_optimized = false         # General multilingual, not Croatian-specific
+fallback_model = "classla/bcms-bertic"  # Croatian fallback if BGE-M3 unavailable
+expected_dimension = 1024          # BGE-M3 embedding dimension
 # Note: device, batch_size, etc. inherited from config.toml [embeddings] section
 
 [vectordb]

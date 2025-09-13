@@ -597,7 +597,7 @@ def create_multilingual_reranker(
     batch_size: int = 4,
 ) -> MultilingualReranker:
     """
-    Factory function to create multilingual reranker (legacy).
+    Factory function to create multilingual reranker.
 
     Args:
         model_loader: Model loading interface
