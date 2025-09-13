@@ -140,19 +140,35 @@ class MockLanguageDataProvider:
 
     def get_stop_words(self, language: str) -> set[str]:
         """Get mock stop words for language."""
-        return self.stop_words.get(language, set())
+        if language not in self.stop_words:
+            raise ValueError(
+                f"Mock language data not configured for language: {language}"
+            )
+        return self.stop_words[language]
 
     def get_question_patterns(self, language: str) -> list[str]:
         """Get mock question patterns for language."""
-        return self.question_patterns.get(language, [])
+        if language not in self.question_patterns:
+            raise ValueError(
+                f"Mock question patterns not configured for language: {language}"
+            )
+        return self.question_patterns[language]
 
     def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get mock synonym groups for language."""
-        return self.synonym_groups.get(language, {})
+        if language not in self.synonym_groups:
+            raise ValueError(
+                f"Mock synonym groups not configured for language: {language}"
+            )
+        return self.synonym_groups[language]
 
     def get_morphological_patterns(self, language: str) -> dict[str, list[str]]:
         """Get mock morphological patterns for language."""
-        return self.morphological_patterns.get(language, {})
+        if language not in self.morphological_patterns:
+            raise ValueError(
+                f"Mock morphological patterns not configured for language: {language}"
+            )
+        return self.morphological_patterns[language]
 
 
 class MockConfigProvider:
@@ -176,14 +192,20 @@ class MockConfigProvider:
 
     def load_config(self, config_name: str) -> dict[str, Any]:
         """Load mock configuration by name."""
-        return self.configs.get(config_name, {})
+        if config_name not in self.configs:
+            raise ValueError(f"Mock configuration not found: {config_name}")
+        return self.configs[config_name]
 
     def get_language_specific_config(
         self, section: str, language: str
     ) -> dict[str, Any]:
         """Get mock language-specific configuration."""
         key = f"{section}_{language}"
-        return self.language_configs.get(key, {})
+        if key not in self.language_configs:
+            raise ValueError(
+                f"Mock language-specific configuration not found: {section} for language {language}"
+            )
+        return self.language_configs[key]
 
 
 # ================================
@@ -192,7 +214,7 @@ class MockConfigProvider:
 
 
 def create_default_config(
-    language: str = "hr", config_provider: Optional[ConfigProvider] = None
+    language: str = "hr", config_provider: ConfigProvider | None = None
 ) -> QueryProcessingConfig:
     """
     Create default query processing configuration.
@@ -238,7 +260,7 @@ def create_production_language_provider(
 
 
 def create_mock_language_provider(
-    language: str = "hr", custom_data: Optional[dict[str, Any]] = None
+    language: str = "hr", custom_data: dict[str, Any] | None = None
 ) -> MockLanguageDataProvider:
     """
     Create mock language data provider with optional custom data.
@@ -299,8 +321,8 @@ def create_mock_language_provider(
 
 def create_test_providers(
     language: str = "hr",
-    custom_config: Optional[dict[str, Any]] = None,
-    custom_language_data: Optional[dict[str, Any]] = None,
+    custom_config: dict[str, Any] | None = None,
+    custom_language_data: dict[str, Any] | None = None,
 ) -> tuple:
     """
     Create complete set of test providers for query processing.
@@ -354,28 +376,10 @@ def create_production_providers(language: str = "hr") -> tuple:
     Returns:
         Tuple of (config, language_provider, config_provider)
     """
-    # Try to import real config provider
-    try:
-        from ..utils.config_loader import get_config_provider
+    # Import real config provider
+    from ..utils.config_protocol import get_config_provider
 
-        config_provider = get_config_provider()
-    except ImportError:
-        # Fallback to mock for development
-        config_provider = MockConfigProvider()
-        config_provider.set_config(
-            "config",
-            {
-                "query_processing": {
-                    "expand_synonyms": True,
-                    "normalize_case": True,
-                    "remove_stopwords": True,
-                    "min_query_length": 3,
-                    "max_expanded_terms": 10,
-                    "enable_spell_check": False,
-                    "min_word_length": 2,
-                }
-            },
-        )
+    config_provider = get_config_provider()
 
     # Create language data provider
     language_provider = create_production_language_provider(config_provider)

@@ -32,7 +32,7 @@ class MockQueryProcessor:
         self.mock_responses[query] = response
 
     def process_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> ProcessedQuery:
         """Mock query processing."""
         self.call_history.append({"query": query, "context": context})
@@ -64,7 +64,7 @@ class MockCategorizer:
         self.mock_responses[query] = response
 
     def categorize_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> CategoryMatch:
         """Mock query categorization."""
         self.call_history.append({"query": query, "context": context})
@@ -171,7 +171,7 @@ class MockReranker:
         self,
         query: str,
         documents: list[dict[str, Any]],
-        category: Optional[str] = None,
+        category: str | None = None,
     ) -> list[dict[str, Any]]:
         """Mock reranking operation."""
         if self.delay_seconds > 0:
@@ -255,7 +255,7 @@ class ProductionQueryProcessor:
                 self._processor = None
 
     def process_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> ProcessedQuery:
         """Process query using production processor."""
         # Handle case where processor couldn't be initialized
@@ -288,7 +288,7 @@ class ProductionCategorizer:
         self._categorizer = QueryCategorizer(language, config_provider)
 
     def categorize_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> CategoryMatch:
         """Categorize query using production categorizer."""
         return self._categorizer.categorize_query(query)
@@ -352,7 +352,7 @@ class ProductionRerankerAdapter:
         self,
         query: str,
         documents: list[dict[str, Any]],
-        category: Optional[str] = None,
+        category: str | None = None,
     ) -> list[dict[str, Any]]:
         """Adapt production reranker to our interface."""
         return await self._reranker.rerank(

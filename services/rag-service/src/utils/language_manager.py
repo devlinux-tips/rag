@@ -342,7 +342,7 @@ class _LanguageManager:
         self,
         config_provider: ConfigProvider,
         pattern_provider: PatternProvider,
-        logger_provider: Optional[LoggerProvider] = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize with injected dependencies."""
         self._config_provider = config_provider
@@ -504,8 +504,8 @@ class _LanguageManager:
         code: str,
         name: str,
         native_name: str,
-        patterns: Optional[list[str]] = None,
-        stopwords: Optional[list[str]] = None,
+        patterns: list[str] | None = None,
+        stopwords: list[str] | None = None,
     ) -> None:
         """Add language support at runtime."""
         self._log_info(f"Adding runtime language support: {code} ({name})")
@@ -540,7 +540,7 @@ class _LanguageManager:
 def create_language_manager(
     config_provider: ConfigProvider,
     pattern_provider: PatternProvider,
-    logger_provider: Optional[LoggerProvider] = None,
+    logger_provider: LoggerProvider | None = None,
 ) -> _LanguageManager:
     """Factory function to create configured language manager."""
     return _LanguageManager(
@@ -556,9 +556,9 @@ def create_language_manager(
 
 
 def LanguageManager(
-    config_provider: Optional[ConfigProvider] = None,
-    pattern_provider: Optional[PatternProvider] = None,
-    logger_provider: Optional[LoggerProvider] = None,
+    config_provider: ConfigProvider | None = None,
+    pattern_provider: PatternProvider | None = None,
+    logger_provider: LoggerProvider | None = None,
 ):
     """
     Create a language manager with dependency injection.

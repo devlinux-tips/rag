@@ -293,7 +293,7 @@ class ConfigValidator:
 
     @classmethod
     def _validate_config_section(
-        cls, config: dict, schema: dict[str, Union[type, tuple]], config_file: str
+        cls, config: dict, schema: dict[str, type | tuple], config_file: str
     ) -> ConfigValidationResult:
         """
         Validate individual config section against schema.
@@ -488,17 +488,17 @@ class ConfigValidator:
         return keys
 
     @classmethod
-    def get_main_config_schema(cls) -> dict[str, Union[type, tuple]]:
+    def get_main_config_schema(cls) -> dict[str, type | tuple]:
         """Get the main config schema for external validation."""
         return cls.MAIN_CONFIG_SCHEMA.copy()
 
     @classmethod
-    def get_language_config_schema(cls) -> dict[str, Union[type, tuple]]:
+    def get_language_config_schema(cls) -> dict[str, type | tuple]:
         """Get the language config schema for external validation."""
         return cls.LANGUAGE_CONFIG_SCHEMA.copy()
 
     @classmethod
-    def get_ranking_features_schema(cls) -> dict[str, Union[type, tuple]]:
+    def get_ranking_features_schema(cls) -> dict[str, type | tuple]:
         """Get the ranking features schema for external validation."""
         return cls.RANKING_FEATURES_SCHEMA.copy()
 
@@ -507,7 +507,7 @@ class ConfigValidator:
         cls,
         config: dict,
         key_path: str,
-        expected_type: Union[type, tuple],
+        expected_type: type | tuple,
         config_file: str = "unknown",
     ) -> bool:
         """
@@ -570,7 +570,7 @@ def validate_language_config(config: dict, language_code: str) -> None:
 def ensure_config_key_exists(
     config: dict,
     key_path: str,
-    expected_type: Union[type, tuple] = str,
+    expected_type: type | tuple = str,
     config_file: str = "config",
 ) -> Any:
     """

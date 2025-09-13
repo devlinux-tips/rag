@@ -23,13 +23,9 @@ Usage:
 """
 
 import logging
+import tomllib
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-
-try:
-    import tomllib  # Python 3.11+
-except ImportError:
-    import tomli as tomllib  # Fallback for older Python versions
 
 logger = logging.getLogger(__name__)
 

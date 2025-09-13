@@ -20,8 +20,7 @@ sys.path.insert(0, str(services_path))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -29,15 +28,25 @@ logger = logging.getLogger(__name__)
 try:
     import asyncio
 
-    from src.models.multitenant_models import (DEFAULT_DEVELOPMENT_CONTEXT,
-                                               DEFAULT_DEVELOPMENT_TENANT,
-                                               DEFAULT_DEVELOPMENT_USER, Chunk,
-                                               Document, DocumentScope,
-                                               DocumentStatus, FileType,
-                                               Language, SearchQuery, Tenant,
-                                               TenantStatus, User, UserRole,
-                                               UserStatus)
+    from src.models.multitenant_models import (
+        DEFAULT_DEVELOPMENT_CONTEXT,
+        DEFAULT_DEVELOPMENT_TENANT,
+        DEFAULT_DEVELOPMENT_USER,
+        Chunk,
+        Document,
+        DocumentScope,
+        DocumentStatus,
+        FileType,
+        Language,
+        SearchQuery,
+        Tenant,
+        TenantStatus,
+        User,
+        UserRole,
+        UserStatus,
+    )
     from surrealdb import Surreal
+
     logger.info("✅ Successfully imported multi-tenant models")
 except ImportError as e:
     logger.error(f"❌ Import error: {e}")
@@ -73,16 +82,24 @@ async def load_schema():
             await db.use("test", "multitenant")
 
         # Read schema file
-        schema_file = project_root / "services" / "rag-service" / "schema" / "multitenant_schema.surql"
+        schema_file = (
+            project_root
+            / "services"
+            / "rag-service"
+            / "schema"
+            / "multitenant_schema.surql"
+        )
         if not schema_file.exists():
             logger.error(f"❌ Schema file not found: {schema_file}")
             return False
 
-        with open(schema_file, 'r', encoding='utf-8') as f:
+        with open(schema_file, "r", encoding="utf-8") as f:
             schema_content = f.read()
 
         # Split schema into individual statements
-        statements = [stmt.strip() for stmt in schema_content.split(';') if stmt.strip()]
+        statements = [
+            stmt.strip() for stmt in schema_content.split(";") if stmt.strip()
+        ]
 
         success_count = 0
         for i, statement in enumerate(statements):
@@ -97,7 +114,9 @@ async def load_schema():
                 if "already exists" not in str(e).lower():
                     logger.warning(f"⚠️ Statement {i+1} warning: {e}")
 
-            logger.info(f"✅ Schema loaded successfully ({success_count}/{len(statements)} statements)")
+            logger.info(
+                f"✅ Schema loaded successfully ({success_count}/{len(statements)} statements)"
+            )
             return True
 
     except Exception as e:
@@ -124,8 +143,8 @@ async def test_tenant_operations():
                 "cultural_context": "croatian_business",
                 "settings": {
                     "max_documents_per_user": 500,
-                    "enable_advanced_categorization": True
-                }
+                    "enable_advanced_categorization": True,
+                },
             }
 
             result = await db.create("tenant:test_corp", tenant_data)
@@ -171,21 +190,25 @@ async def test_user_operations():
             "language_preference": "hr",
             "settings": {
                 "preferred_categories": ["business", "technical"],
-                "search_both_scopes": True
-            }
+                "search_both_scopes": True,
+            },
         }
 
         result = await db.create("user:test_user", user_data)
         logger.info(f"✅ Created user: {result[0]['email']}")
 
         # Test user-tenant relationship query
-        user_with_tenant = await db.query("""
+        user_with_tenant = await db.query(
+            """
             SELECT *, tenant_id.* FROM user:test_user
-        """)
+        """
+        )
 
-        if user_with_tenant[0]['result']:
-            user = user_with_tenant[0]['result'][0]
-            logger.info(f"✅ User-tenant relationship working: {user['username']} → {user.get('tenant_id', {}).get('name', 'Unknown')}")
+        if user_with_tenant[0]["result"]:
+            user = user_with_tenant[0]["result"][0]
+            logger.info(
+                f"✅ User-tenant relationship working: {user['username']} → {user.get('tenant_id', {}).get('name', 'Unknown')}"
+            )
             return True
 
     except Exception as e:
@@ -214,7 +237,7 @@ async def test_document_scoping():
             "scope": "user",
             "status": "processed",
             "categories": ["business", "technical"],
-            "chunk_count": 5
+            "chunk_count": 5,
         }
 
         user_doc = await db.create("document:user_doc_1", user_doc_data)
@@ -233,31 +256,32 @@ async def test_document_scoping():
             "scope": "tenant",
             "status": "processed",
             "categories": ["business"],
-            "chunk_count": 3
+            "chunk_count": 3,
         }
 
         tenant_doc = await db.create("document:tenant_doc_1", tenant_doc_data)
         logger.info(f"✅ Created tenant document: {tenant_doc[0]['title']}")
 
         # Test scoped queries
-        user_docs = await db.query("""
+        user_docs = await db.query(
+            """
             SELECT * FROM document
             WHERE tenant_id = $tenant AND scope = 'user' AND user_id = $user
-        """, {
-            "tenant": "tenant:test_corp",
-            "user": "user:test_user"
-        })
+        """,
+            {"tenant": "tenant:test_corp", "user": "user:test_user"},
+        )
 
-        tenant_docs = await db.query("""
+        tenant_docs = await db.query(
+            """
             SELECT * FROM document
             WHERE tenant_id = $tenant AND scope = 'tenant'
-        """, {
-            "tenant": "tenant:test_corp"
-        })
+        """,
+            {"tenant": "tenant:test_corp"},
+        )
 
-            logger.info(f"✅ User documents: {len(user_docs[0]['result'])}")
-            logger.info(f"✅ Tenant documents: {len(tenant_docs[0]['result'])}")
-            return True
+        logger.info(f"✅ User documents: {len(user_docs[0]['result'])}")
+        logger.info(f"✅ Tenant documents: {len(tenant_docs[0]['result'])}")
+        return True
 
     except Exception as e:
         logger.error(f"❌ Document scoping failed: {e}")
@@ -282,9 +306,13 @@ async def test_collection_naming():
     for scope, language, expected in test_cases:
         collection_name = tenant.get_collection_name(scope, language)
         if collection_name == expected:
-            logger.info(f"✅ Collection naming: {scope.value} + {language.value} = {collection_name}")
+            logger.info(
+                f"✅ Collection naming: {scope.value} + {language.value} = {collection_name}"
+            )
         else:
-            logger.error(f"❌ Collection naming failed: expected {expected}, got {collection_name}")
+            logger.error(
+                f"❌ Collection naming failed: expected {expected}, got {collection_name}"
+            )
 
     # Test TenantUserContext collection methods
     context = DEFAULT_DEVELOPMENT_CONTEXT
@@ -314,7 +342,7 @@ async def test_access_control():
         title="User Document",
         filename="user.pdf",
         file_path="/data/user.pdf",
-        scope=DocumentScope.USER
+        scope=DocumentScope.USER,
     )
 
     tenant_doc = Document(
@@ -324,7 +352,7 @@ async def test_access_control():
         title="Tenant Document",
         filename="tenant.pdf",
         file_path="/data/tenant.pdf",
-        scope=DocumentScope.TENANT
+        scope=DocumentScope.TENANT,
     )
 
     other_tenant_doc = Document(
@@ -334,7 +362,7 @@ async def test_access_control():
         title="Other Tenant Document",
         filename="other.pdf",
         file_path="/data/other.pdf",
-        scope=DocumentScope.TENANT
+        scope=DocumentScope.TENANT,
     )
 
     # Test access control
@@ -361,16 +389,18 @@ async def test_categorization_templates():
             await db.use("test", "multitenant")
 
         # Query system templates
-        templates = await db.query("""
+        templates = await db.query(
+            """
             SELECT * FROM categorization_template
             WHERE is_system_default = true AND language = 'hr'
-        """)
+        """
+        )
 
-        template_count = len(templates[0]['result'])
+        template_count = len(templates[0]["result"])
         logger.info(f"✅ Found {template_count} system Croatian templates")
 
         if template_count > 0:
-            for template in templates[0]['result']:
+            for template in templates[0]["result"]:
                 logger.info(f"   - {template['name']}: {template['category']}")
 
         # Test custom tenant template
@@ -386,12 +416,14 @@ async def test_categorization_templates():
             "user_prompt_template": "Kontekst: {context}\n\nPitanje: {query}\n\nDaj poslovni savjet.",
             "is_system_default": False,
             "is_active": True,
-            "priority": 5
+            "priority": 5,
         }
 
-            result = await db.create("categorization_template:custom_business", custom_template)
-            logger.info(f"✅ Created custom template: {result[0]['name']}")
-            return True
+        result = await db.create(
+            "categorization_template:custom_business", custom_template
+        )
+        logger.info(f"✅ Created custom template: {result[0]['name']}")
+        return True
 
     except Exception as e:
         logger.error(f"❌ Categorization template test failed: {e}")
@@ -407,17 +439,21 @@ async def test_system_functions():
             await db.use("test", "multitenant")
 
         # Test collection name function
-        result = await db.query("RETURN fn::get_collection_name('test_corp', 'user', 'hr')")
-        if result and result[0]['result']:
-            collection_name = result[0]['result'][0]
+        result = await db.query(
+            "RETURN fn::get_collection_name('test_corp', 'user', 'hr')"
+        )
+        if result and result[0]["result"]:
+            collection_name = result[0]["result"][0]
             logger.info(f"✅ Collection name function: {collection_name}")
 
         # Test user access function
-        access_result = await db.query("""
+        access_result = await db.query(
+            """
             RETURN fn::user_can_access_document(user:test_user, document:user_doc_1)
-        """)
-        if access_result and access_result[0]['result']:
-            can_access = access_result[0]['result'][0]
+        """
+        )
+        if access_result and access_result[0]["result"]:
+            can_access = access_result[0]["result"][0]
             logger.info(f"✅ User access function: {can_access}")
             return True
 
@@ -440,7 +476,7 @@ async def cleanup_test_data():
             "user:test_user",
             "document:user_doc_1",
             "document:tenant_doc_1",
-            "categorization_template:custom_business"
+            "categorization_template:custom_business",
         ]
 
         for record_id in test_records:
@@ -474,8 +510,8 @@ async def generate_schema_report():
                 "tables_created": [],
                 "functions_available": [],
                 "indexes_created": [],
-                "default_data": {}
-            }
+                "default_data": {},
+            },
         }
 
         # Check default tenant and user
@@ -491,13 +527,19 @@ async def generate_schema_report():
             logger.info("✅ Default development user found")
 
         # Check system templates
-        system_templates = await db.query("""
+        system_templates = await db.query(
+            """
             SELECT * FROM categorization_template WHERE is_system_default = true
-        """)
+        """
+        )
 
-        if system_templates[0]['result']:
-            report["schema_validation"]["default_data"]["templates"] = len(system_templates[0]['result'])
-            logger.info(f"✅ Found {len(system_templates[0]['result'])} system templates")
+        if system_templates[0]["result"]:
+            report["schema_validation"]["default_data"]["templates"] = len(
+                system_templates[0]["result"]
+            )
+            logger.info(
+                f"✅ Found {len(system_templates[0]['result'])} system templates"
+            )
 
         # Save report
         report_file = "multitenant_schema_report.json"
@@ -568,6 +610,7 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Test suite failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

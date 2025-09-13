@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from sentence_transformers import SentenceTransformer
+
 from .embeddings import EmbeddingModel, ModelLoader
 
 
@@ -18,24 +20,21 @@ class SentenceTransformerLoader:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
+    def load_model(
+        self, model_name: str, cache_dir: str, device: str, **kwargs
+    ) -> EmbeddingModel:
         """Load sentence-transformers model."""
         try:
-            from sentence_transformers import SentenceTransformer
-
             # Create cache directory
             Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
             # Load model with configuration
-            model = SentenceTransformer(model_name, cache_folder=cache_dir, device=device, **kwargs)
+            model = SentenceTransformer(
+                model_name, cache_folder=cache_dir, device=device, **kwargs
+            )
 
             self.logger.info(f"Loaded model {model_name} on device {device}")
             return SentenceTransformerAdapter(model)
-
-        except ImportError:
-            raise ImportError(
-                "sentence-transformers library is required for SentenceTransformerLoader"
-            )
         except Exception as e:
             self.logger.error(f"Failed to load model {model_name}: {e}")
             raise RuntimeError(f"Model loading failed: {e}")
@@ -64,7 +63,9 @@ class SentenceTransformerAdapter:
     def __init__(self, model):
         self._model = model
 
-    def encode(self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs):
+    def encode(
+        self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs
+    ):
         """Generate embeddings for texts."""
         return self._model.encode(
             texts,
@@ -121,7 +122,9 @@ class MockModelLoader:
         """Clear call log."""
         self.call_log.clear()
 
-    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
+    def load_model(
+        self, model_name: str, cache_dir: str, device: str, **kwargs
+    ) -> EmbeddingModel:
         """Mock model loading."""
         self.call_log.append(
             {
@@ -163,7 +166,9 @@ class MockEmbeddingModel:
         self._embedding_dim = 1024
         self.call_log = []
 
-    def encode(self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs):
+    def encode(
+        self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs
+    ):
         """Mock embedding generation."""
         import numpy as np
 

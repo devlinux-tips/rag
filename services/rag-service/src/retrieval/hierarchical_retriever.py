@@ -76,7 +76,7 @@ class QueryProcessor(Protocol):
     """Protocol for query processing operations."""
 
     def process_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> ProcessedQuery:
         """Process query into structured format."""
         ...
@@ -87,7 +87,7 @@ class Categorizer(Protocol):
     """Protocol for query categorization operations."""
 
     def categorize_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> CategoryMatch:
         """Categorize query and determine retrieval strategy."""
         ...
@@ -112,7 +112,7 @@ class Reranker(Protocol):
         self,
         query: str,
         documents: list[dict[str, Any]],
-        category: Optional[str] = None,
+        category: str | None = None,
     ) -> list[dict[str, Any]]:
         """Rerank documents based on relevance."""
         ...
@@ -585,8 +585,8 @@ class HierarchicalRetriever:
         categorizer: Categorizer,
         search_engine: SearchEngine,
         config: RetrievalConfig,
-        reranker: Optional[Reranker] = None,
-        logger_provider: Optional[LoggerProvider] = None,
+        reranker: Reranker | None = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize hierarchical retriever with injected dependencies."""
         self._query_processor = query_processor
@@ -604,7 +604,7 @@ class HierarchicalRetriever:
         self,
         query: str,
         max_results: int = None,
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> HierarchicalRetrievalResult:
         """
         Execute hierarchical retrieval with intelligent routing.

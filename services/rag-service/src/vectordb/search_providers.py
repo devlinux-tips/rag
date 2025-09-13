@@ -58,7 +58,9 @@ class MockVectorSearchProvider(VectorSearchProvider):
 
     def __init__(self):
         """Initialize mock search provider."""
-        self.documents = {}  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
+        self.documents = (
+            {}
+        )  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
         self.logger = logging.getLogger(__name__)
 
     def add_document(
@@ -66,7 +68,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
         doc_id: str,
         content: str,
         embedding: np.ndarray,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """Add document for testing."""
         self.documents[doc_id] = {
@@ -79,7 +81,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
         self,
         query_embedding: np.ndarray,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Mock embedding-based search."""
@@ -137,7 +139,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
         self,
         query_text: str,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Mock text-based search using simple keyword matching."""
@@ -201,7 +203,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
             "distances": distances,
         }
 
-    async def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
+    async def get_document(self, document_id: str) -> dict[str, Any] | None:
         """Get document by ID."""
         if document_id in self.documents:
             return {
@@ -224,7 +226,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
 class MockConfigProvider(ConfigProvider):
     """Mock configuration provider for testing."""
 
-    def __init__(self, custom_config: Optional[dict[str, Any]] = None):
+    def __init__(self, custom_config: dict[str, Any] | None = None):
         """
         Initialize mock config provider.
 
@@ -280,18 +282,13 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             model_name: HuggingFace model name
             device: Device to run model on (cpu, cuda, mps)
         """
-        try:
-            from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer
 
-            self.model = SentenceTransformer(model_name, device=device)
-            self.model_name = model_name
-            self.device = device
-            self.logger = logging.getLogger(__name__)
-            self.logger.info(f"Loaded embedding model {model_name} on {device}")
-        except ImportError:
-            raise ImportError(
-                "sentence-transformers package required for production embedding provider"
-            )
+        self.model = SentenceTransformer(model_name, device=device)
+        self.model_name = model_name
+        self.device = device
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"Loaded embedding model {model_name} on {device}")
 
     async def encode_text(self, text: str) -> np.ndarray:
         """Encode text using sentence-transformers model."""
@@ -335,7 +332,7 @@ class ChromaDBSearchProvider(VectorSearchProvider):
         self,
         query_embedding: np.ndarray,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Search using embedding vector."""
@@ -373,7 +370,7 @@ class ChromaDBSearchProvider(VectorSearchProvider):
         self,
         query_text: str,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Search using query text (relies on ChromaDB's built-in embedding)."""
@@ -406,7 +403,7 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             self.logger.error(f"ChromaDB text search failed: {e}")
             raise
 
-    async def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
+    async def get_document(self, document_id: str) -> dict[str, Any] | None:
         """Get document by ID from ChromaDB."""
         try:
             loop = asyncio.get_event_loop()
@@ -449,15 +446,11 @@ class ProductionConfigProvider(ConfigProvider):
         if config_loader_func:
             self.config_loader = config_loader_func
         else:
-            # Use default config loader if available
-            try:
-                from ..utils.config_loader import get_search_config, get_shared_config
+            # Use default config loader
+            from ..utils.config_loader import get_search_config, get_shared_config
 
-                self.get_search_config_func = get_search_config
-                self.get_shared_config_func = get_shared_config
-            except ImportError:
-                self.get_search_config_func = None
-                self.get_shared_config_func = None
+            self.get_search_config_func = get_search_config
+            self.get_shared_config_func = get_shared_config
 
         self.logger = logging.getLogger(__name__)
 
@@ -510,7 +503,7 @@ def create_mock_search_provider() -> VectorSearchProvider:
 
 
 def create_mock_config_provider(
-    custom_config: Optional[dict[str, Any]] = None,
+    custom_config: dict[str, Any] | None = None,
 ) -> ConfigProvider:
     """Create mock config provider for testing."""
     return MockConfigProvider(custom_config=custom_config)

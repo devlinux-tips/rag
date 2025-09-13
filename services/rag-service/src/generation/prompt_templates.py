@@ -73,11 +73,11 @@ def truncate_context_chunks(
     if not all(isinstance(chunk, str) for chunk in chunks):
         raise ValueError("All chunks must be strings")
 
-    result_chunks = []
+    result_chunks: list[str] = []
     current_length = 0
     separator_length = len(chunk_separator)
 
-    for i, chunk in enumerate(chunks):
+    for _i, chunk in enumerate(chunks):
         chunk = chunk.strip()
         if not chunk:
             continue
@@ -460,7 +460,7 @@ class PromptBuilder:
     def build_prompt(
         self,
         query: str,
-        context: Optional[list[str]] = None,
+        context: list[str] | None = None,
         max_context_length: int = 2000,
     ) -> tuple[str, str]:
         """
@@ -573,9 +573,9 @@ def create_prompt_builder_for_query(
 
 
 def create_mock_config_provider(
-    templates: Optional[dict[str, PromptTemplate]] = None,
-    keyword_patterns: Optional[dict[str, list[str]]] = None,
-    formatting: Optional[dict[str, str]] = None,
+    templates: dict[str, PromptTemplate] | None = None,
+    keyword_patterns: dict[str, list[str]] | None = None,
+    formatting: dict[str, str] | None = None,
 ) -> ConfigProvider:
     """
     Factory function to create mock configuration provider.

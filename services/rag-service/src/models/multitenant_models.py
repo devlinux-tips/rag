@@ -79,7 +79,7 @@ class Tenant:
     id: str
     name: str
     slug: str
-    description: Optional[str] = None
+    description: str | None = None
     status: TenantStatus = TenantStatus.ACTIVE
     settings: dict[str, Any] = field(default_factory=dict)
     business_context: BusinessContext = BusinessContext.BUSINESS
@@ -118,12 +118,12 @@ class User:
     tenant_id: str
     email: str
     username: str
-    full_name: Optional[str] = None
+    full_name: str | None = None
     password_hash: str = ""
     role: UserRole = UserRole.MEMBER
     status: UserStatus = UserStatus.ACTIVE
     settings: dict[str, Any] = field(default_factory=dict)
-    last_login_at: Optional[datetime] = None
+    last_login_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -177,13 +177,13 @@ class Document:
     language: str = "auto"
     scope: DocumentScope = DocumentScope.USER
     status: DocumentStatus = DocumentStatus.UPLOADED
-    content_hash: Optional[str] = None
+    content_hash: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     categories: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     chunk_count: int = 0
-    processing_started_at: Optional[datetime] = None
-    processing_completed_at: Optional[datetime] = None
+    processing_started_at: datetime | None = None
+    processing_completed_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -241,16 +241,16 @@ class SearchQuery:
     user_id: str
     query_text: str
     query_language: str = "auto"
-    detected_language: Optional[str] = None
-    primary_category: Optional[CategoryType] = None
+    detected_language: str | None = None
+    primary_category: CategoryType | None = None
     secondary_categories: list[CategoryType] = field(default_factory=list)
-    retrieval_strategy: Optional[str] = None  # String strategy name
+    retrieval_strategy: str | None = None  # String strategy name
     scope_searched: list[DocumentScope] = field(
         default_factory=lambda: [DocumentScope.USER, DocumentScope.TENANT]
     )
     results_count: int = 0
     response_time_ms: int = 0
-    satisfaction_rating: Optional[int] = None
+    satisfaction_rating: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
 
@@ -266,7 +266,7 @@ class CategorizationTemplate:
     """Template for category-specific prompts and patterns."""
 
     id: str
-    tenant_id: Optional[str]
+    tenant_id: str | None
     name: str
     category: CategoryType
     language: str
@@ -314,11 +314,11 @@ class SystemConfig:
     """System configuration key-value pairs."""
 
     id: str
-    tenant_id: Optional[str]
+    tenant_id: str | None
     config_key: str
     config_value: str
     config_type: str = "string"
-    description: Optional[str] = None
+    description: str | None = None
     is_system_config: bool = False
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -402,8 +402,8 @@ class MultiTenantQueryResult:
     user_results_count: int = 0
     tenant_results_count: int = 0
     response_time_ms: int = 0
-    primary_category: Optional[CategoryType] = None
-    retrieval_strategy: Optional[str] = None  # String strategy name
+    primary_category: CategoryType | None = None
+    retrieval_strategy: str | None = None  # String strategy name
 
 
 # ===============================================

@@ -327,10 +327,10 @@ class MultilingualQueryProcessor:
     def __init__(
         self,
         config: QueryProcessingConfig,
-        language_data_provider: Optional[LanguageDataProvider] = None,
-        spell_checker: Optional[SpellChecker] = None,
-        filter_config: Optional[dict[str, Any]] = None,
-        logger: Optional[logging.Logger] = None,
+        language_data_provider: LanguageDataProvider | None = None,
+        spell_checker: SpellChecker | None = None,
+        filter_config: dict[str, Any] | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize query processor with injectable dependencies.
@@ -355,7 +355,7 @@ class MultilingualQueryProcessor:
         self._morphological_patterns = None
 
     def process_query(
-        self, query: str, context: Optional[dict[str, Any]] = None
+        self, query: str, context: dict[str, Any] | None = None
     ) -> ProcessedQuery:
         """
         Process a query for multilingual retrieval.
@@ -575,13 +575,8 @@ def create_query_processor(
 
     # Create language data provider (can be mocked in tests)
     language_data_provider = None
-    try:
-        # Try to create production language data provider
-        if config_provider:
-            language_data_provider = ProductionLanguageDataProvider(config_provider)
-    except ImportError:
-        # In tests, language data provider might not be available
-        pass
+    if config_provider:
+        language_data_provider = ProductionLanguageDataProvider(config_provider)
 
     # Get filter configuration
     filter_config = {}

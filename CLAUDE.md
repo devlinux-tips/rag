@@ -6,13 +6,19 @@
 
 #### **1. FAIL-FAST Philosophy**
 - **SYSTEM MUST FAIL** if config values are missing - they MUST be in config files
+- **SYSTEM MUST FAIL** if required packages not installed - they MUST be in requirements.txt
 - **NO fallback defaults** in code - use direct dictionary access after validation
 - **NO silent `.get()` patterns** - use explicit validation at startup
+- **NO import fallbacks** - all imports must succeed or system fails
+- **NO OR fallbacks** - no `value or "default"` patterns
+- **NO exception swallowing** - no `except: pass` patterns
 - **Validate everything at initialization** - fail loud, fail clear, fail fast
 
 #### **2. FORBIDDEN Patterns**
+- ❌ **ANY fallback patterns** - no `.get(key, default)`, no `value or default`, no `except: pass`
+- ❌ **Import fallbacks** - no `try: import X except ImportError: X = None`
+- ❌ **Silent failures** - no swallowing exceptions or using defaults
 - ❌ **Hard-coded values** without explicit permission
-- ❌ **Fallback defaults** in code (`config.get("key", "default")`)
 - ❌ **New config values** without explicit permission
 - ❌ **Noise comments** describing obvious code
 - ❌ **Test logic** left in production code

@@ -54,7 +54,7 @@ class GenerationRequest:
     query: str
     query_type: str = "general"
     language: str = "hr"
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -76,7 +76,7 @@ class HttpResponse:
 
     status_code: int
     content: bytes
-    json_data: Optional[dict[str, Any]] = None
+    json_data: dict[str, Any] | None = None
 
     def json(self) -> dict[str, Any]:
         """Get JSON data from response."""
@@ -147,7 +147,7 @@ class LanguageConfigProvider(Protocol):
 
 # Pure functions for business logic
 def build_complete_prompt(
-    query: str, context: Optional[list[str]] = None, system_prompt: Optional[str] = None
+    query: str, context: list[str] | None = None, system_prompt: str | None = None
 ) -> str:
     """
     Build complete prompt from components.
@@ -414,9 +414,9 @@ class MultilingualOllamaClient:
     def __init__(
         self,
         config: OllamaConfig,
-        http_client: Optional[HttpClient] = None,
-        language_config_provider: Optional[LanguageConfigProvider] = None,
-        logger: Optional[logging.Logger] = None,
+        http_client: HttpClient | None = None,
+        language_config_provider: LanguageConfigProvider | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize client with injected dependencies.
@@ -553,7 +553,7 @@ class MultilingualOllamaClient:
         response = await self.http_client.get(url, self.config.timeout)
         return extract_model_list(response.json())
 
-    async def is_model_available(self, model_name: Optional[str] = None) -> bool:
+    async def is_model_available(self, model_name: str | None = None) -> bool:
         """
         Check if a specific model is available.
 
@@ -567,7 +567,7 @@ class MultilingualOllamaClient:
         available_models = await self.get_available_models()
         return check_model_availability(target_model, available_models)
 
-    async def pull_model(self, model_name: Optional[str] = None) -> bool:
+    async def pull_model(self, model_name: str | None = None) -> bool:
         """
         Pull a model from Ollama registry.
 
@@ -595,8 +595,8 @@ class MultilingualOllamaClient:
     def generate_response(
         self,
         prompt: str,
-        context: Optional[list[str]] = None,
-        system_prompt: Optional[str] = None,
+        context: list[str] | None = None,
+        system_prompt: str | None = None,
         language: str = "hr",
     ) -> str:
         """
@@ -704,8 +704,15 @@ class MultilingualOllamaClient:
             "factual": "factual_qa_system",
             "summary": "summarization_system",
             "business": "business_system",
+            "question_answering": "question_answering_system",  # explicit default
         }
-        return category_mapping.get(category, "question_answering_system")
+
+        if category not in category_mapping:
+            raise ValueError(
+                f"Unsupported query category: {category}. Supported categories: {list(category_mapping.keys())}"
+            )
+
+        return category_mapping[category]
 
     async def close(self) -> None:
         """Close HTTP client."""
@@ -722,10 +729,10 @@ class MultilingualOllamaClient:
 
 # Factory function for convenient creation
 def create_ollama_client(
-    config: Optional[OllamaConfig] = None,
-    http_client: Optional[HttpClient] = None,
-    language_config_provider: Optional[LanguageConfigProvider] = None,
-    logger: Optional[logging.Logger] = None,
+    config: OllamaConfig | None = None,
+    http_client: HttpClient | None = None,
+    language_config_provider: LanguageConfigProvider | None = None,
+    logger: logging.Logger | None = None,
 ) -> MultilingualOllamaClient:
     """
     Factory function to create configured Ollama client.

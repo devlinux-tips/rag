@@ -23,7 +23,7 @@ from .language_manager import (
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, settings: Optional[LanguageSettings] = None):
+    def __init__(self, settings: LanguageSettings | None = None):
         """Initialize with optional mock settings."""
         self.settings = settings or self._create_default_settings()
         self.call_history: list[str] = []
@@ -58,7 +58,7 @@ class MockConfigProvider:
 class MockPatternProvider:
     """Mock pattern provider for testing."""
 
-    def __init__(self, patterns: Optional[LanguagePatterns] = None):
+    def __init__(self, patterns: LanguagePatterns | None = None):
         """Initialize with optional mock patterns."""
         self.patterns = patterns or self._create_default_patterns()
         self.call_history: list[str] = []
@@ -159,7 +159,7 @@ class ProductionConfigProvider:
 
     def __init__(self):
         """Initialize production config provider."""
-        self._settings_cache: Optional[LanguageSettings] = None
+        self._settings_cache: LanguageSettings | None = None
 
     def get_language_settings(self) -> LanguageSettings:
         """Get language settings from real config system."""
@@ -209,7 +209,7 @@ class ProductionPatternProvider:
 
     def __init__(self):
         """Initialize production pattern provider."""
-        self._patterns_cache: Optional[LanguagePatterns] = None
+        self._patterns_cache: LanguagePatterns | None = None
 
     def get_language_patterns(self) -> LanguagePatterns:
         """Get language patterns from real config system."""
@@ -312,10 +312,10 @@ class StandardLoggerProvider:
 
 
 def create_mock_setup(
-    settings: Optional[LanguageSettings] = None,
-    patterns: Optional[LanguagePatterns] = None,
-    custom_patterns: Optional[dict[str, list[str]]] = None,
-    custom_stopwords: Optional[dict[str, set[str]]] = None,
+    settings: LanguageSettings | None = None,
+    patterns: LanguagePatterns | None = None,
+    custom_patterns: dict[str, list[str]] | None = None,
+    custom_stopwords: dict[str, set[str]] | None = None,
 ) -> tuple:
     """
     Create complete mock setup for testing.
@@ -347,7 +347,7 @@ def create_mock_setup(
     return config_provider, pattern_provider, logger_provider
 
 
-def create_production_setup(logger_name: Optional[str] = None) -> tuple:
+def create_production_setup(logger_name: str | None = None) -> tuple:
     """
     Create production setup with real components.
 
@@ -398,8 +398,8 @@ def create_test_settings(
 
 
 def create_test_patterns(
-    detection_patterns: Optional[dict[str, list[str]]] = None,
-    stopwords: Optional[dict[str, set[str]]] = None,
+    detection_patterns: dict[str, list[str]] | None = None,
+    stopwords: dict[str, set[str]] | None = None,
 ) -> LanguagePatterns:
     """Create test patterns with customizable parameters."""
     default_detection = {
@@ -438,10 +438,10 @@ def create_development_language_manager():
 
 
 def create_test_language_manager(
-    settings: Optional[LanguageSettings] = None,
-    patterns: Optional[LanguagePatterns] = None,
-    custom_patterns: Optional[dict[str, list[str]]] = None,
-    custom_stopwords: Optional[dict[str, set[str]]] = None,
+    settings: LanguageSettings | None = None,
+    patterns: LanguagePatterns | None = None,
+    custom_patterns: dict[str, list[str]] | None = None,
+    custom_stopwords: dict[str, set[str]] | None = None,
 ):
     """Create language manager configured for testing."""
     from .language_manager import create_language_manager

@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from ..utils.config_protocol import ConfigProvider
 
 import yaml
+from pydantic import ConfigDict, Field
+from pydantic_settings import BaseSettings
 
 from ..utils.config_models import (
     ChromaConfig,
@@ -20,14 +22,6 @@ from ..utils.config_models import (
     ProcessingConfig,
     RetrievalConfig,
 )
-
-try:
-    from pydantic import ConfigDict, Field
-    from pydantic_settings import BaseSettings
-except ImportError:
-    from pydantic import BaseSettings, Field
-
-    ConfigDict = None
 
 
 class RAGConfig(BaseSettings):

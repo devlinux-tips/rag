@@ -21,7 +21,7 @@ class DocumentMetadata:
     source_file: str
     chunk_index: int
     language: str
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -45,7 +45,7 @@ class StorageResult:
     documents_stored: int = 0
     batches_processed: int = 0
     document_ids: list[str] = field(default_factory=list)
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -67,42 +67,42 @@ class VectorCollection(Protocol):
         ids: list[str],
         documents: list[str],
         metadatas: list[dict[str, Any]],
-        embeddings: Optional[list[np.ndarray]] = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         ...
 
     def query(
         self,
-        query_texts: Optional[list[str]] = None,
-        query_embeddings: Optional[list[np.ndarray]] = None,
+        query_texts: list[str] | None = None,
+        query_embeddings: list[np.ndarray] | None = None,
         n_results: int = 10,
-        where: Optional[dict[str, Any]] = None,
-        where_document: Optional[dict[str, Any]] = None,
-        include: Optional[list[str]] = None,
+        where: dict[str, Any] | None = None,
+        where_document: dict[str, Any] | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         ...
 
     def get(
         self,
-        ids: Optional[list[str]] = None,
-        where: Optional[dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        include: Optional[list[str]] = None,
+        ids: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         ...
 
     def update(
         self,
         ids: list[str],
-        documents: Optional[list[str]] = None,
-        metadatas: Optional[list[dict[str, Any]]] = None,
-        embeddings: Optional[list[np.ndarray]] = None,
+        documents: list[str] | None = None,
+        metadatas: list[dict[str, Any]] | None = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         ...
 
     def delete(
-        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
+        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
     ) -> None:
         ...
 
@@ -159,7 +159,7 @@ def validate_documents_for_storage(documents: list[str]) -> list[str]:
 
 
 def validate_embeddings_for_storage(
-    embeddings: list[np.ndarray], expected_dim: Optional[int] = None
+    embeddings: list[np.ndarray], expected_dim: int | None = None
 ) -> list[np.ndarray]:
     """Validate embeddings for storage - pure function."""
     if not embeddings:
@@ -296,7 +296,7 @@ class VectorStorage:
 
     def __init__(self, database: VectorDatabase):
         self.database = database
-        self.collection: Optional[VectorCollection] = None
+        self.collection: VectorCollection | None = None
         self.logger = logging.getLogger(__name__)
 
     async def initialize(
@@ -350,10 +350,10 @@ class VectorStorage:
 
     async def search_documents(
         self,
-        query_text: Optional[str] = None,
-        query_embedding: Optional[np.ndarray] = None,
+        query_text: str | None = None,
+        query_embedding: np.ndarray | None = None,
         top_k: int = 10,
-        filter_metadata: Optional[dict[str, Any]] = None,
+        filter_metadata: dict[str, Any] | None = None,
     ) -> list[QueryResult]:
         """Search documents by text or embedding."""
         if not self.collection:
@@ -394,8 +394,8 @@ class VectorStorage:
 
     async def delete_documents(
         self,
-        ids: Optional[list[str]] = None,
-        filter_metadata: Optional[dict[str, Any]] = None,
+        ids: list[str] | None = None,
+        filter_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Delete documents from collection."""
         if not self.collection:

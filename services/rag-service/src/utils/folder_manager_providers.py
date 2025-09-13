@@ -109,7 +109,7 @@ class MockFileSystemProvider:
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, config: Optional[FolderConfig] = None):
+    def __init__(self, config: FolderConfig | None = None):
         """Initialize with optional mock configuration."""
         self.config = config or self._create_default_config()
         self.call_history: list[str] = []
@@ -232,7 +232,7 @@ class ProductionConfigProvider:
 
     def __init__(self):
         """Initialize production config provider."""
-        self._config_cache: Optional[FolderConfig] = None
+        self._config_cache: FolderConfig | None = None
 
     def get_folder_config(self) -> FolderConfig:
         """Get folder configuration from real config system."""
@@ -295,10 +295,10 @@ class StandardLoggerProvider:
 
 
 def create_mock_setup(
-    config: Optional[FolderConfig] = None,
-    existing_folders: Optional[dict[str, bool]] = None,
-    folder_stats: Optional[dict[str, FolderStats]] = None,
-    filesystem_failures: Optional[dict[str, bool]] = None,
+    config: FolderConfig | None = None,
+    existing_folders: dict[str, bool] | None = None,
+    folder_stats: dict[str, FolderStats] | None = None,
+    filesystem_failures: dict[str, bool] | None = None,
 ) -> tuple:
     """
     Create complete mock setup for testing.
@@ -335,7 +335,7 @@ def create_mock_setup(
     return config_provider, filesystem_provider, logger_provider
 
 
-def create_production_setup(logger_name: Optional[str] = None) -> tuple:
+def create_production_setup(logger_name: str | None = None) -> tuple:
     """
     Create production setup with real components.
 
@@ -391,10 +391,10 @@ def create_development_folder_manager():
 
 
 def create_test_folder_manager(
-    config: Optional[FolderConfig] = None,
-    existing_folders: Optional[dict[str, bool]] = None,
-    folder_stats: Optional[dict[str, FolderStats]] = None,
-    filesystem_failures: Optional[dict[str, bool]] = None,
+    config: FolderConfig | None = None,
+    existing_folders: dict[str, bool] | None = None,
+    folder_stats: dict[str, FolderStats] | None = None,
+    filesystem_failures: dict[str, bool] | None = None,
 ):
     """Create folder manager configured for testing."""
     from .folder_manager import create_tenant_folder_manager

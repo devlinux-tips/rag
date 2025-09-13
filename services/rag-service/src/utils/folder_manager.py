@@ -56,23 +56,23 @@ class FolderPaths:
     """Complete folder structure for a tenant/user/language combination."""
 
     tenant_root: Path
-    tenant_cache: Optional[Path] = None
-    tenant_exports: Optional[Path] = None
-    tenant_logs: Optional[Path] = None
-    tenant_chromadb: Optional[Path] = None
-    tenant_shared_documents_lang: Optional[Path] = None
-    tenant_shared_processed_lang: Optional[Path] = None
-    user_root: Optional[Path] = None
-    user_exports: Optional[Path] = None
-    user_cache: Optional[Path] = None
-    user_documents_raw: Optional[Path] = None
-    user_documents_lang: Optional[Path] = None
-    user_processed_lang: Optional[Path] = None
-    tenant_models_lang: Optional[Path] = None
-    tenant_models_embeddings: Optional[Path] = None
-    tenant_models_generation: Optional[Path] = None
-    tenant_models: Optional[Path] = None
-    tenant_models_shared: Optional[Path] = None
+    tenant_cache: Path | None = None
+    tenant_exports: Path | None = None
+    tenant_logs: Path | None = None
+    tenant_chromadb: Path | None = None
+    tenant_shared_documents_lang: Path | None = None
+    tenant_shared_processed_lang: Path | None = None
+    user_root: Path | None = None
+    user_exports: Path | None = None
+    user_cache: Path | None = None
+    user_documents_raw: Path | None = None
+    user_documents_lang: Path | None = None
+    user_processed_lang: Path | None = None
+    tenant_models_lang: Path | None = None
+    tenant_models_embeddings: Path | None = None
+    tenant_models_generation: Path | None = None
+    tenant_models: Path | None = None
+    tenant_models_shared: Path | None = None
 
 
 @dataclass
@@ -151,8 +151,8 @@ def render_path_template(template: str, **kwargs) -> str:
 
 def build_template_params(
     tenant: Tenant,
-    user: Optional[User] = None,
-    language: Optional[str] = None,
+    user: User | None = None,
+    language: str | None = None,
     config: FolderConfig = None,
 ) -> dict[str, str]:
     """Pure function to build template parameters for path rendering."""
@@ -177,7 +177,7 @@ def build_template_params(
 
 
 def calculate_folder_structure(
-    tenant: Tenant, user: Optional[User], language: Optional[str], config: FolderConfig
+    tenant: Tenant, user: User | None, language: str | None, config: FolderConfig
 ) -> FolderPaths:
     """Pure function to calculate complete folder structure."""
     params = build_template_params(tenant, user, language, config)
@@ -328,7 +328,7 @@ def get_system_paths(config: FolderConfig) -> list[Path]:
 def get_all_folder_paths(paths: FolderPaths) -> list[Path]:
     """Pure function to extract all non-None paths from FolderPaths structure."""
     all_paths = []
-    for field_name, field_value in paths.__dict__.items():
+    for _field_name, field_value in paths.__dict__.items():
         if field_value is not None:
             all_paths.append(field_value)
     return all_paths
@@ -374,7 +374,7 @@ class _TenantFolderManager:
         self,
         config_provider: ConfigProvider,
         filesystem_provider: FileSystemProvider,
-        logger_provider: Optional[LoggerProvider] = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize with injected dependencies."""
         self._config_provider = config_provider
@@ -411,8 +411,8 @@ class _TenantFolderManager:
     def get_tenant_folder_structure(
         self,
         tenant: Tenant,
-        user: Optional[User] = None,
-        language: Optional[str] = None,
+        user: User | None = None,
+        language: str | None = None,
     ) -> FolderPaths:
         """Get complete folder structure for tenant/user/language combination."""
         config = self._get_config()
@@ -421,8 +421,8 @@ class _TenantFolderManager:
     def create_tenant_folder_structure(
         self,
         tenant: Tenant,
-        user: Optional[User] = None,
-        languages: Optional[list[str]] = None,
+        user: User | None = None,
+        languages: list[str] | None = None,
     ) -> tuple[bool, list[str]]:
         """Create complete folder structure for tenant/user/languages."""
         created_folders = []
@@ -611,7 +611,7 @@ class _TenantFolderManager:
 def create_tenant_folder_manager(
     config_provider: ConfigProvider,
     filesystem_provider: FileSystemProvider,
-    logger_provider: Optional[LoggerProvider] = None,
+    logger_provider: LoggerProvider | None = None,
 ) -> _TenantFolderManager:
     """Factory function to create configured TenantFolderManager."""
     return _TenantFolderManager(
@@ -627,10 +627,10 @@ def create_tenant_folder_manager(
 
 
 def TenantFolderManager(
-    base_config: Optional[dict] = None,
-    config_provider: Optional[ConfigProvider] = None,
-    filesystem_provider: Optional[FileSystemProvider] = None,
-    logger_provider: Optional[LoggerProvider] = None,
+    base_config: dict | None = None,
+    config_provider: ConfigProvider | None = None,
+    filesystem_provider: FileSystemProvider | None = None,
+    logger_provider: LoggerProvider | None = None,
 ):
     """
     Create a tenant folder manager with dependency injection.

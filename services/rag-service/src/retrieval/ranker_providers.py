@@ -487,16 +487,9 @@ class ProductionLanguageProvider(LanguageProvider):
     def detect_language_content(self, text: str) -> dict[str, Any]:
         """Detect language from content."""
         # Import here to avoid circular imports
-        try:
-            from ..preprocessing.cleaners import detect_language_content
+        from ..preprocessing.cleaners import detect_language_content
 
-            return detect_language_content(text)
-        except ImportError:
-            # Fallback detection
-            if any(char in text.lower() for char in "čćšžđ"):
-                return {"language": "hr", "confidence": 0.9}
-            else:
-                return {"language": "en", "confidence": 0.8}
+        return detect_language_content(text)
 
 
 # ===== FACTORY FUNCTIONS =====

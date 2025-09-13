@@ -1,44 +1,46 @@
 # Core RAG components
-chromadb
-sentence-transformers
-requests
-numpy
-pandas
-httpx
-transformers
+chromadb>=0.5.0
+sentence-transformers>=2.2.0
+requests>=2.31.0
+numpy>=1.24.0
+pandas>=2.0.0
+httpx>=0.24.0
+transformers>=4.30.0
 
-# PyTorch (2.6+ required for security - CPU version for embeddings)
-torch>=2.6.0
+# PyTorch (2.8+ required for security)
+torch>=2.8.0
 torchvision>=0.19.0
 torchaudio>=2.6.0
 safetensors>=0.4.0
 
 # Document processing
-pypdf>=6.0.0  # Modern replacement for deprecated PyPDF2
-python-docx
-beautifulsoup4
-pdfplumber
-python-magic
-rank-bm25
+pypdf>=6.0.0
+python-docx>=0.8.11
+beautifulsoup4>=4.12.0
+pdfplumber>=0.9.0
+python-magic>=0.4.27
+rank-bm25>=0.2.2
 
 # Croatian NLP
-spacy
-nltk
+spacy>=3.6.0
+nltk>=3.8.1
 
 # Configuration and utilities
-python-dotenv
-pyyaml
-tomli
-pydantic
-pydantic-settings
-click
-tqdm
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+click>=8.1.0
+tqdm>=4.65.0
 
 # Development and testing
-jupyter
-pytest
-pytest-asyncio
-black
-flake8
-coverage
-pytest-cov
+jupyter>=1.0.0
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+coverage>=7.0.0
+
+# Modern formatting and linting (replaces flake8)
+ruff>=0.1.6
+mypy>=1.5.0
+black>=23.0.0

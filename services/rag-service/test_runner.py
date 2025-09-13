@@ -12,19 +12,8 @@ from pathlib import Path
 
 def check_dependencies():
     """Check if required dependencies are installed"""
-    try:
-        import pytest
-    except ImportError:
-        print("❌ pytest not found. Installing...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "pytest"], check=True)
-
-    # Check for coverage if --cov flag will be used
-    try:
-        import coverage
-    except ImportError:
-        print(
-            "ℹ️  coverage not installed. Use 'pip install coverage pytest-cov' for coverage reports"
-        )
+    import coverage
+    import pytest
 
 
 def run_tests(coverage_enabled=False, verbose=False):
@@ -39,14 +28,9 @@ def run_tests(coverage_enabled=False, verbose=False):
         cmd.append("-q")
 
     if coverage_enabled:
-        try:
-            import pytest_cov
+        import pytest_cov
 
-            cmd.extend(["--cov=src", "--cov-report=term-missing"])
-        except ImportError:
-            print("⚠️  pytest-cov not installed. Running tests without coverage.")
-            print("   Install with: pip install pytest-cov")
-            coverage_enabled = False
+        cmd.extend(["--cov=src", "--cov-report=term-missing"])
 
     # Add colored output
     cmd.append("--color=yes")
@@ -113,7 +97,9 @@ Examples:
         help="Enable test coverage reporting",
     )
 
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test output")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Verbose test output"
+    )
 
     parser.add_argument("--list", action="store_true", help="List available test files")
 

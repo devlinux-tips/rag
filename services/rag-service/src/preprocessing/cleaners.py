@@ -22,8 +22,8 @@ class CleaningResult:
     original_length: int
     cleaned_length: int
     operations_performed: list[str]
-    language_score: Optional[float] = None
-    is_meaningful: Optional[bool] = None
+    language_score: float | None = None
+    is_meaningful: bool | None = None
 
 
 @dataclass
@@ -32,7 +32,7 @@ class LanguageConfig:
 
     diacritic_map: dict[str, str]
     word_char_pattern: str
-    locale_primary: Optional[str] = None
+    locale_primary: str | None = None
     locale_fallback: str = "C.UTF-8"
 
 
@@ -478,8 +478,8 @@ class MultilingualTextCleaner:
         self,
         language: str,
         config_provider: ConfigProvider,
-        logger_provider: Optional[LoggerProvider] = None,
-        environment_provider: Optional[EnvironmentProvider] = None,
+        logger_provider: LoggerProvider | None = None,
+        environment_provider: EnvironmentProvider | None = None,
     ):
         """Initialize cleaner with injected dependencies."""
         self.language = language
@@ -678,7 +678,7 @@ def clean_text(
     text: str,
     language: str,
     preserve_structure: bool = True,
-    config_provider: Optional[ConfigProvider] = None,
+    config_provider: ConfigProvider | None = None,
 ) -> str:
     """
     Clean and normalize text for the specified language.
@@ -702,7 +702,7 @@ def clean_text(
 
 
 def detect_language_content_with_config(
-    text: str, language: str, config_provider: Optional[ConfigProvider] = None
+    text: str, language: str, config_provider: ConfigProvider | None = None
 ) -> float:
     """
     Detect how much content matches the specified language.
@@ -724,7 +724,7 @@ def detect_language_content_with_config(
 
 
 def preserve_text_encoding_with_config(
-    text: any, language: str, config_provider: Optional[ConfigProvider] = None
+    text: any, language: str, config_provider: ConfigProvider | None = None
 ) -> str:
     """
     Preserve proper text encoding for the specified language.
@@ -746,7 +746,7 @@ def preserve_text_encoding_with_config(
 
 
 def setup_language_environment(
-    language: str, config_provider: Optional[ConfigProvider] = None
+    language: str, config_provider: ConfigProvider | None = None
 ) -> None:
     """
     Setup language-specific environment.

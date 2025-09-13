@@ -98,7 +98,7 @@ def fix_common_ocr_errors(text: str) -> str:
     return text
 
 
-def fix_spaced_diacritics(text: str, language: str = None) -> str:
+def fix_spaced_diacritics(text: str, language: str | None = None) -> str:
     """
     Fix spaced diacritic characters for languages that use them.
 
@@ -134,7 +134,7 @@ def fix_spaced_diacritics(text: str, language: str = None) -> str:
 
 
 def apply_ocr_corrections(
-    text: str, config: dict[str, Any], language: str = None
+    text: str, config: dict[str, Any], language: str | None = None
 ) -> str:
     """
     Apply OCR corrections based on configuration flags.
@@ -181,7 +181,7 @@ def get_ocr_correction_stats(original_text: str, corrected_text: str) -> dict[st
         "original_length": len(original_text),
         "corrected_length": len(corrected_text),
         "characters_changed": sum(
-            1 for a, b in zip(original_text, corrected_text) if a != b
+            1 for a, b in zip(original_text, corrected_text, strict=False) if a != b
         ),
         "length_difference": len(corrected_text) - len(original_text),
     }

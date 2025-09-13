@@ -9,22 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
-# Optional dependencies - handle gracefully if not available
-try:
-    from pypdf import PdfReader
-
-    PYPDF_AVAILABLE = True
-except ImportError:
-    PdfReader = None
-    PYPDF_AVAILABLE = False
-
-try:
-    from docx import Document
-
-    DOCX_AVAILABLE = True
-except ImportError:
-    Document = None
-    DOCX_AVAILABLE = False
+from docx import Document
+from pypdf import PdfReader
 
 
 @dataclass
@@ -34,9 +20,9 @@ class ExtractionResult:
     text: str
     character_count: int
     extraction_method: str
-    encoding_used: Optional[str] = None
-    pages_processed: Optional[int] = None
-    error_details: Optional[str] = None
+    encoding_used: str | None = None
+    pages_processed: int | None = None
+    error_details: str | None = None
 
 
 @dataclass
@@ -99,7 +85,7 @@ class LoggerProvider(Protocol):
 
 def validate_file_format(
     file_path: Path, supported_formats: list[str]
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Validate if file format is supported.
 
@@ -132,10 +118,6 @@ def extract_text_from_pdf_binary(pdf_binary: bytes) -> tuple[str, int]:
         Exception: If PDF processing fails
         ImportError: If pypdf is not available
     """
-    if not PYPDF_AVAILABLE:
-        raise ImportError(
-            "pypdf is required for PDF extraction. Install with: pip install pypdf"
-        )
 
     from io import BytesIO
 
@@ -170,10 +152,6 @@ def extract_text_from_docx_binary(docx_binary: bytes) -> str:
         Exception: If DOCX processing fails
         ImportError: If python-docx is not available
     """
-    if not DOCX_AVAILABLE:
-        raise ImportError(
-            "python-docx is required for DOCX extraction. Install with: pip install python-docx"
-        )
 
     from io import BytesIO
 
@@ -253,7 +231,7 @@ class DocumentExtractor:
         self,
         config_provider: ConfigProvider,
         file_system_provider: FileSystemProvider,
-        logger_provider: Optional[LoggerProvider] = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize extractor with injected dependencies."""
         self._config_provider = config_provider
@@ -388,8 +366,8 @@ class DocumentExtractor:
 
 def extract_document_text(
     file_path: str | Path,
-    config_provider: Optional[ConfigProvider] = None,
-    file_system_provider: Optional[FileSystemProvider] = None,
+    config_provider: ConfigProvider | None = None,
+    file_system_provider: FileSystemProvider | None = None,
 ) -> str:
     """
     Convenience function for document text extraction.

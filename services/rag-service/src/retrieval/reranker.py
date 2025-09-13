@@ -51,7 +51,7 @@ def calculate_rank_changes(
     if not all(isinstance(rank, int) for rank in new_ranks):
         raise ValueError("All new ranks must be integers")
 
-    return [orig - new for orig, new in zip(original_ranks, new_ranks)]
+    return [orig - new for orig, new in zip(original_ranks, new_ranks, strict=False)]
 
 
 def sort_by_scores(
@@ -87,7 +87,7 @@ def sort_by_scores(
         raise ValueError("All scores must be numbers")
 
     # Create indexed pairs and sort
-    indexed_pairs = list(enumerate(zip(items, scores)))
+    indexed_pairs = list(enumerate(zip(items, scores, strict=False)))
     indexed_pairs.sort(key=lambda x: x[1][1], reverse=descending)
 
     # Extract sorted data
@@ -215,7 +215,7 @@ def calculate_reranking_metrics(
 
         numerator = sum(
             (o - mean_orig) * (n - mean_new)
-            for o, n in zip(orig_positions, new_positions)
+            for o, n in zip(orig_positions, new_positions, strict=False)
         )
 
         orig_var = sum((o - mean_orig) ** 2 for o in orig_positions)
@@ -444,7 +444,7 @@ class MultilingualReranker:
             self.is_ready = False
 
     def rerank(
-        self, query: str, documents: list[DocumentItem], top_k: Optional[int] = None
+        self, query: str, documents: list[DocumentItem], top_k: int | None = None
     ) -> list[RerankingResult]:
         """
         Rerank documents based on relevance to query.
@@ -497,7 +497,7 @@ class MultilingualReranker:
             # Create reranking results
             results = []
             for new_rank, (doc, score, orig_idx) in enumerate(
-                zip(sorted_docs, sorted_scores, original_indices)
+                zip(sorted_docs, sorted_scores, original_indices, strict=False)
             ):
                 # Apply score threshold filter
                 if score >= self.config.score_threshold:
@@ -693,7 +693,7 @@ def create_mock_model_loader(
 
 
 def create_mock_score_calculator(
-    base_scores: Optional[list[float]] = None, add_noise: bool = False
+    base_scores: list[float] | None = None, add_noise: bool = False
 ) -> ScoreCalculator:
     """
     Factory function to create mock score calculator.

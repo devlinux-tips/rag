@@ -72,7 +72,7 @@ class MockVectorStorage:
     def add_documents(
         self, documents: list[str], metadatas: list[dict], embeddings: list
     ) -> None:
-        for doc, meta, emb in zip(documents, metadatas, embeddings):
+        for doc, meta, emb in zip(documents, metadatas, embeddings, strict=False):
             self._documents.append({"content": doc, "metadata": meta, "embedding": emb})
 
     def create_collection(self) -> None:
@@ -140,7 +140,7 @@ class MockRetriever:
     """Mock retriever for testing."""
 
     async def retrieve(
-        self, query: str, max_results: int = 5, context: Optional[dict] = None
+        self, query: str, max_results: int = 5, context: dict | None = None
     ) -> Any:
         class MockCategory:
             value = "general"
@@ -166,9 +166,7 @@ class MockRetriever:
         return MockResults()
 
 
-def create_mock_rag_system(
-    language: str = "hr", config: Optional[dict[str, Any]] = None
-):
+def create_mock_rag_system(language: str = "hr", config: dict[str, Any] | None = None):
     """Create a fully mocked RAG system for testing."""
     from src.pipeline.rag_system import create_rag_system
 

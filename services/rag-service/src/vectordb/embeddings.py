@@ -45,8 +45,8 @@ class DeviceInfo:
 
     device_type: str  # "cuda", "mps", "cpu"
     device_name: str
-    available_memory: Optional[int] = None
-    device_properties: Optional[dict[str, Any]] = None
+    available_memory: int | None = None
+    device_properties: dict[str, Any] | None = None
 
 
 # Protocols for dependency injection
@@ -144,7 +144,7 @@ def validate_texts_for_embedding(texts: list[str]) -> list[str]:
 
 def calculate_optimal_batch_size(
     num_texts: int,
-    available_memory: Optional[int],
+    available_memory: int | None,
     base_batch_size: int = 32,
     max_batch_size: int = 256,
 ) -> int:
@@ -238,8 +238,8 @@ def combine_batch_embeddings(batch_embeddings: list[np.ndarray]) -> np.ndarray:
 
 def validate_embedding_dimensions(
     embeddings: np.ndarray,
-    expected_dim: Optional[int] = None,
-    num_texts: Optional[int] = None,
+    expected_dim: int | None = None,
+    num_texts: int | None = None,
 ) -> None:
     """
     Validate embedding array dimensions.
@@ -309,9 +309,9 @@ class MultilingualEmbeddingGenerator:
     def __init__(
         self,
         config: EmbeddingConfig,
-        model_loader: Optional[ModelLoader] = None,
-        device_detector: Optional[DeviceDetector] = None,
-        logger: Optional[logging.Logger] = None,
+        model_loader: ModelLoader | None = None,
+        device_detector: DeviceDetector | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize embedding generator with injected dependencies.
@@ -323,12 +323,21 @@ class MultilingualEmbeddingGenerator:
             logger: Logger instance
         """
         self.config = config
-        self.model_loader = model_loader or self._create_default_model_loader()
-        self.device_detector = device_detector or self._create_default_device_detector()
-        self.logger = logger or logging.getLogger(__name__)
+        # Dependency injection - explicit defaults for optional dependencies
+        self.model_loader = (
+            model_loader
+            if model_loader is not None
+            else self._create_default_model_loader()
+        )
+        self.device_detector = (
+            device_detector
+            if device_detector is not None
+            else self._create_default_device_detector()
+        )
+        self.logger = logger if logger is not None else logging.getLogger(__name__)
 
-        self._model: Optional[EmbeddingModel] = None
-        self._device_info: Optional[DeviceInfo] = None
+        self._model: EmbeddingModel | None = None
+        self._device_info: DeviceInfo | None = None
         self._is_initialized = False
 
     def _create_default_model_loader(self) -> ModelLoader:
@@ -379,8 +388,8 @@ class MultilingualEmbeddingGenerator:
     def generate_embeddings(
         self,
         texts: list[str],
-        normalize: Optional[bool] = None,
-        batch_size: Optional[int] = None,
+        normalize: bool | None = None,
+        batch_size: int | None = None,
     ) -> EmbeddingResult:
         """
         Generate embeddings for input texts.
@@ -498,7 +507,7 @@ class MultilingualEmbeddingGenerator:
 
         return self._model.get_sentence_embedding_dimension()
 
-    def is_model_available(self, model_name: Optional[str] = None) -> bool:
+    def is_model_available(self, model_name: str | None = None) -> bool:
         """
         Check if a model is available for loading.
 
@@ -511,7 +520,7 @@ class MultilingualEmbeddingGenerator:
         check_model = model_name or self.config.model_name
         return self.model_loader.is_model_available(check_model)
 
-    def get_device_info(self) -> Optional[DeviceInfo]:
+    def get_device_info(self) -> DeviceInfo | None:
         """
         Get information about the current device.
 
@@ -544,10 +553,10 @@ class MultilingualEmbeddingGenerator:
 
 # Factory function for convenient creation
 def create_embedding_generator(
-    config: Optional[EmbeddingConfig] = None,
-    model_loader: Optional[ModelLoader] = None,
-    device_detector: Optional[DeviceDetector] = None,
-    logger: Optional[logging.Logger] = None,
+    config: EmbeddingConfig | None = None,
+    model_loader: ModelLoader | None = None,
+    device_detector: DeviceDetector | None = None,
+    logger: logging.Logger | None = None,
 ) -> MultilingualEmbeddingGenerator:
     """
     Factory function to create configured embedding generator.

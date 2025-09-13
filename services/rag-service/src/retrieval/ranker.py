@@ -34,7 +34,7 @@ class RankingSignal:
     name: str
     score: float
     weight: float
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -70,7 +70,7 @@ class ProcessedQuery:
     keywords: list[str]
     query_type: str
     language: str
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     # ===== PROTOCOL DEFINITIONS =====
 
@@ -727,7 +727,7 @@ class DocumentRanker:
         self,
         documents: list[dict[str, Any]],
         query: ProcessedQuery,
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> list[RankedDocument]:
         """
         Rank and re-order documents for better relevance.
@@ -885,8 +885,8 @@ class DocumentRanker:
 
 def create_document_ranker(
     language: str,
-    config_provider: Optional[ConfigProvider] = None,
-    language_provider: Optional[LanguageProvider] = None,
+    config_provider: ConfigProvider | None = None,
+    language_provider: LanguageProvider | None = None,
 ) -> DocumentRanker:
     """
     Factory function to create document ranker.
@@ -912,7 +912,7 @@ def create_document_ranker(
 
 
 def create_mock_ranker(
-    language: str = "hr", config_dict: Optional[dict[str, Any]] = None
+    language: str = "hr", config_dict: dict[str, Any] | None = None
 ) -> DocumentRanker:
     """
     Factory function to create mock ranker for testing.

@@ -7,12 +7,7 @@ import asyncio
 import json
 from typing import Any, Dict, List
 
-try:
-    import httpx
-
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+import httpx
 
 from .ollama_client import ConnectionError, HttpClient, HttpError, HttpResponse
 
@@ -28,8 +23,6 @@ class AsyncHttpxClient:
     def _ensure_client(self) -> httpx.AsyncClient:
         """Ensure HTTP client is initialized."""
         if self._client is None:
-            if not HTTPX_AVAILABLE:
-                raise ImportError("httpx is required for AsyncHttpxClient")
             self._client = httpx.AsyncClient()
         return self._client
 
@@ -52,11 +45,11 @@ class AsyncHttpxClient:
                 json_data=json_data,
             )
         except httpx.ConnectError as e:
-            raise ConnectionError(f"Connection failed: {e}")
+            raise ConnectionError(f"Connection failed: {e}") from e
         except httpx.HTTPStatusError as e:
-            raise HttpError(f"HTTP error: {e}", e.response.status_code)
+            raise HttpError(f"HTTP error: {e}", e.response.status_code) from e
         except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timeout: {e}")
+            raise TimeoutError(f"Request timeout: {e}") from e
 
     async def post(
         self, url: str, json_data: dict[str, Any], timeout: float = 30.0
@@ -79,11 +72,11 @@ class AsyncHttpxClient:
                 json_data=json_data_response,
             )
         except httpx.ConnectError as e:
-            raise ConnectionError(f"Connection failed: {e}")
+            raise ConnectionError(f"Connection failed: {e}") from e
         except httpx.HTTPStatusError as e:
-            raise HttpError(f"HTTP error: {e}", e.response.status_code)
+            raise HttpError(f"HTTP error: {e}", e.response.status_code) from e
         except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timeout: {e}")
+            raise TimeoutError(f"Request timeout: {e}") from e
 
     async def stream_post(
         self, url: str, json_data: dict[str, Any], timeout: float = 30.0
@@ -102,9 +95,9 @@ class AsyncHttpxClient:
                         lines.append(line)
             return lines
         except httpx.ConnectError as e:
-            raise ConnectionError(f"Connection failed: {e}")
+            raise ConnectionError(f"Connection failed: {e}") from e
         except httpx.HTTPStatusError as e:
-            raise HttpError(f"HTTP error: {e}", e.response.status_code)
+            raise HttpError(f"HTTP error: {e}", e.response.status_code) from e
         except httpx.TimeoutException as e:
             raise TimeoutError(f"Streaming request timeout: {e}")
 

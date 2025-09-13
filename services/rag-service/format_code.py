@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to format all Python files in the project using black, isort, and flake8.
+Script to format all Python files in the project using modern tooling.
+Uses ruff (fast linter/formatter) + black + mypy for comprehensive code quality.
 Run this to ensure consistent formatting across the codebase.
 Works from any directory by finding repository root and using root configurations.
 """
@@ -16,7 +17,9 @@ def run_command(cmd, description, allow_failure=False):
     """Run a command and report its status."""
     print(f"Running {description}...")
     try:
-        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, shell=True, check=True, capture_output=True, text=True
+        )
         print(f"✅ {description} completed successfully")
         if result.stdout:
             print(result.stdout)
@@ -32,7 +35,7 @@ def run_command(cmd, description, allow_failure=False):
 
 def check_tool_availability():
     """Check if required tools are available."""
-    tools = {"black": "black", "isort": "isort", "flake8": "flake8"}
+    tools = {"ruff": "ruff", "black": "black", "mypy": "mypy"}
     available_tools = {}
 
     for name, command in tools.items():
@@ -115,7 +118,7 @@ def main():
 
     if not available_tools:
         print("❌ No formatting tools available. Please install them:")
-        print("pip install black isort flake8")
+        print("pip install ruff black mypy")
         sys.exit(1)
 
     # Find repository root and determine working context
@@ -147,25 +150,32 @@ def main():
         os.chdir(repo_root)
 
     try:
-        # Format with black (if available)
-        if "black" in available_tools:
+        # Ruff: fix issues and format code (if available)
+        if "ruff" in available_tools:
+            total_operations += 1
+            # Ruff fix: auto-fix import sorting and style issues
+            if run_command(f"ruff check --fix {targets_str}", "Ruff auto-fix"):
+                success_count += 1
+
+            total_operations += 1
+            # Ruff format: code formatting
+            if run_command(f"ruff format {targets_str}", "Ruff formatting"):
+                success_count += 1
+
+        # Format with black (if available and ruff not available)
+        elif "black" in available_tools:
             total_operations += 1
             # Black will use root pyproject.toml or default settings
             if run_command(f"black {targets_str}", "Black formatting"):
                 success_count += 1
 
-        # Sort imports with isort (if available)
-        if "isort" in available_tools:
+        # Type checking with mypy (if available)
+        if "mypy" in available_tools:
             total_operations += 1
-            # isort will use root configuration
-            if run_command(f"isort {targets_str}", "Import sorting"):
-                success_count += 1
-
-        # Run flake8 to check for any remaining issues (if available)
-        if "flake8" in available_tools:
-            total_operations += 1
-            # flake8 will use root .flake8 configuration
-            if run_command(f"flake8 {targets_str}", "Flake8 linting", allow_failure=True):
+            # mypy will use root configuration
+            if run_command(
+                f"mypy {targets_str}", "MyPy type checking", allow_failure=True
+            ):
                 success_count += 1
     finally:
         # Restore original working directory
@@ -173,14 +183,16 @@ def main():
             os.chdir(original_cwd)
 
     # Report results
-    print(f"\n📊 Results: {success_count}/{total_operations} operations completed successfully")
+    print(
+        f"\n📊 Results: {success_count}/{total_operations} operations completed successfully"
+    )
 
     if success_count == total_operations:
-        print("🎉 All formatting and linting completed successfully!")
-    elif success_count >= total_operations - 1:  # Allow flake8 to fail
+        print("🎉 All formatting and type checking completed successfully!")
+    elif success_count >= total_operations - 1:  # Allow mypy to fail
         print("✅ Formatting completed successfully!")
-        if "flake8" in available_tools and success_count < total_operations:
-            print("⚠️  Some linting issues remain - check output above")
+        if "mypy" in available_tools and success_count < total_operations:
+            print("⚠️  Some type checking issues remain - check output above")
     else:
         print("❌ Some critical formatting operations failed")
         sys.exit(1)

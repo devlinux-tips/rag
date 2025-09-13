@@ -7,13 +7,9 @@ key structures to prevent configuration drift and maintain language equality.
 """
 
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
-
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
 
 
 def load_toml_file(file_path: Path) -> dict[str, Any]:

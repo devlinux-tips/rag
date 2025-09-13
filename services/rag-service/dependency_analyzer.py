@@ -347,7 +347,7 @@ class DependencyAnalyzer:
         listing.append("")
 
         current_dep_count = -1
-        for dep_count, level, module in all_modules:
+        for dep_count, _level, module in all_modules:
             # Add section headers for different dependency counts
             if dep_count != current_dep_count:
                 current_dep_count = dep_count
@@ -358,9 +358,7 @@ class DependencyAnalyzer:
                 elif dep_count == 2:
                     listing.append("#### 🟠 Two Dependencies")
                 else:
-                    listing.append(
-                        f"#### 🔴 {dep_count} Dependencies (High Complexity)"
-                    )
+                    listing.append(f"#### 🔴 {dep_count} Dependencies (High Complexity)")
                 listing.append("")
 
             # Get file name without src. prefix

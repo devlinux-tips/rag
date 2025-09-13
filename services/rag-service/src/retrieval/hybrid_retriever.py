@@ -227,7 +227,7 @@ def combine_hybrid_scores(
 
     hybrid_scores = [
         normalized_dense_weight * dense + normalized_sparse_weight * sparse
-        for dense, sparse in zip(dense_scores, sparse_scores)
+        for dense, sparse in zip(dense_scores, sparse_scores, strict=False)
     ]
 
     return hybrid_scores
@@ -627,7 +627,8 @@ class HybridRetriever:
 
             # Create content to BM25 score mapping
             content_to_bm25 = {
-                doc: score for doc, score in zip(self.documents, bm25_scores)
+                doc: score
+                for doc, score in zip(self.documents, bm25_scores, strict=False)
             }
 
             # Process dense results and combine with BM25
@@ -775,7 +776,7 @@ def create_hybrid_retriever_from_config(
 
 
 def create_mock_stop_words_provider(
-    croatian_stop_words: Optional[set] = None, english_stop_words: Optional[set] = None
+    croatian_stop_words: set | None = None, english_stop_words: set | None = None
 ) -> StopWordsProvider:
     """
     Factory function to create mock stop words provider.
@@ -809,7 +810,6 @@ def create_mock_stop_words_provider(
                 "bilo",
                 "mogu",
                 "možete",
-                "mogu",
                 "ili",
                 "ako",
                 "kada",

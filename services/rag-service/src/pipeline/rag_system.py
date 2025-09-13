@@ -31,11 +31,11 @@ class RAGQuery:
 
     text: str
     language: str  # Language code (hr, en, etc.)
-    query_id: Optional[str] = None
-    user_id: Optional[str] = None
-    context_filters: Optional[dict[str, Any]] = None
-    max_results: Optional[int] = None
-    metadata: Optional[dict[str, Any]] = None
+    query_id: str | None = None
+    user_id: str | None = None
+    context_filters: dict[str, Any] | None = None
+    max_results: int | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -64,7 +64,7 @@ class ComponentHealth:
 
     status: str  # "healthy", "degraded", "unhealthy"
     details: str
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -75,7 +75,7 @@ class SystemHealth:
     components: dict[str, ComponentHealth]
     metrics: dict[str, Any]
     timestamp: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
@@ -169,7 +169,7 @@ class RetrieverProtocol(Protocol):
     """Protocol for document retrieval."""
 
     async def retrieve(
-        self, query: str, max_results: int = 5, context: Optional[dict] = None
+        self, query: str, max_results: int = 5, context: dict | None = None
     ) -> Any:
         ...
 
@@ -493,7 +493,7 @@ def evaluate_component_health(
 
 
 def evaluate_ollama_health(
-    client: Optional[GenerationClientProtocol], model_name: str
+    client: GenerationClientProtocol | None, model_name: str
 ) -> ComponentHealth:
     """Evaluate Ollama service health."""
     if not client:
@@ -552,10 +552,10 @@ class RAGSystem:
         response_parser: ResponseParserProtocol,
         prompt_builder: PromptBuilderProtocol,
         # Configuration - validated config objects instead of raw dict
-        embedding_config: Optional[EmbeddingConfig] = None,
-        ollama_config: Optional[OllamaConfig] = None,
-        processing_config: Optional[ProcessingConfig] = None,
-        retrieval_config: Optional[RetrievalConfig] = None,
+        embedding_config: EmbeddingConfig | None = None,
+        ollama_config: OllamaConfig | None = None,
+        processing_config: ProcessingConfig | None = None,
+        retrieval_config: RetrievalConfig | None = None,
     ):
         """Initialize with all dependencies injected."""
         self.language = validate_language_code(language)
@@ -616,23 +616,18 @@ class RAGSystem:
             language_config = get_language_config(self.language)
 
             # Try ConfigValidator - log result but don't break system
-            try:
-                ConfigValidator.validate_startup_config(
-                    main_config, {self.language: language_config}
-                )
-                logger.info(
-                    "✅ ConfigValidator: All configuration keys validated successfully"
-                )
-            except ConfigurationError as e:
-                # Log warning but continue - development system
-                logger.warning(
-                    f"⚠️  ConfigValidator found missing keys (development mode): {e}"
-                )
-                logger.info("🔧 System will continue with current configuration")
-
-        except ImportError:
-            # ConfigValidator not available - continue normally
-            logger.debug("ConfigValidator not available, skipping validation")
+            ConfigValidator.validate_startup_config(
+                main_config, {self.language: language_config}
+            )
+            logger.info(
+                "✅ ConfigValidator: All configuration keys validated successfully"
+            )
+        except ConfigurationError as e:
+            # Log warning but continue - development system
+            logger.warning(
+                f"⚠️  ConfigValidator found missing keys (development mode): {e}"
+            )
+            logger.info("🔧 System will continue with current configuration")
         except Exception as e:
             # Any other error - log but don't break startup
             logger.warning(f"Configuration validation failed: {e}")
@@ -982,10 +977,10 @@ def create_rag_system(
     generation_client: GenerationClientProtocol,
     response_parser: ResponseParserProtocol,
     prompt_builder: PromptBuilderProtocol,
-    embedding_config: Optional[EmbeddingConfig] = None,
-    ollama_config: Optional[OllamaConfig] = None,
-    processing_config: Optional[ProcessingConfig] = None,
-    retrieval_config: Optional[RetrievalConfig] = None,
+    embedding_config: EmbeddingConfig | None = None,
+    ollama_config: OllamaConfig | None = None,
+    processing_config: ProcessingConfig | None = None,
+    retrieval_config: RetrievalConfig | None = None,
 ) -> RAGSystem:
     """Factory function to create RAG system with validated config dependency injection."""
     return RAGSystem(

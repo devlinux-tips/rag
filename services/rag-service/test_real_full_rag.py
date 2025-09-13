@@ -15,6 +15,7 @@ import json
 import time
 
 import chromadb
+import numpy as np
 
 from src.preprocessing.extractors import extract_document_text
 
@@ -71,27 +72,20 @@ async def test_complete_real_rag():
         print("\n3️⃣ EMBEDDING GENERATION")
         print("-" * 30)
 
-        try:
-            from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer
 
-            print("🔧 Loading BGE-M3 embedding model...")
-            model = SentenceTransformer("BAAI/bge-m3")
-            print("✅ BGE-M3 model loaded successfully")
+        print("🔧 Loading BGE-M3 embedding model...")
+        model = SentenceTransformer("BAAI/bge-m3")
+        print("✅ BGE-M3 model loaded successfully")
 
-            print("🔄 Generating embeddings for chunks...")
-            embeddings = []
-            for i, chunk in enumerate(chunks):
-                embedding = model.encode(chunk["content"])
-                embeddings.append(embedding.tolist())
-                print(f"   Chunk {i+1}: {len(embedding)}-dim embedding generated")
+        print("🔄 Generating embeddings for chunks...")
+        embeddings = []
+        for i, chunk in enumerate(chunks):
+            embedding = model.encode(chunk["content"])
+            embeddings.append(embedding.tolist())
+            print(f"   Chunk {i+1}: {len(embedding)}-dim embedding generated")
 
-            print(f"✅ Generated {len(embeddings)} embeddings")
-
-        except ImportError:
-            print("⚠️  sentence-transformers not installed, using dummy embeddings")
-            import numpy as np
-
-            embeddings = [np.random.random(1024).tolist() for _ in chunks]
+        print(f"✅ Generated {len(embeddings)} embeddings")
 
         # ===== STEP 4: REAL VECTOR STORAGE =====
         print("\n4️⃣ VECTOR STORAGE (ChromaDB)")
@@ -103,7 +97,7 @@ async def test_complete_real_rag():
         # Delete collection if it exists (for clean testing)
         try:
             client.delete_collection("test_english_docs")
-        except:
+        except Exception:
             pass
 
         # Create collection
@@ -158,7 +152,7 @@ async def test_complete_real_rag():
             print(f"📊 Found {len(results['documents'][0])} relevant chunks:")
 
             for i, (doc, metadata) in enumerate(
-                zip(results["documents"][0], results["metadatas"][0])
+                zip(results["documents"][0], results["metadatas"][0], strict=False)
             ):
                 distance = results["distances"][0][i] if "distances" in results else 0
                 print(

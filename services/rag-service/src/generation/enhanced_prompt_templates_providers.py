@@ -22,7 +22,7 @@ from src.retrieval.categorization import CategoryType
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, config: Optional[PromptConfig] = None):
+    def __init__(self, config: PromptConfig | None = None):
         """Initialize with optional mock configuration."""
         self.config = config or self._create_default_config()
         self.call_history: list[str] = []
@@ -200,7 +200,7 @@ class ProductionConfigProvider:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to load prompt configuration for language '{language}': {e}"
-            )
+            ) from e
 
 
 class StandardLoggerProvider:
@@ -233,10 +233,10 @@ class StandardLoggerProvider:
 
 
 def create_mock_setup(
-    config: Optional[PromptConfig] = None,
-    custom_templates: Optional[dict[CategoryType, dict[PromptType, str]]] = None,
-    custom_messages: Optional[dict[str, str]] = None,
-    custom_formatting: Optional[dict[str, str]] = None,
+    config: PromptConfig | None = None,
+    custom_templates: dict[CategoryType, dict[PromptType, str]] | None = None,
+    custom_messages: dict[str, str] | None = None,
+    custom_formatting: dict[str, str] | None = None,
     language: str = "hr",
 ) -> tuple:
     """
@@ -271,7 +271,7 @@ def create_mock_setup(
     return config_provider, logger_provider
 
 
-def create_production_setup(logger_name: Optional[str] = None) -> tuple:
+def create_production_setup(logger_name: str | None = None) -> tuple:
     """
     Create production setup with real components.
 
@@ -391,10 +391,10 @@ def create_development_prompt_builder():
 
 def create_test_prompt_builder(
     language: str = "hr",
-    config: Optional[PromptConfig] = None,
-    custom_templates: Optional[dict[CategoryType, dict[PromptType, str]]] = None,
-    custom_messages: Optional[dict[str, str]] = None,
-    custom_formatting: Optional[dict[str, str]] = None,
+    config: PromptConfig | None = None,
+    custom_templates: dict[CategoryType, dict[PromptType, str]] | None = None,
+    custom_messages: dict[str, str] | None = None,
+    custom_formatting: dict[str, str] | None = None,
 ):
     """Create prompt builder configured for testing."""
     from .enhanced_prompt_templates import create_enhanced_prompt_builder

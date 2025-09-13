@@ -19,17 +19,17 @@ from typing import Any, Dict, List, Optional, Protocol, TextIO
 class CLIArgs:
     """CLI arguments - pure data structure."""
 
-    command: Optional[str]
+    command: str | None
     tenant: str
     user: str
     language: str
     log_level: str
     # Command-specific args
-    query_text: Optional[str] = None
-    top_k: Optional[int] = None
+    query_text: str | None = None
+    top_k: int | None = None
     no_sources: bool = False
-    docs_path: Optional[str] = None
-    languages: Optional[list[str]] = None
+    docs_path: str | None = None
+    languages: list[str] | None = None
     # Data management args
     confirm: bool = False
     dry_run: bool = False
@@ -58,7 +58,7 @@ class QueryResult:
     query_time: float
     documents_retrieved: int
     retrieved_chunks: list[dict[str, Any]]
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -67,8 +67,8 @@ class DocumentProcessingResult:
 
     success: bool
     processing_time: float
-    processing_result: Optional[dict[str, Any]] = None
-    error_message: Optional[str] = None
+    processing_result: dict[str, Any] | None = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -515,8 +515,8 @@ def format_reprocess_result(
         "=" * 50,
     ]
 
-    success = result.get("success", False)
-    message = result.get("message", "")
+    success = result["success"]
+    message = result["message"]
 
     if success:
         lines.extend(
@@ -1319,7 +1319,7 @@ class MockConfigLoader:
 
 
 def create_mock_cli(
-    should_fail: bool = False, output_writer: Optional[OutputWriterProtocol] = None
+    should_fail: bool = False, output_writer: OutputWriterProtocol | None = None
 ) -> MultiTenantRAGCLI:
     """Create a fully mocked CLI for testing."""
     output_writer = output_writer or MockOutputWriter()
@@ -1435,7 +1435,7 @@ async def main():
                             print(
                                 f"📦 Found existing collection: {collection_name} ({existing_count} documents)"
                             )
-                        except:
+                        except Exception:
                             # Collection doesn't exist, create new one
                             self._collection = self._client.create_collection(
                                 name=collection_name,
@@ -1528,12 +1528,10 @@ async def main():
                                         f"❌ Primary model {primary_model} failed and no fallback_model configured"
                                     )
                                     raise
-                        except ImportError:
-                            print(
-                                "⚠️ sentence-transformers not installed, using dummy embeddings"
-                            )
-                            self._model = None
-                            # Keep self._model_name from config for logging purposes
+
+                        except Exception as e:
+                            print(f"❌ Failed to initialize embedding model: {e}")
+                            raise
 
                         print(f"🎯 Complete RAG system initialized for {self.language}")
 
@@ -1624,7 +1622,9 @@ async def main():
                                 embeddings = [
                                     np.random.random(1024).tolist() for _ in chunks
                                 ]
-                                print(f"⚠️ Generated {len(embeddings)} dummy embeddings")
+                                print(
+                                    f"⚠️ Generated {len(embeddings)} dummy embeddings"
+                                )
 
                             # 4. Real vector storage in ChromaDB
                             if chunks and embeddings:
@@ -1716,7 +1716,11 @@ async def main():
                             )
 
                             for i, (doc, metadata) in enumerate(
-                                zip(results["documents"][0], results["metadatas"][0])
+                                zip(
+                                    results["documents"][0],
+                                    results["metadatas"][0],
+                                    strict=False,
+                                )
                             ):
                                 distance = (
                                     results["distances"][0][i]

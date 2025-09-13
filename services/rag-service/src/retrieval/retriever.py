@@ -45,10 +45,10 @@ class RetrievalQuery:
     query_type: QueryType
     language: str
     keywords: list[str]
-    filters: Optional[dict[str, Any]] = None
+    filters: dict[str, Any] | None = None
     max_results: int = 10
     similarity_threshold: float = 0.1
-    strategy_override: Optional[RetrievalStrategy] = None
+    strategy_override: RetrievalStrategy | None = None
 
     def __post_init__(self):
         """Validate query parameters."""
@@ -67,8 +67,8 @@ class RetrievedDocument:
     score: float
     metadata: dict[str, Any]
     retrieval_method: str
-    rank: Optional[int] = None
-    query_match_info: Optional[dict[str, Any]] = None
+    rank: int | None = None
+    query_match_info: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -94,7 +94,7 @@ class RetrievalResult:
     strategy_used: RetrievalStrategy
     query_type: QueryType
     language: str
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self):
         """Add ranking to documents if not present."""
@@ -120,7 +120,7 @@ class SearchEngine(Protocol):
         query: str,
         top_k: int,
         method: str = "semantic",
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         similarity_threshold: float = 0.0,
     ) -> list[dict[str, Any]]:
         """Execute search and return results."""
@@ -434,9 +434,9 @@ class DocumentRetriever:
         self,
         query: str,
         language: str = "en",
-        max_results: Optional[int] = None,
-        strategy: Optional[RetrievalStrategy] = None,
-        filters: Optional[dict[str, Any]] = None,
+        max_results: int | None = None,
+        strategy: RetrievalStrategy | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> RetrievalResult:
         """
         Retrieve relevant documents for query.
@@ -538,16 +538,27 @@ class DocumentRetriever:
             similarity_threshold=query.similarity_threshold,
         )
 
-        documents = [
-            RetrievedDocument(
-                id=result.get("id", ""),
-                content=result.get("content", ""),
-                score=result.get("score", 0.0),
-                metadata=result.get("metadata", {}),
-                retrieval_method="semantic",
+        documents = []
+        for result in results:
+            # Validate required fields - fail fast if missing
+            if "id" not in result:
+                raise ValueError("Search result missing required 'id' field")
+            if "content" not in result:
+                raise ValueError("Search result missing required 'content' field")
+            if "score" not in result:
+                raise ValueError("Search result missing required 'score' field")
+            if "metadata" not in result:
+                raise ValueError("Search result missing required 'metadata' field")
+
+            documents.append(
+                RetrievedDocument(
+                    id=result["id"],
+                    content=result["content"],
+                    score=result["score"],
+                    metadata=result["metadata"],
+                    retrieval_method="semantic",
+                )
             )
-            for result in results
-        ]
 
         return documents
 
@@ -565,16 +576,31 @@ class DocumentRetriever:
             similarity_threshold=query.similarity_threshold,
         )
 
-        documents = [
-            RetrievedDocument(
-                id=result.get("id", ""),
-                content=result.get("content", ""),
-                score=result.get("score", 0.0),
-                metadata=result.get("metadata", {}),
-                retrieval_method="keyword",
+        documents = []
+        for result in results:
+            # Validate required fields - fail fast if missing
+            if "id" not in result:
+                raise ValueError("Keyword search result missing required 'id' field")
+            if "content" not in result:
+                raise ValueError(
+                    "Keyword search result missing required 'content' field"
+                )
+            if "score" not in result:
+                raise ValueError("Keyword search result missing required 'score' field")
+            if "metadata" not in result:
+                raise ValueError(
+                    "Keyword search result missing required 'metadata' field"
+                )
+
+            documents.append(
+                RetrievedDocument(
+                    id=result["id"],
+                    content=result["content"],
+                    score=result["score"],
+                    metadata=result["metadata"],
+                    retrieval_method="keyword",
+                )
             )
-            for result in results
-        ]
 
         return documents
 

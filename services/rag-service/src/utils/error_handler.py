@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """
     Get a logger instance with consistent configuration.
 

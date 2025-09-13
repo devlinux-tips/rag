@@ -96,7 +96,7 @@ def fix_punctuation_spacing(text: str) -> str:
     return fixed
 
 
-def clean_response_text(text: str, prefixes_to_remove: list[str] = None) -> str:
+def clean_response_text(text: str, prefixes_to_remove: list[str] | None = None) -> str:
     """
     Clean and normalize response text.
     Pure function - no side effects, deterministic output.
@@ -339,9 +339,9 @@ def detect_language_by_patterns(
 
 def format_display_text(
     content: str,
-    confidence: Optional[float] = None,
-    sources: Optional[list[str]] = None,
-    confidence_labels: Optional[dict[str, str]] = None,
+    confidence: float | None = None,
+    sources: list[str] | None = None,
+    confidence_labels: dict[str, str] | None = None,
     sources_prefix: str = "Sources",
 ) -> str:
     """
@@ -419,7 +419,7 @@ class ParsedResponse:
     """Structured representation of parsed LLM response."""
 
     content: str
-    confidence: Optional[float] = None
+    confidence: float | None = None
     sources_mentioned: list[str] = field(default_factory=list)
     has_answer: bool = True
     language: str = "unknown"
@@ -521,7 +521,7 @@ class MultilingualResponseParser:
         self,
         raw_response: str,
         query: str = "",
-        context_chunks: Optional[list[str]] = None,
+        context_chunks: list[str] | None = None,
     ) -> ParsedResponse:
         """
         Parse and analyze LLM response.
@@ -653,12 +653,12 @@ def create_response_parser(
 
 
 def create_mock_config_provider(
-    no_answer_patterns: Optional[list[str]] = None,
-    source_patterns: Optional[list[str]] = None,
-    confidence_indicators: Optional[dict[str, list[str]]] = None,
-    language_patterns: Optional[dict[str, list[str]]] = None,
-    cleaning_prefixes: Optional[list[str]] = None,
-    display_settings: Optional[dict[str, str]] = None,
+    no_answer_patterns: list[str] | None = None,
+    source_patterns: list[str] | None = None,
+    confidence_indicators: dict[str, list[str]] | None = None,
+    language_patterns: dict[str, list[str]] | None = None,
+    cleaning_prefixes: list[str] | None = None,
+    display_settings: dict[str, str] | None = None,
 ) -> ConfigProvider:
     """
     Factory function to create mock configuration provider.

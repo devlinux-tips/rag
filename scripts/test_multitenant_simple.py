@@ -20,12 +20,18 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 try:
-    from src.models.multitenant_models import (DEFAULT_DEVELOPMENT_CONTEXT,
-                                               DEFAULT_DEVELOPMENT_TENANT,
-                                               DEFAULT_DEVELOPMENT_USER,
-                                               Document, DocumentScope,
-                                               Language, Tenant, TenantStatus,
-                                               User, UserRole)
+    from src.models.multitenant_models import (
+        DEFAULT_DEVELOPMENT_CONTEXT,
+        DEFAULT_DEVELOPMENT_TENANT,
+        DEFAULT_DEVELOPMENT_USER,
+        Document,
+        DocumentScope,
+        Language,
+        Tenant,
+        TenantStatus,
+        User,
+        UserRole,
+    )
 
     logger.info("✅ Multi-tenant models imported successfully")
 except ImportError as e:

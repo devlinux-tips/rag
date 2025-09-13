@@ -381,7 +381,7 @@ class QueryCategorizer:
         self,
         language: str,
         config_provider: ConfigProvider,
-        logger_provider: Optional[LoggerProvider] = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize categorizer with injected dependencies."""
         self.language = language
@@ -459,7 +459,7 @@ class QueryCategorizer:
 
 
 def create_query_categorizer(
-    language: str, config_provider: Optional[ConfigProvider] = None
+    language: str, config_provider: ConfigProvider | None = None
 ) -> QueryCategorizer:
     """
     Create a QueryCategorizer instance with proper dependency injection.

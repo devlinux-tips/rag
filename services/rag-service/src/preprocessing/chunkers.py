@@ -21,7 +21,7 @@ def sliding_window_chunk_positions(
     text_length: int,
     chunk_size: int,
     overlap: int,
-    sentence_boundaries: Optional[list[int]] = None,
+    sentence_boundaries: list[int] | None = None,
     respect_sentences: bool = True,
 ) -> list[tuple[int, int]]:
     """
@@ -223,7 +223,7 @@ def paragraph_chunk_positions(
 
 
 def find_sentence_boundaries(
-    text: str, language_patterns: Optional[dict[str, Any]] = None
+    text: str, language_patterns: dict[str, Any] | None = None
 ) -> list[int]:
     """
     Find sentence boundaries in text (pure function).
@@ -305,7 +305,7 @@ class ChunkingConfig:
     @classmethod
     def from_config(
         cls,
-        config_dict: Optional[dict[str, Any]] = None,
+        config_dict: dict[str, Any] | None = None,
         config_provider: Optional["ConfigProvider"] = None,
     ) -> "ChunkingConfig":
         """Create config from dictionary or provider with DRY error handling."""
@@ -427,10 +427,10 @@ class DocumentChunker:
     def __init__(
         self,
         config: ChunkingConfig,
-        text_cleaner: Optional[TextCleaner] = None,
-        sentence_extractor: Optional[SentenceExtractor] = None,
-        language_patterns: Optional[dict[str, Any]] = None,
-        logger: Optional[logging.Logger] = None,
+        text_cleaner: TextCleaner | None = None,
+        sentence_extractor: SentenceExtractor | None = None,
+        language_patterns: dict[str, Any] | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize document chunker with injectable dependencies.
@@ -449,7 +449,7 @@ class DocumentChunker:
         self.logger = logger or logging.getLogger(__name__)
 
     def chunk_document(
-        self, text: str, source_file: str, strategy: Optional[ChunkingStrategy] = None
+        self, text: str, source_file: str, strategy: ChunkingStrategy | None = None
     ) -> list[TextChunk]:
         """
         Chunk document using specified strategy.
@@ -548,7 +548,7 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(
+        for chunk_idx, (_start_idx, _end_idx, sentence_group) in enumerate(
             chunk_positions
         ):
             chunk_text = " ".join(sentence_group).strip()
@@ -585,7 +585,7 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(
+        for chunk_idx, (_start_idx, _end_idx, paragraph_group) in enumerate(
             chunk_positions
         ):
             # Handle oversized paragraph (needs sliding window)
@@ -657,7 +657,7 @@ class DocumentChunker:
 
 
 def create_document_chunker(
-    config_dict: Optional[dict[str, Any]] = None,
+    config_dict: dict[str, Any] | None = None,
     config_provider: Optional["ConfigProvider"] = None,
     language: str = "hr",
 ) -> DocumentChunker:
@@ -676,14 +676,9 @@ def create_document_chunker(
     config = ChunkingConfig.from_config(config_dict, config_provider)
 
     # Create dependencies (can be mocked in tests)
-    text_cleaner = None
-    try:
-        from .cleaners import MultilingualTextCleaner
+    from .cleaners import MultilingualTextCleaner
 
-        text_cleaner = MultilingualTextCleaner(language=language)
-    except ImportError:
-        # In tests, cleaner might not be available
-        pass
+    text_cleaner = MultilingualTextCleaner(language=language)
 
     # Get language patterns if available
     language_patterns = None

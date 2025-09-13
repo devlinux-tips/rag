@@ -23,7 +23,7 @@ class SearchQuery:
     text: str
     top_k: int = 5
     method: str = "semantic"
-    filters: Optional[dict[str, Any]] = None
+    filters: dict[str, Any] | None = None
     similarity_threshold: float = 0.0
     max_context_length: int = 2000
     rerank: bool = True
@@ -44,8 +44,8 @@ class SearchResult:
     content: str
     score: float
     metadata: dict[str, Any]
-    rank: Optional[int] = None
-    method_used: Optional[str] = None
+    rank: int | None = None
+    method_used: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -61,7 +61,7 @@ class SearchResponse:
     total_results: int
     search_time: float
     method_used: str
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self):
         """Add ranking to results if not present."""
@@ -95,7 +95,7 @@ class VectorSearchProvider(Protocol):
         self,
         query_embedding: np.ndarray,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Search by embedding vector."""
@@ -105,13 +105,13 @@ class VectorSearchProvider(Protocol):
         self,
         query_text: str,
         top_k: int,
-        filters: Optional[dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Search by text (if supported by provider)."""
         ...
 
-    async def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
+    async def get_document(self, document_id: str) -> dict[str, Any] | None:
         """Get document by ID."""
         ...
 
@@ -183,15 +183,23 @@ def parse_vector_search_results(
     if isinstance(ids, list) and ids and isinstance(ids[0], list):
         ids = ids[0]
 
-    documents = raw_results.get("documents", [])
+    # Validate ChromaDB response format - fail fast if unexpected structure
+    if "documents" not in raw_results:
+        raise ValueError("ChromaDB response missing 'documents' field")
+    if "metadatas" not in raw_results:
+        raise ValueError("ChromaDB response missing 'metadatas' field")
+    if "distances" not in raw_results:
+        raise ValueError("ChromaDB response missing 'distances' field")
+
+    documents = raw_results["documents"]
     if isinstance(documents, list) and documents and isinstance(documents[0], list):
         documents = documents[0]
 
-    metadatas = raw_results.get("metadatas", [])
+    metadatas = raw_results["metadatas"]
     if isinstance(metadatas, list) and metadatas and isinstance(metadatas[0], list):
         metadatas = metadatas[0]
 
-    distances = raw_results.get("distances", [])
+    distances = raw_results["distances"]
     if isinstance(distances, list) and distances and isinstance(distances[0], list):
         distances = distances[0]
 
@@ -300,7 +308,7 @@ def combine_scores(
 def rerank_results_by_relevance(
     query_text: str,
     results: list[SearchResult],
-    boost_factors: Optional[dict[str, float]] = None,
+    boost_factors: dict[str, float] | None = None,
 ) -> list[SearchResult]:
     """
     Rerank search results based on additional relevance factors.
@@ -691,7 +699,7 @@ class SemanticSearchEngine:
             raise
 
     async def find_similar_documents(
-        self, document_id: str, top_k: int = 5, filters: Optional[dict[str, Any]] = None
+        self, document_id: str, top_k: int = 5, filters: dict[str, Any] | None = None
     ) -> SearchResponse:
         """
         Find documents similar to a given document.

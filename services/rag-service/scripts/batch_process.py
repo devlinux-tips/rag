@@ -21,8 +21,8 @@ from src.pipeline.rag_system import RAGSystem, create_rag_system
 
 async def process_language_documents(
     language: str,
-    source_dir: Optional[str] = None,
-    file_patterns: Optional[list[str]] = None,
+    source_dir: str | None = None,
+    file_patterns: list[str] | None = None,
 ) -> dict:
     """
     Process all documents for a specific language.

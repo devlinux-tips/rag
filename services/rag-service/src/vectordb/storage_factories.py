@@ -29,7 +29,7 @@ class ChromaDBCollection(VectorCollection):
         ids: list[str],
         documents: list[str],
         metadatas: list[dict[str, Any]],
-        embeddings: Optional[list[np.ndarray]] = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Add documents to collection."""
         try:
@@ -52,12 +52,12 @@ class ChromaDBCollection(VectorCollection):
 
     def query(
         self,
-        query_texts: Optional[list[str]] = None,
-        query_embeddings: Optional[list[np.ndarray]] = None,
+        query_texts: list[str] | None = None,
+        query_embeddings: list[np.ndarray] | None = None,
         n_results: int = 10,
-        where: Optional[dict[str, Any]] = None,
-        where_document: Optional[dict[str, Any]] = None,
-        include: Optional[list[str]] = None,
+        where: dict[str, Any] | None = None,
+        where_document: dict[str, Any] | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         """Query collection for similar documents."""
         try:
@@ -96,11 +96,11 @@ class ChromaDBCollection(VectorCollection):
 
     def get(
         self,
-        ids: Optional[list[str]] = None,
-        where: Optional[dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        include: Optional[list[str]] = None,
+        ids: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get documents from collection."""
         try:
@@ -132,9 +132,9 @@ class ChromaDBCollection(VectorCollection):
     def update(
         self,
         ids: list[str],
-        documents: Optional[list[str]] = None,
-        metadatas: Optional[list[dict[str, Any]]] = None,
-        embeddings: Optional[list[np.ndarray]] = None,
+        documents: list[str] | None = None,
+        metadatas: list[dict[str, Any]] | None = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Update documents in collection."""
         try:
@@ -162,7 +162,7 @@ class ChromaDBCollection(VectorCollection):
             raise
 
     def delete(
-        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
+        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
     ) -> None:
         """Delete documents from collection."""
         try:
@@ -340,7 +340,7 @@ class MockCollection(VectorCollection):
         ids: list[str],
         documents: list[str],
         metadatas: list[dict[str, Any]],
-        embeddings: Optional[list[np.ndarray]] = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Add documents to mock collection."""
         for i, doc_id in enumerate(ids):
@@ -353,12 +353,12 @@ class MockCollection(VectorCollection):
 
     def query(
         self,
-        query_texts: Optional[list[str]] = None,
-        query_embeddings: Optional[list[np.ndarray]] = None,
+        query_texts: list[str] | None = None,
+        query_embeddings: list[np.ndarray] | None = None,
         n_results: int = 10,
-        where: Optional[dict[str, Any]] = None,
-        where_document: Optional[dict[str, Any]] = None,
-        include: Optional[list[str]] = None,
+        where: dict[str, Any] | None = None,
+        where_document: dict[str, Any] | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         """Mock query returns first n_results documents."""
         include = include or ["documents", "metadatas", "distances"]
@@ -387,11 +387,11 @@ class MockCollection(VectorCollection):
 
     def get(
         self,
-        ids: Optional[list[str]] = None,
-        where: Optional[dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        include: Optional[list[str]] = None,
+        ids: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get documents from mock collection."""
         include = include or ["documents", "metadatas"]
@@ -423,9 +423,9 @@ class MockCollection(VectorCollection):
     def update(
         self,
         ids: list[str],
-        documents: Optional[list[str]] = None,
-        metadatas: Optional[list[dict[str, Any]]] = None,
-        embeddings: Optional[list[np.ndarray]] = None,
+        documents: list[str] | None = None,
+        metadatas: list[dict[str, Any]] | None = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Update documents in mock collection."""
         for i, doc_id in enumerate(ids):
@@ -438,7 +438,7 @@ class MockCollection(VectorCollection):
                     self._documents[doc_id]["embedding"] = embeddings[i]
 
     def delete(
-        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
+        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
     ) -> None:
         """Delete documents from mock collection."""
         if ids:

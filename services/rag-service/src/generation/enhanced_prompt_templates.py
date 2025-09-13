@@ -30,7 +30,7 @@ class PromptTemplate:
     prompt_type: PromptType
     language: str
     priority: int = 0
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     def format(self, **kwargs) -> str:
         """Format the template with provided variables."""
@@ -448,7 +448,7 @@ class _EnhancedPromptBuilder:
         self,
         language: str,
         config_provider: ConfigProvider,
-        logger_provider: Optional[LoggerProvider] = None,
+        logger_provider: LoggerProvider | None = None,
     ):
         """Initialize with injected dependencies."""
         self.language = language
@@ -641,7 +641,7 @@ class _EnhancedPromptBuilder:
 def create_enhanced_prompt_builder(
     language: str,
     config_provider: ConfigProvider,
-    logger_provider: Optional[LoggerProvider] = None,
+    logger_provider: LoggerProvider | None = None,
 ) -> _EnhancedPromptBuilder:
     """Factory function to create configured enhanced prompt builder."""
     return _EnhancedPromptBuilder(
@@ -658,8 +658,8 @@ def create_enhanced_prompt_builder(
 
 def EnhancedPromptBuilder(
     language: str,
-    config_provider: Optional[ConfigProvider] = None,
-    logger_provider: Optional[LoggerProvider] = None,
+    config_provider: ConfigProvider | None = None,
+    logger_provider: LoggerProvider | None = None,
 ):
     """
     Create an enhanced prompt builder with dependency injection.
