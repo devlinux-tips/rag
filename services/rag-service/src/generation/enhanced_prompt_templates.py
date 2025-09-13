@@ -245,7 +245,7 @@ def build_category_prompt(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         context_used=formatted_context,
-        chunks_included=len(context_chunks) if not truncated else len(context_chunks) - 1,
+        chunks_included=(len(context_chunks) if not truncated else len(context_chunks) - 1),
         truncated=truncated,
     )
 

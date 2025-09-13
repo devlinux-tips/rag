@@ -288,45 +288,10 @@ def calculate_embedding_statistics(embeddings: np.ndarray) -> Dict[str, Any]:
     }
 
 
-def get_recommended_models() -> Dict[str, str]:
-    """
-    Get dictionary of recommended embedding models.
-
-    Returns:
-        Dictionary mapping model keys to model names
-    """
-    return {
-        "bge_m3": "BAAI/bge-m3",
-        "bge_large": "BAAI/bge-large-en-v1.5",
-        "labse": "sentence-transformers/LaBSE",
-        "multilingual_minilm": "paraphrase-multilingual-MiniLM-L12-v2",
-        "multilingual_mpnet": "paraphrase-multilingual-mpnet-base-v2",
-        "distiluse_multilingual": "distiluse-base-multilingual-cased",
-        "croatian_electra": "classla/bcms-bertic",
-    }
-
-
-def choose_model_for_language(language: str) -> str:
-    """
-    Choose optimal model for specific language.
-
-    Args:
-        language: Language code (e.g., 'hr', 'en', 'multilingual')
-
-    Returns:
-        Recommended model name
-    """
-    models = get_recommended_models()
-
-    if language.lower() in ["hr", "croatian", "serbian", "bosnian"]:
-        # For Croatian and related languages, prefer BGE-M3 or specific BCMS models
-        return models["bge_m3"]  # Best multilingual performance for Croatian
-    elif language.lower() in ["en", "english"]:
-        # For English, BGE-large or BGE-M3 work well
-        return models["bge_m3"]  # Consistent choice for multilingual systems
-    else:
-        # For other languages or multilingual, use BGE-M3
-        return models["bge_m3"]
+# Model selection is now configuration-driven via language-specific TOML files
+# Croatian: Uses classla/bcms-bertic (Croatian-optimized ELECTRA model)
+# English: Uses BAAI/bge-large-en-v1.5 (English-optimized model)
+# Fallback: BAAI/bge-m3 (multilingual) configured in main config.toml
 
 
 class MultilingualEmbeddingGenerator:

@@ -417,8 +417,8 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             if results and results.get("ids") and results["ids"]:
                 return {
                     "id": document_id,
-                    "content": results["documents"][0] if results.get("documents") else "",
-                    "metadata": results["metadatas"][0] if results.get("metadatas") else {},
+                    "content": (results["documents"][0] if results.get("documents") else ""),
+                    "metadata": (results["metadatas"][0] if results.get("metadatas") else {}),
                 }
 
             return None
@@ -499,7 +499,9 @@ def create_mock_search_provider() -> VectorSearchProvider:
     return MockVectorSearchProvider()
 
 
-def create_mock_config_provider(custom_config: Optional[Dict[str, Any]] = None) -> ConfigProvider:
+def create_mock_config_provider(
+    custom_config: Optional[Dict[str, Any]] = None,
+) -> ConfigProvider:
     """Create mock config provider for testing."""
     return MockConfigProvider(custom_config=custom_config)
 

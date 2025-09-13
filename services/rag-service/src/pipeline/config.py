@@ -82,6 +82,9 @@ class RAGConfig(BaseSettings):
             config_provider = get_config_provider()
             main_config = config_provider.get_main_config()
 
+            # Get language-specific config for embeddings
+            language_config = config_provider.get_language_config(language)
+
             # Load additional configs for direct system settings
             shared_config = get_shared_config()
             system_config = get_system_config()
@@ -90,7 +93,7 @@ class RAGConfig(BaseSettings):
             # Create component configs using validated approach
             data = {
                 "processing": ProcessingConfig.from_validated_config(main_config),
-                "embedding": EmbeddingConfig.from_validated_config(main_config),
+                "embedding": EmbeddingConfig.from_validated_config(main_config, language_config),
                 "chroma": ChromaConfig.from_validated_config(main_config),
                 "retrieval": RetrievalConfig.from_validated_config(main_config),
                 "ollama": OllamaConfig.from_validated_config(main_config),

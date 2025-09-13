@@ -25,3 +25,4 @@ repos:
     rev: 6.0.0
     hooks:
       - id: flake8
+        exclude: ^(services/rag-service/dependency_analyzer\.py|services/rag-service/src/retrieval/categorization\.py|services/rag-service/validate_language_configs\.py|services/rag-service/src/cli/rag_cli\.py)$

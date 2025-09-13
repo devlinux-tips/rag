@@ -164,6 +164,9 @@ remove_diacritics = false  # Keep Croatian diacritics (š, ć, č, ž, đ)
 normalize_case = true
 # Note: Uppercase chars derived programmatically from lowercase_special
 
+# Word character pattern for Croatian (includes Croatian diacritics)
+word_char_pattern = "[a-zA-ZčćšžđĆČŠŽĐ]"
+
 # Croatian diacritic mapping (for normalization when needed)
 [text_processing.diacritic_map]
 "č" = "c"
@@ -171,9 +174,6 @@ normalize_case = true
 "š" = "s"
 "ž" = "z"
 "đ" = "d"
-
-# Word character pattern for Croatian (includes Croatian diacritics)
-word_char_pattern = "[a-zA-ZčćšžđĆČŠŽĐ]"
 
 # Locale settings for Croatian
 [text_processing.locale]
@@ -215,22 +215,23 @@ header_footer_patterns = [
     "^\\s*SLUŽBENI\\s*LIST.*$"           # Official list header
 ]
 
-# OCR error corrections for Croatian text
+# OCR error corrections - generic behavior control only
 [document_cleaning.ocr_corrections]
-spaced_hrvatske = "HRVATSKE"     # Replaces HR V A TSKE pattern
-split_hrvatske = "HRVATSKE"      # Replaces HR VATSKE pattern
-split_zagreb = "ZAGREB"          # Replaces ZAGR EB pattern
-fully_spaced_hrvatske = "HRVATSKE" # Replaces fully spaced HRVATSKE pattern
-spaced_diacritics = "fix"        # Fixes spaced Croatian diacritics
+fix_spaced_capitals = true       # Generic: Fix any spaced capital letters
+fix_spaced_punctuation = true    # Generic: Fix spaced punctuation marks
+fix_common_ocr_errors = true     # Generic: Fix rn->m, vv->w, etc.
 
 # ============================================================================
 # EMBEDDINGS & VECTOR DATABASE
 # ============================================================================
 [embeddings]
 # Croatian language embeddings configuration
-# Note: model_name, device, batch_size, etc. inherited from config.toml [embeddings] section
-supports_multilingual = true
-language_optimized = true  # Configured multilingual model has Croatian support
+# Using Croatian-optimized ELECTRA model for best Croatian performance
+model_name = "classla/bcms-bertic"  # Croatian-specific ELECTRA model (better than BGE-M3 for Croatian)
+supports_multilingual = false       # Croatian-specific model
+language_optimized = true          # Optimized specifically for Croatian
+fallback_model = "BAAI/bge-m3"     # Multilingual fallback if Croatian model unavailable
+# Note: device, batch_size, etc. inherited from config.toml [embeddings] section
 
 [vectordb]
 # Croatian-specific vector database settings
@@ -257,18 +258,8 @@ boost_title_matches = true
 # ============================================================================
 [retrieval]
 # Croatian synonyms for query expansion
-[retrieval.synonyms]
-velika = ["velika", "veca", "znacajna", "vazna"]
-mala = ["mala", "manja", "sitna", "nevazna"]
-dobra = ["dobra", "kvalitetna", "izvrsna", "odlicna", "vrhunska"]
-losa = ["losa", "slaba", "neispravna", "neadekvatna"]
-
-# Croatian morphological variations for search
-[retrieval.morphology]
-hrvatska = ["hrvatska", "hrvatske", "hrvatskoj", "hrvatsku", "hrvatskom"]
-ekonomija = ["ekonomija", "ekonomije", "ekonomiju", "ekonomskim", "gospodarstvo"]
-politika = ["politika", "politike", "političke", "političkih"]
-kultura = ["kultura", "kulture", "kulturne", "kulturnih", "kulturnim"]
+# Synonym expansion handled by BGE-M3 semantic similarity, not config hardcoding
+# Morphological analysis handled by CLASSLA library, not config hardcoding
 
 # ============================================================================
 # GENERATION & PROMPTS
@@ -332,11 +323,23 @@ Fokusiraj se na korisne informacije za posjetitelje i ističi posebne značajke.
 tourism_user = "Turističko pitanje: {query}\n\nTuristički odgovor:"
 tourism_context = "Turističke informacije:\n{context}\n\n"
 
+business_system = """Ti si poslovni konzultant koji odgovara na hrvatskom jeziku.
+Koristi kontekst da daš praktičan i informativan odgovor o poslovnim pitanjima.
+Fokusiraj se na korisne informacije za stručnjake i ističi ključne poslovne uvide."""
+business_user = "Poslovno pitanje: {query}\n\nPoslovan odgovor:"
+business_context = "Poslovne informacije:\n{context}\n\n"
+
 # Croatian keywords for prompt template selection
 [prompts.keywords]
-tourism = ["turizam", "putovanje", "odmor", "destinacija", "atrakcija", "smještaj", "hoteli"]
+# Keywords for system prompt selection - Croatian
+tourism = ["turizam", "putovanje", "odmor", "destinacija", "atrakcija", "smještaj", "hoteli", "plaža", "park", "nacionalni", "grad"]
+comparison = ["usporedi", "razlika", "sličnost", "bolje", "gore", "različit", "jednak", "poredi", "nasuprot"]
+explanation = ["objasni", "zašto", "kako", "što znači", "značenje", "razlog", "uzrok", "način", "process", "postupak"]
+factual = ["broj", "količina", "datum", "godina", "kad", "gdje", "tko", "koliko", "kada", "koji", "koja", "koje"]
+summary = ["sažmi", "sažetak", "ukratko", "glavno", "ključno", "rezime", "sumarno", "pregled"]
+business = ["poslovanje", "tvrtka", "ekonomija", "profit", "trgovina", "tržište", "prodaja", "marketing", "investicija", "prihod"]
 
-[formal_prompts]
+[prompts.formal]
 # Croatian formal style prompts
 formal_instruction = "Odgovaraj uvijek u formalnom stilu."
 # Note: Cultural awareness built into language-specific templates
@@ -375,9 +378,7 @@ sources_prefix = "Izvori"
 prefixes_to_remove = ["^(odgovor|answer):", "^(rezultat|result):", "^(tekst|text):"]
 
 # Language detection patterns
-[response_parsing.language_detection]
-language_words = ["je", "su", "biti", "imati", "moći", "htjeti", "reći", "znati"]
-# Note: English words removed - they belong in english.toml
+# Language detection handled by langdetect library, not word lists
 
 # ============================================================================
 # PIPELINE CONFIGURATION
@@ -392,6 +393,7 @@ language_priority = true
 # Croatian preprocessing settings
 [pipeline.processing]
 preserve_diacritics = true
+preserve_formatting = true           # Added from en.toml
 respect_grammar = true
 enable_sentence_boundary_detection = true
 specific_chunking = true

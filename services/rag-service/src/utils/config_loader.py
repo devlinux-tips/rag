@@ -2,7 +2,7 @@
 Centralized Configuration Loader for Multilingual RAG Project
 
 This module provides a unified interface for loading TOML configuration files
-with multilingual language settings (Croatian and English) and environment-specific overrides.
+with multilingual language settings and environment-specific overrides.
 
 Usage:
     from src.utils.config_loader import load_config, get_language_config
@@ -79,15 +79,18 @@ class ConfigLoader:
             logger.debug(f"Using cached config: {config_name}")
             return self._cache[config_name]
 
-        # Use dynamic language config file mapping
-        language_config_files = self._get_language_config_files()
-        language_file_names = [f.replace(".toml", "") for f in language_config_files.values()]
+        # Determine config file path based on naming convention
+        # Language codes (hr, en, etc.) map directly to language-specific config files
+        # Everything else uses the main config.toml
 
-        if config_name in language_file_names:
-            # This is a language-specific config (croatian, english, etc.)
+        # Check if this is a supported language code
+        supported_languages = ["hr", "en"]  # Could make this dynamic if needed
+
+        if config_name in supported_languages:
+            # This is a language-specific config (hr.toml, en.toml, etc.)
             config_path = self.config_dir / f"{config_name}.toml"
         else:
-            # This is a main system config (config, main, etc.)
+            # This is a main system config - always use config.toml
             config_path = self.config_dir / "config.toml"
 
         if not config_path.exists():
@@ -97,10 +100,9 @@ class ConfigLoader:
             with open(config_path, "rb") as f:
                 config_data = tomllib.load(f)
 
-            # All configs return their full data - no special section mapping needed
-
+            # Cache the loaded configuration
             self._cache[config_name] = config_data
-            logger.info(f"Loaded configuration: {config_name}")
+            logger.info(f"Loaded configuration: {config_name} from {config_path}")
             return config_data
 
         except tomllib.TOMLDecodeError as e:

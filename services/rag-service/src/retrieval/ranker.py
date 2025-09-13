@@ -77,15 +77,7 @@ class ProcessedQuery:
     language: str
     metadata: Optional[Dict[str, Any]] = None
 
-
-# ===== PROTOCOL DEFINITIONS =====
-
-
-class ConfigProvider(Protocol):
-    """Protocol for configuration access."""
-
-    def get_ranking_config(self) -> Dict[str, Any]:
-        ...
+    # ===== PROTOCOL DEFINITIONS =====
 
     def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
         ...
@@ -243,94 +235,179 @@ def calculate_language_relevance_score(
     content: str, language: str, language_features: LanguageFeatures
 ) -> Tuple[float, Dict[str, Any]]:
     """
-    Calculate language-specific relevance boost.
-    Pure function - no side effects, deterministic output.
+    Calculate language-specific relevance boost using configuration-driven approach.
+
+    This function replaces hardcoded language logic with configurable features,
+    allowing easy addition of new languages without code changes.
 
     Args:
-        content: Document content
+        content: Document content to analyze
         language: Language code (hr, en, etc.)
-        language_features: Language-specific feature patterns
+        language_features: Language-specific feature patterns (for compatibility)
 
     Returns:
-        Tuple of (score, metadata)
+        Tuple of (score, metadata) where score is 0.0-1.0 and metadata contains
+        detailed breakdown of feature detection
     """
-    score = 0.0
+    try:
+        # Import here to avoid circular imports
+        from ..utils.config_loader import get_language_ranking_features
+
+        # Get configuration-driven language features
+        ranking_features = get_language_ranking_features(language)
+
+    except Exception as e:
+        # Simple fallback - return minimal score when config unavailable
+        logger.warning(
+            f"Failed to load ranking features for '{language}': {e}. Using fallback logic."
+        )
+        return 0.0, {
+            "language": language,
+            "features_detected": {},
+            "config_driven": False,
+            "fallback_reason": "Configuration system unavailable",
+            "language_features_detected": False,
+        }
+
+    # Initialize scoring
+    total_score = 0.0
     content_lower = content.lower()
-    metadata = {"language": language, "features_detected": {}}
+    word_count = len(content.split())
+    metadata = {"language": language, "features_detected": {}, "config_driven": True}
 
-    if language == "hr":
-        # Croatian diacritics (indicates proper Croatian content)
-        croatian_chars = "čćšžđ"
-        diacritic_count = sum(content_lower.count(char) for char in croatian_chars)
-        diacritic_score = 0.0
-        if diacritic_count > 0:
-            diacritic_score = min(0.3, diacritic_count / len(content) * 1000)
-            score += diacritic_score
-        metadata["features_detected"]["diacritics"] = diacritic_score
+    # 1. Special Characters (diacritics, etc.)
+    special_chars_config = ranking_features["special_characters"]
+    if special_chars_config["enabled"]:
+        special_chars = special_chars_config["characters"]
+        char_count = sum(content_lower.count(char) for char in special_chars)
+        density_factor = special_chars_config["density_factor"]
+        max_score = special_chars_config["max_score"]
 
-        # Croatian importance words
-        importance_matches = sum(
-            1 for word in language_features.importance_words if word in content_lower
-        )
-        importance_score = min(0.4, importance_matches * 0.1)
-        score += importance_score
-        metadata["features_detected"]["importance_words"] = importance_score
+        special_score = 0.0
+        if char_count > 0 and len(content) > 0:
+            special_score = min(max_score, char_count / len(content) * density_factor)
+            total_score += special_score
 
-        # Cultural references
+        metadata["features_detected"]["special_characters"] = {
+            "score": special_score,
+            "count": char_count,
+            "characters_found": special_chars if char_count > 0 else [],
+        }
+
+    # 2. Importance Words
+    importance_config = ranking_features["importance_words"]
+    if importance_config["enabled"]:
+        importance_words = importance_config["words"]
+        word_boost = importance_config["word_boost"]
+        max_score = importance_config["max_score"]
+
+        importance_matches = sum(1 for word in importance_words if word in content_lower)
+        importance_score = min(max_score, importance_matches * word_boost)
+        total_score += importance_score
+
+        metadata["features_detected"]["importance_words"] = {
+            "score": importance_score,
+            "matches": importance_matches,
+            "matched_words": [word for word in importance_words if word in content_lower],
+        }
+
+    # 3. Cultural Patterns
+    cultural_config = ranking_features["cultural_patterns"]
+    if cultural_config["enabled"]:
+        cultural_patterns = cultural_config["patterns"]
+        pattern_boost = cultural_config["pattern_boost"]
+        max_score = cultural_config["max_score"]
+
         cultural_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE))
-            for pattern in language_features.cultural_patterns
+            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in cultural_patterns
         )
-        cultural_score = min(0.2, cultural_matches * 0.1)
-        score += cultural_score
-        metadata["features_detected"]["cultural_patterns"] = cultural_score
+        cultural_score = min(max_score, cultural_matches * pattern_boost)
+        total_score += cultural_score
 
-        # Grammar patterns
+        metadata["features_detected"]["cultural_patterns"] = {
+            "score": cultural_score,
+            "matches": cultural_matches,
+        }
+
+    # 4. Grammar Patterns
+    grammar_config = ranking_features["grammar_patterns"]
+    if grammar_config["enabled"]:
+        grammar_patterns = grammar_config["patterns"]
+        density_factor = grammar_config["density_factor"]
+        max_score = grammar_config["max_score"]
+
         grammar_matches = sum(
-            len(re.findall(pattern, content_lower))
-            for pattern in language_features.grammar_patterns
+            len(re.findall(pattern, content_lower)) for pattern in grammar_patterns
         )
-        grammar_score = min(0.1, grammar_matches / len(content.split()) * 10)
-        score += grammar_score
-        metadata["features_detected"]["grammar_patterns"] = grammar_score
+        grammar_score = 0.0
+        if word_count > 0:
+            grammar_score = min(max_score, grammar_matches / word_count * density_factor)
+        total_score += grammar_score
 
-    elif language == "en":
-        # English capitalization patterns
+        metadata["features_detected"]["grammar_patterns"] = {
+            "score": grammar_score,
+            "matches": grammar_matches,
+        }
+
+    # 5. Capitalization Patterns
+    capitalization_config = ranking_features["capitalization"]
+    if capitalization_config["enabled"]:
+        proper_nouns = capitalization_config["proper_nouns"]
+        capitalization_boost = capitalization_config["capitalization_boost"]
+        max_score = capitalization_config["max_score"]
+
+        # Check for proper noun matches
+        proper_noun_matches = sum(1 for noun in proper_nouns if noun in content)
+
+        # Analyze general capitalization patterns
         sentence_count = len(re.findall(r"[.!?]+", content))
-        capital_starts = len(re.findall(r"(?:^|[.!?]\s+)([A-Z][a-z])", content, re.MULTILINE))
+        capital_starts = len(re.findall(r"(?:^|[.!?]\\s+)([A-Z][a-z])", content, re.MULTILINE))
+
         capitalization_score = 0.0
         if sentence_count > 0:
             capitalization_ratio = capital_starts / sentence_count
-            capitalization_score = min(0.2, capitalization_ratio * 0.5)
-            score += capitalization_score
-        metadata["features_detected"]["capitalization"] = capitalization_score
+            capitalization_score = min(max_score, capitalization_ratio * 0.5)
 
-        # English-specific vocabulary
-        english_patterns = [
-            r"\b(the|and|that|have|for|not|with|you|this|but|his|from|they)\b",
-            r"\b(United States|UK|Britain|England|American|British)\b",
-            r"\b(technology|science|research|development|innovation)\b",
-        ]
+        # Add proper noun bonus
+        capitalization_score += min(max_score * 0.5, proper_noun_matches * capitalization_boost)
+        capitalization_score = min(max_score, capitalization_score)
+
+        total_score += capitalization_score
+
+        metadata["features_detected"]["capitalization"] = {
+            "score": capitalization_score,
+            "proper_noun_matches": proper_noun_matches,
+            "sentence_capitalization_ratio": (capitalization_ratio if sentence_count > 0 else 0.0),
+        }
+
+    # 6. Vocabulary Patterns
+    vocabulary_config = ranking_features["vocabulary_patterns"]
+    if vocabulary_config["enabled"]:
+        vocab_patterns = vocabulary_config["patterns"]
+        pattern_boost = vocabulary_config["pattern_boost"]
+        max_score = vocabulary_config["max_score"]
+
         vocab_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in english_patterns
+            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in vocab_patterns
         )
-        vocab_score = min(0.4, vocab_matches / len(content.split()) * 5)
-        score += vocab_score
-        metadata["features_detected"]["vocabulary"] = vocab_score
+        vocab_score = 0.0
+        if word_count > 0:
+            vocab_score = min(
+                max_score, vocab_matches / word_count * 50
+            )  # Scale factor for readability
+        total_score += vocab_score
 
-        # Grammar patterns
-        grammar_matches = sum(
-            len(re.findall(pattern, content_lower))
-            for pattern in language_features.grammar_patterns
-        )
-        grammar_score = min(0.3, grammar_matches / len(content.split()) * 10)
-        score += grammar_score
-        metadata["features_detected"]["grammar_patterns"] = grammar_score
+        metadata["features_detected"]["vocabulary_patterns"] = {
+            "score": vocab_score,
+            "matches": vocab_matches,
+        }
 
-    score = max(0.0, min(1.0, score))
-    metadata["language_features_detected"] = score > 0.1
+    # Normalize final score
+    final_score = max(0.0, min(1.0, total_score))
+    metadata["total_score"] = final_score
+    metadata["language_features_detected"] = final_score > 0.1
 
-    return score, metadata
+    return final_score, metadata
 
 
 def calculate_authority_score(
@@ -379,7 +456,7 @@ def calculate_authority_score(
     # Metadata completeness (more complete = more authoritative)
     metadata_fields = ["title", "author", "date", "source", "language"]
     completeness = sum(
-        1 for field in metadata_fields if metadata.get(field)
+        1 for metadata_field in metadata_fields if metadata.get(metadata_field)
     )  # Keep .get() - document metadata from external sources
     completeness_score = completeness / len(metadata_fields) * 0.2
     score += completeness_score

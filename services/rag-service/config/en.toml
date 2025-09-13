@@ -171,12 +171,17 @@ structural_indicators = [
 remove_diacritics = false  # Keep foreign diacritics in English text
 normalize_case = true
 # Note: Uppercase chars derived programmatically from lowercase_diacritics
-
-# English diacritic mapping (minimal for English - mostly preserve original)
-diacritic_map = {}  # Empty for English - preserve foreign diacritics as-is
-
 # Word character pattern for English
 word_char_pattern = "[a-zA-Z0-9]"
+# English diacritic mapping (empty - English typically doesn't normalize diacritics)
+[text_processing.diacritic_map]
+# No diacritic mapping for English - preserve original characters
+# Structural placeholders to maintain config equality with Croatian
+"č" = "č"  # Preserve Croatian characters in English text
+"ć" = "ć"  # Preserve Croatian characters in English text
+"š" = "š"  # Preserve Croatian characters in English text
+"ž" = "ž"  # Preserve Croatian characters in English text
+"đ" = "đ"  # Preserve Croatian characters in English text
 
 # Locale settings for English
 [text_processing.locale]
@@ -218,21 +223,23 @@ header_footer_patterns = [
     "^\\s*FINAL.*$"                      # Final version headers
 ]
 
-# OCR error corrections for English text
+# OCR error corrections - generic behavior control only
 [document_cleaning.ocr_corrections]
-spaced_capitals = "fix"          # Fix spaced capitals pattern
-rn_error = "m"                   # Common OCR error: rn -> m
-vv_error = "w"                   # Common OCR error: vv -> w
-spaced_punctuation = "fix"       # Fix spaced punctuation pattern
+fix_spaced_capitals = true       # Generic: Fix any spaced capital letters
+fix_spaced_punctuation = true    # Generic: Fix spaced punctuation marks
+fix_common_ocr_errors = true     # Generic: Fix rn->m, vv->w, etc.
 
 # ============================================================================
 # EMBEDDINGS & VECTOR DATABASE
 # ============================================================================
 [embeddings]
 # English language embeddings configuration
-# Note: model_name, device, batch_size, etc. inherited from config.toml [embeddings] section
-supports_multilingual = true
-language_optimized = true  # Configured multilingual model has English support
+# Using English-optimized BGE model for best English performance
+model_name = "BAAI/bge-large-en-v1.5"  # English-specific BGE model (better than BGE-M3 for English)
+supports_multilingual = false           # English-specific model
+language_optimized = true              # Optimized specifically for English
+fallback_model = "BAAI/bge-m3"         # Multilingual fallback if English model unavailable
+# Note: device, batch_size, etc. inherited from config.toml [embeddings] section
 
 [vectordb]
 # English-specific vector database settings
@@ -259,18 +266,8 @@ boost_title_matches = true
 # ============================================================================
 [retrieval]
 # English synonyms for query expansion
-[retrieval.synonyms]
-big = ["big", "large", "huge", "enormous", "massive", "significant"]
-small = ["small", "little", "tiny", "minor", "minimal"]
-good = ["good", "excellent", "great", "outstanding", "superb", "quality"]
-bad = ["bad", "poor", "terrible", "awful", "inadequate", "deficient"]
-
-# English morphological variations for search
-[retrieval.morphology]
-america = ["america", "american", "americas", "usa", "united states"]
-economy = ["economy", "economic", "economics", "economical", "financial"]
-politics = ["politics", "political", "politician", "policy", "policies"]
-culture = ["culture", "cultural", "cultures", "culturally"]
+# Synonym expansion handled by BGE-M3 semantic similarity, not config hardcoding
+# Morphological analysis handled by spaCy library, not config hardcoding
 
 # ============================================================================
 # GENERATION & PROMPTS
@@ -334,11 +331,23 @@ Focus on useful information for professionals and highlight key business insight
 business_user = "Business question: {query}\n\nBusiness response:"
 business_context = "Business information:\n{context}\n\n"
 
+tourism_system = """You are a tourism guide for English-speaking visitors who responds in English.
+Use the context to provide practical and informative answers about destinations.
+Focus on useful information for visitors and highlight special features."""
+tourism_user = "Tourism question: {query}\n\nTourism response:"
+tourism_context = "Tourism information:\n{context}\n\n"
+
 # English keywords for prompt template selection
 [prompts.keywords]
+# Keywords for system prompt selection - English
 business = ["business", "financial", "economic", "corporate", "commercial", "investment", "revenue"]
+comparison = ["compare", "difference", "similarity", "better", "worse", "different", "same", "versus", "against", "contrast"]
+explanation = ["explain", "why", "how", "what does", "meaning", "reason", "cause", "process", "procedure", "define"]
+factual = ["number", "amount", "date", "year", "when", "where", "who", "how much", "how many", "which", "what"]
+summary = ["summarize", "summary", "briefly", "main", "key", "overview", "outline", "recap"]
+tourism = ["tourism", "travel", "vacation", "destination", "attraction", "accommodation", "hotels", "beach", "park", "national", "city"]
 
-[formal_prompts]
+[prompts.formal]
 # English formal style prompts
 formal_instruction = "Always respond in a professional and formal style."
 # Note: Cultural awareness built into language-specific templates
@@ -377,9 +386,7 @@ sources_prefix = "Sources"
 prefixes_to_remove = ["^(answer|response):", "^(result|output):", "^(text|content):"]
 
 # Language detection patterns
-[response_parsing.language_detection]
-language_words = ["the", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by"]
-foreign_words = ["je", "su", "biti", "imati", "moći", "htjeti", "reći", "znati"]
+# Language detection handled by langdetect library, not word lists
 
 # ============================================================================
 # PIPELINE CONFIGURATION
@@ -394,6 +401,7 @@ language_priority = true
 # English preprocessing settings
 [pipeline.processing]
 preserve_formatting = true
+preserve_diacritics = false         # Added from hr.toml (false for English)
 respect_grammar = true
 enable_sentence_boundary_detection = true
 specific_chunking = true

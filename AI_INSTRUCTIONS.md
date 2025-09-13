@@ -2,10 +2,17 @@
 
 ## IMPORTANT!!!!!
 
-- FORBIDDEN is adding any new config values without any EXPLICIT ask.
-- FORBIDDEN is adding any new hard-coded values without any EXPLICIT ask.
-- FORBIDDEN is adding any new fallback defaults values without any EXPLICIT ask.
-- DON'T add code comments that are just noise and describing some kind of refactoring, ADD comments when they are specific and describe some logic
+- Software Development is NOT a speed contest but a thought process.
+- Rule of Consistency is above anything else.
+- Restrain yourself in just DOING code, discuss, debate and brainstorm idea first, then implement code.
+- Stray from "AI Cargo Culting" (fix for sake of fixing) analyze the problem, describe it, debate then plan actions.
+- FORBIDDEN is adding any new config values without EXPLICIT ask, this doesn't mean to hard-code it instead.
+- FORBIDDEN is adding any new hard-coded values without EXPLICIT ask.
+- FORBIDDEN is adding any new fallback defaults values without EXPLICIT ask.
+- DO NOT hard-code config values as fallback. SYSTEM SHOULD FAIL if config value is missing! THEY MUST be in config.
+- DON'T add code comments as noise and describing same thing identically in multiple places in code, ADD comments when they are specific and describe logic.
+- DON'T add code comments with only current languages mentioned, it is MULTILINGUAL system!
+- DON'T left test logic in code that is only for testing and not full implementation. It is OK to test it, but after test needs to be addressed IMMEDIATELY!
 
 ## Role Definition
 
@@ -13,6 +20,15 @@
 - Maintain critical and sharp analytical thinking
 - Push the human's critical thinking ability through planning and brainstorming
 - Always look for opportunities to challenge assumptions and improve solutions
+
+## Multilingual Rules
+
+System uses principle that should guide multilingual systems: Language Equality with Language-Specific Content.
+
+  - All languages are equal - same features, same structure, same scoring
+  - Only content differs - Croatian diacritics vs English patterns vs German umlauts
+  - Unified configuration structure - every language gets every feature type
+  - Use Language Configuration Structure Validator to make sure language configurations are synced
 
 ## Core Operating Principles
 
@@ -92,6 +108,35 @@ def validate_config(config: dict) -> None:
 
 # BAD: Silent fallback with defaults
 config.get("query_processing", {})  # Hides configuration problems
+```
+## ❌ **FORBIDDEN PATTERNS**
+
+### **NEVER USE - Silent Fallbacks**
+```python
+# ❌ FORBIDDEN: Silent fallback with .get()
+expand_synonyms = config.get("expand_synonyms", True)  # Hides missing config
+
+# ❌ FORBIDDEN: Magic defaults in code
+min_length = query_config.get("min_query_length", 3)  # Should be in config file
+
+# ❌ FORBIDDEN: Scattered error handling
+try:
+    model = config["embeddings"]["model_name"]
+except KeyError:
+    model = "default-model"  # Silent failure
+```
+
+### **ALWAYS USE - Explicit Patterns**
+```python
+# ✅ CORRECT: ConfigValidator ensures existence
+expand_synonyms = config["query_processing"]["expand_synonyms"]  # Guaranteed to exist
+
+# ✅ CORRECT: Explicit validation with clear errors
+if "expand_synonyms" not in config["query_processing"]:
+    raise ConfigurationError("Missing required config: query_processing.expand_synonyms in config/config.toml")
+
+# ✅ CORRECT: Fail-fast at startup, not runtime
+ConfigValidator.validate_startup_config(main_config, language_configs)
 ```
 
 **✅ ERROR HANDLING STRATEGY:**

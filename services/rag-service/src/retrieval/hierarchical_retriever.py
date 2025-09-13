@@ -752,7 +752,7 @@ class HierarchicalRetriever:
         """Get performance statistics."""
         return {
             "total_retrievals": self._retrieval_count,
-            "strategy_stats": self._strategy_stats.copy() if self._strategy_stats else {},
+            "strategy_stats": (self._strategy_stats.copy() if self._strategy_stats else {}),
             "reranking_enabled": self._reranker is not None,
             "performance_tracking": self._config.performance_tracking,
         }

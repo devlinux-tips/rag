@@ -107,7 +107,10 @@ Examples:
     )
 
     parser.add_argument(
-        "--cov", "--coverage", action="store_true", help="Enable test coverage reporting"
+        "--cov",
+        "--coverage",
+        action="store_true",
+        help="Enable test coverage reporting",
     )
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test output")

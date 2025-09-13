@@ -101,9 +101,19 @@ class EmbeddingConfig:
     torch_dtype: str
 
     @classmethod
-    def from_validated_config(cls, main_config: dict) -> "EmbeddingConfig":
-        """Create config from validated main configuration."""
+    def from_validated_config(
+        cls, main_config: dict, language_config: dict = None
+    ) -> "EmbeddingConfig":
+        """Create config from validated main configuration with optional language-specific overrides."""
         embed_config = main_config["embeddings"]  # Direct access
+
+        # Language-specific overrides if provided
+        if language_config and "embeddings" in language_config:
+            lang_embed_config = language_config["embeddings"]
+            # Merge with language-specific overrides taking precedence
+            merged_config = {**embed_config}
+            merged_config.update(lang_embed_config)
+            embed_config = merged_config
 
         return cls(
             model_name=embed_config["model_name"],

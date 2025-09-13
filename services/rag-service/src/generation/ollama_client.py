@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
 
 from ..preprocessing.cleaners import detect_language_content, preserve_text_encoding
+from ..utils.config_loader import ConfigError
 
 
 @dataclass
@@ -464,8 +465,11 @@ class MultilingualOllamaClient:
         # Step 2: Get language-specific configuration
         formal_prompts = self.language_config_provider.get_formal_prompts(request.language)
 
+        # Get appropriate system prompt based on query type
+        system_prompt = self._get_system_prompt_for_query(request, formal_prompts)
+
         # Step 3: Build and enhance prompt
-        base_prompt = build_complete_prompt(request.query, request.context, system_prompt=None)
+        base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
 
         enhanced_prompt = enhance_prompt_with_formality(
             base_prompt, formal_prompts, self.config.prefer_formal_style
@@ -486,28 +490,26 @@ class MultilingualOllamaClient:
             response = await self.http_client.post(url, ollama_request, self.config.timeout)
             generated_text = parse_non_streaming_response(response.json())
 
-            # Step 6: Apply text preservation if needed
-            if self.config.preserve_diacritics:
-                generated_text = preserve_text_encoding(generated_text)
+        # Step 6: Apply text preservation if needed
+        if self.config.preserve_diacritics:
+            generated_text = preserve_text_encoding(generated_text, request.language)
 
-            # Step 7: Calculate confidence
-            confidence_settings = self.language_config_provider.get_confidence_settings(
-                request.language
-            )
-            confidence = calculate_generation_confidence(
-                generated_text, request, confidence_settings
-            )
+        # Step 7: Calculate confidence
+        confidence_settings = self.language_config_provider.get_confidence_settings(
+            request.language
+        )
+        confidence = calculate_generation_confidence(generated_text, request, confidence_settings)
 
-            # Step 8: Build response
-            metadata = {
-                "query_type": request.query_type,
-                "language": request.language,
-                "context_length": len(" ".join(request.context)),
-                "streaming": self.config.streaming,
-                "formal_style": self.config.prefer_formal_style,
-            }
-            if request.metadata:
-                metadata.update(request.metadata)
+        # Step 8: Build response
+        metadata = {
+            "query_type": request.query_type,
+            "language": request.language,
+            "context_length": len(" ".join(request.context)),
+            "streaming": self.config.streaming,
+            "formal_style": self.config.prefer_formal_style,
+        }
+        if request.metadata:
+            metadata.update(request.metadata)
 
         return GenerationResponse(
             text=generated_text,
@@ -629,6 +631,71 @@ class MultilingualOllamaClient:
             True if service is healthy
         """
         return await self.is_service_available()
+
+    def _get_system_prompt_for_query(
+        self, request: GenerationRequest, formal_prompts: Dict[str, str]
+    ) -> str:
+        """
+        Select appropriate system prompt based on query type and language using configuration.
+
+        Args:
+            request: Generation request with query and language
+            formal_prompts: Language-specific formal prompts configuration
+
+        Returns:
+            System prompt optimized for the query type
+        """
+        try:
+            # Get language-specific prompts configuration
+            from ..utils.config_loader import get_language_specific_config
+
+            prompts_config = get_language_specific_config("prompts", request.language)
+
+            # Get keyword categories from configuration
+            keywords_config = prompts_config["keywords"]
+            query_lower = request.query.lower()
+
+            # Check each keyword category from configuration
+            for category, keywords in keywords_config.items():
+                if isinstance(keywords, list) and any(
+                    keyword in query_lower for keyword in keywords
+                ):
+                    # Map category to system prompt name
+                    system_prompt_key = self._get_system_prompt_key(category)
+                    if system_prompt_key in prompts_config:
+                        return prompts_config[system_prompt_key]
+
+            # Default: Use question answering system for general queries
+            return prompts_config["question_answering_system"]
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to get language-specific system prompt for language '{request.language}': {e}"
+            )
+            raise ConfigError(
+                f"System prompt configuration missing or invalid for language '{request.language}'"
+            ) from e
+
+    def _get_system_prompt_key(self, category: str) -> str:
+        """
+        Map keyword category to system prompt configuration key.
+
+        Args:
+            category: Keyword category from configuration
+
+        Returns:
+            System prompt configuration key
+        """
+        # Standard mapping from category to system prompt key
+        category_mapping = {
+            "tourism": "tourism_system",
+            "comparison": "comparison_system",
+            "explanation": "explanatory_system",
+            "factual": "factual_qa_system",
+            "summary": "summarization_system",
+            "business": "business_system",
+        }
+        return category_mapping.get(category, "question_answering_system")
 
     async def close(self) -> None:
         """Close HTTP client."""

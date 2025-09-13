@@ -997,6 +997,7 @@ async def main():
                     self._client = None
                     self._collection = None
                     self._model = None
+                    self._model_name = None  # Will be set from config
                     self._document_count = 0
                     print(f"✅ Complete RAG system created for {language}")
 
@@ -1059,16 +1060,46 @@ async def main():
                             )
                             print(f"📦 Created new collection: {collection_name}")
 
-                        # Initialize BGE-M3 embedding model
+                        # Initialize embedding model (language-specific)
                         try:
                             from sentence_transformers import SentenceTransformer
 
-                            print("🔧 Loading BGE-M3 embedding model...")
-                            self._model = SentenceTransformer("BAAI/bge-m3")
-                            print("✅ BGE-M3 model loaded successfully")
+                            from ..utils.config_loader import get_language_specific_config
+                            from ..utils.config_validator import ConfigurationError
+
+                            # Get language-specific embedding configuration
+                            embedding_config = get_language_specific_config(
+                                "embeddings", self.language
+                            )
+
+                            # FAIL FAST: both model_name and fallback_model must be configured
+                            primary_model = embedding_config["model_name"]
+                            fallback_model = embedding_config["fallback_model"]
+
+                            # Try primary model first
+                            try:
+                                print(
+                                    f"🔧 Loading {primary_model} embedding model for {self.language}..."
+                                )
+                                self._model = SentenceTransformer(primary_model)
+                                self._model_name = primary_model
+                                print(f"✅ {primary_model} model loaded successfully")
+                            except Exception as e:
+                                if fallback_model:
+                                    print(f"⚠️ Primary model {primary_model} failed: {e}")
+                                    print(f"🔧 Trying fallback model {fallback_model}...")
+                                    self._model = SentenceTransformer(fallback_model)
+                                    self._model_name = fallback_model
+                                    print(f"✅ Fallback model {fallback_model} loaded successfully")
+                                else:
+                                    print(
+                                        f"❌ Primary model {primary_model} failed and no fallback_model configured"
+                                    )
+                                    raise
                         except ImportError:
                             print("⚠️ sentence-transformers not installed, using dummy embeddings")
                             self._model = None
+                            # Keep self._model_name from config for logging purposes
 
                         print(f"🎯 Complete RAG system initialized for {self.language}")
 
@@ -1141,7 +1172,7 @@ async def main():
                             # 3. Real embedding generation
                             embeddings = []
                             if self._model:
-                                print("🔄 Generating BGE-M3 embeddings...")
+                                print(f"🔄 Generating {self._model_name} embeddings...")
                                 for chunk in chunks:
                                     embedding = self._model.encode(chunk["content"])
                                     embeddings.append(embedding.tolist())
@@ -1201,7 +1232,7 @@ async def main():
                     }
 
                 async def query(self, query_obj):
-                    """Handle queries with real retrieval and response generation."""
+                    """Handle queries with REAL Ollama-powered generation."""
                     if not self._collection:
                         raise RuntimeError("RAG system not initialized. Call initialize() first.")
 
@@ -1225,7 +1256,7 @@ async def main():
                         print("🔍 Searching vector database...")
                         results = self._collection.query(
                             query_embeddings=[query_embedding],
-                            n_results=min(3, self._collection.count()),  # Get up to 3 results
+                            n_results=min(3, self._collection.count()),
                         )
 
                         retrieved_chunks = []
@@ -1262,35 +1293,48 @@ async def main():
                                     f"  📄 Chunk {i+1}: Score {score:.3f} | Source: {metadata['source'] if 'source' in metadata else 'Unknown'}"
                                 )
 
-                        # 3. Generate answer from retrieved context
+                        # 3. **REAL OLLAMA GENERATION**
                         if context_chunks:
+                            print("🤖 Generating answer using Ollama...")
+
+                            # Import Ollama client factory and request class
+                            from ..generation.ollama_client import (
+                                GenerationRequest,
+                                create_ollama_client,
+                            )
+
+                            # Create Ollama client using factory
+                            ollama_client = create_ollama_client()
+
+                            # Build prompt manually (simplified version)
                             context_text = "\n\n".join(context_chunks)
+                            prompt = f"Based on the following context, answer the question in Croatian:\n\nContext:\n{context_text}\n\nQuestion: {query_text}\n\nAnswer:"
 
-                            # Simple answer extraction (similar to test_real_full_rag.py)
-                            sentences = [s.strip() for s in context_text.split(".") if s.strip()]
-                            relevant_sentences = []
+                            # Create generation request with all required fields
+                            generation_request = GenerationRequest(
+                                prompt=prompt,
+                                context=context_chunks,
+                                query=query_text,
+                                language=self.language,
+                                query_type="general",
+                            )
 
-                            # Look for sentences containing key terms from the query
-                            query_words = query_text.lower().split()
-                            for sentence in sentences:
-                                sentence_lower = sentence.lower()
-                                if any(
-                                    word in sentence_lower for word in query_words if len(word) > 2
-                                ):
-                                    relevant_sentences.append(sentence)
+                            # Generate answer with Ollama
+                            print("⏳ Calling Ollama for text generation...")
+                            generation_start = time.time()
 
-                            if relevant_sentences:
-                                answer = ". ".join(relevant_sentences[:2]) + "."
-                                print(f"✅ Generated answer from context")
-                            else:
-                                answer = (
-                                    f"Based on the retrieved documents: {context_chunks[0][:200]}..."
-                                    if context_chunks
-                                    else "No relevant information found."
-                                )
-                                print(f"✅ Generated fallback answer")
+                            ollama_response = await ollama_client.generate_text_async(
+                                generation_request
+                            )
+
+                            answer = ollama_response.text
+                            generation_time = time.time() - generation_start
+
+                            print(f"✅ Generated answer using Ollama in {generation_time:.2f}s")
+                            print(f"💬 Answer preview: {answer[:100]}...")
                         else:
                             answer = "No relevant documents found in the knowledge base."
+                            generation_time = 0.0
                             print("⚠️ No documents retrieved")
 
                         total_time = time.time() - start_time
@@ -1303,8 +1347,8 @@ async def main():
                             query=query_text,
                             retrieved_chunks=retrieved_chunks,
                             confidence=0.8 if retrieved_chunks else 0.1,
-                            generation_time=0.1,
-                            retrieval_time=total_time - 0.1,
+                            generation_time=generation_time,
+                            retrieval_time=total_time - generation_time,
                             total_time=total_time,
                             sources=[
                                 chunk["source"] if "source" in chunk else "Unknown"
@@ -1313,6 +1357,7 @@ async def main():
                             metadata={
                                 "language": self.language,
                                 "real_components": True,
+                                "ollama_generation": True,
                                 "chunks_retrieved": len(retrieved_chunks),
                                 "collection_size": self._collection.count(),
                             },
@@ -1323,6 +1368,10 @@ async def main():
 
                     except Exception as e:
                         print(f"❌ Query failed: {e}")
+                        import traceback
+
+                        traceback.print_exc()
+
                         # Return error response
                         from ..pipeline.rag_system import RAGResponse
 

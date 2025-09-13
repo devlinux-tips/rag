@@ -6,12 +6,17 @@ for multilingual document question-answering workflows.
 
 import asyncio
 import json
+import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
 
+# Module logger
+logger = logging.getLogger(__name__)
+
 from ..utils.config_models import EmbeddingConfig, OllamaConfig, ProcessingConfig, RetrievalConfig
+from ..utils.config_validator import ConfigurationError
 
 
 # Pure data structures
@@ -661,7 +666,7 @@ class RAGSystem:
                             documents=[chunk.content],
                             metadatas=[metadata],
                             embeddings=[
-                                embedding.tolist() if hasattr(embedding, "tolist") else embedding
+                                (embedding.tolist() if hasattr(embedding, "tolist") else embedding)
                             ],
                         )
 
@@ -888,13 +893,17 @@ class RAGSystem:
                 "embedding_model": (
                     self.embedding_config.model_name if self.embedding_config else "unknown"
                 ),
-                "llm_model": self.ollama_config.model if self.ollama_config else "unknown",
+                "llm_model": (self.ollama_config.model if self.ollama_config else "unknown"),
                 "device": "auto",
             },
             performance={
-                "chunk_size": 1000,  # Default value - processing config not used for chunk size in stats
-                "max_retrieval": self.retrieval_config.max_k if self.retrieval_config else 10,
-                "similarity_threshold": 0.0,  # Default - retrieval config doesn't have min_similarity_score field
+                "chunk_size": (
+                    self.processing_config.chunk_size if self.processing_config else 1000
+                ),
+                "max_retrieval": (self.retrieval_config.max_k if self.retrieval_config else 10),
+                "similarity_threshold": (
+                    self.retrieval_config.similarity_threshold if self.retrieval_config else 0.0
+                ),
                 "timeout": self.ollama_config.timeout if self.ollama_config else 60,
             },
         )

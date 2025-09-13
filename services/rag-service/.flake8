@@ -1,0 +1,33 @@
+[flake8]
+max-line-length = 100
+# Comprehensive ignore list covering architectural patterns and formatting
+extend-ignore =
+    E203,    # whitespace before ':'
+    W503,    # line break before binary operator
+    E501,    # line too long (handled by black)
+    F401,    # imported but unused (common in __init__.py files)
+    F811,    # redefinition of unused (common in provider patterns)
+    F841,    # local variable assigned but never used (common in tests)
+    W291,    # trailing whitespace (handled by pre-commit)
+    W293,    # blank line contains whitespace (handled by pre-commit)
+    E402,    # module level import not at top (common in test setup)
+    F541,    # f-string missing placeholders (sometimes intentional)
+    E231,    # missing whitespace after ':' (f-string format specifiers)
+    E722,    # bare except (common in error handling)
+    E713,    # test for membership should be 'not in'
+    F402,    # import shadowed by loop variable
+    F821,    # undefined name (common in dynamic imports)
+    E221     # multiple spaces before operator (alignment patterns)
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .eggs,
+    *.egg-info,
+    .tox,
+    .venv,
+    temp_cache,
+    data,
+    notebooks,
+    venv

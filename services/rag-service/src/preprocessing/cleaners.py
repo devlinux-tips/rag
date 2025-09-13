@@ -588,11 +588,49 @@ class MultilingualTextCleaner:
 
     def detect_language_content(self, text: str) -> float:
         """Detect how much content matches the current language."""
-        return detect_language_content(text, self.shared_config.stopwords)
+        if not text:
+            return 0.0
+
+        # Simple language detection based on character patterns and stopwords
+        words = text.lower().split()
+        if not words:
+            return 0.0
+
+        # Check for language-specific characters
+        language_chars = 0
+        total_chars = len(text.replace(" ", ""))
+
+        if (
+            hasattr(self.language_config, "word_char_pattern")
+            and self.language_config.word_char_pattern
+        ):
+            import re
+
+            matches = re.findall(self.language_config.word_char_pattern, text)
+            language_chars = len("".join(matches))
+
+        char_ratio = language_chars / total_chars if total_chars > 0 else 0.0
+
+        # Check for stopwords if available
+        stopword_ratio = 0.0
+        if hasattr(self.shared_config, "stopwords") and self.shared_config.stopwords:
+            matching_stopwords = sum(1 for word in words if word in self.shared_config.stopwords)
+            stopword_ratio = matching_stopwords / len(words) if words else 0.0
+
+        # Combined score
+        return (char_ratio * 0.6) + (stopword_ratio * 0.4)
 
     def preserve_encoding(self, text: any) -> str:
         """Preserve proper text encoding for the language."""
-        return preserve_text_encoding(text)
+        if not isinstance(text, str):
+            text = str(text)
+
+        # Apply language-specific diacritic preservation
+        if hasattr(self.language_config, "diacritic_map") and self.language_config.diacritic_map:
+            # For languages with diacritics, ensure proper UTF-8 encoding
+            text = text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+
+        return text
 
     def setup_language_environment(self) -> None:
         """Setup language-specific environment from configuration."""
@@ -644,7 +682,7 @@ def clean_text(
     return result.text
 
 
-def detect_language_content(
+def detect_language_content_with_config(
     text: str, language: str, config_provider: Optional[ConfigProvider] = None
 ) -> float:
     """
@@ -666,7 +704,7 @@ def detect_language_content(
     return cleaner.detect_language_content(text)
 
 
-def preserve_text_encoding(
+def preserve_text_encoding_with_config(
     text: any, language: str, config_provider: Optional[ConfigProvider] = None
 ) -> str:
     """

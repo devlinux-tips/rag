@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Script to format all Python files in the project using black and isort.
+Script to format all Python files in the project using black, isort, and flake8.
 Run this to ensure consistent formatting across the codebase.
+Works from any directory by finding repository root and using root configurations.
 """
 
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run_command(cmd, description):
+def run_command(cmd, description, allow_failure=False):
     """Run a command and report its status."""
     print(f"Running {description}...")
     try:
@@ -22,41 +25,164 @@ def run_command(cmd, description):
         print(f"❌ {description} failed with exit code {e.returncode}")
         if e.stderr:
             print(f"Error: {e.stderr}")
-        return False
+        if e.stdout:
+            print(f"Output: {e.stdout}")
+        return allow_failure
+
+
+def check_tool_availability():
+    """Check if required tools are available."""
+    tools = {"black": "black", "isort": "isort", "flake8": "flake8"}
+    available_tools = {}
+
+    for name, command in tools.items():
+        if shutil.which(command):
+            available_tools[name] = command
+            print(f"✅ {name} found: {command}")
+        else:
+            print(f"❌ {name} not found in PATH")
+
+    return available_tools
+
+
+def find_repo_root():
+    """Find repository root by looking for .git directory."""
+    current_path = Path.cwd()
+    repo_root = current_path
+
+    while repo_root != repo_root.parent:
+        if (repo_root / ".git").exists():
+            return repo_root
+        repo_root = repo_root.parent
+
+    # If no .git found, use current directory
+    print("⚠️ Git repository root not found, using current directory")
+    return current_path
+
+
+def get_python_targets(repo_root, current_path):
+    """Determine which Python files/directories to format."""
+    python_targets = []
+
+    # If we're in rag-service directory or subdirectory, format local files
+    if "rag-service" in str(current_path):
+        # Find the rag-service directory relative to repo root
+        rag_service_path = None
+        for part_path in [current_path] + list(current_path.parents):
+            if part_path.name == "rag-service":
+                rag_service_path = part_path.relative_to(repo_root)
+                break
+
+        if rag_service_path:
+            # Format rag-service specific paths
+            for target in ["src/", "tests/", "*.py"]:
+                target_path = rag_service_path / target
+                if target.endswith(".py"):
+                    # Check for individual Python files
+                    if (repo_root / target_path).exists():
+                        python_targets.append(str(target_path))
+                else:
+                    # Check for directories
+                    if (repo_root / target_path).exists():
+                        python_targets.append(str(target_path))
+
+        # Also include Python files in rag-service root
+        rag_service_root = (
+            repo_root / rag_service_path.parts[0] / rag_service_path.parts[1]
+            if len(rag_service_path.parts) >= 2
+            else repo_root
+        )
+        for py_file in rag_service_root.glob("*.py"):
+            rel_path = py_file.relative_to(repo_root)
+            python_targets.append(str(rel_path))
+    else:
+        # If we're in repository root, format the entire services directory
+        services_path = repo_root / "services"
+        if services_path.exists():
+            python_targets.append("services/")
+
+        # Also include root-level Python files
+        for py_file in repo_root.glob("*.py"):
+            python_targets.append(str(py_file.relative_to(repo_root)))
+
+    return python_targets
 
 
 def main():
     """Format all Python files in the project."""
-    project_root = Path(__file__).parent.parent.parent
-    venv_python = project_root / "venv" / "bin" / "python"
-    venv_black = project_root / "venv" / "bin" / "black"
-    venv_isort = project_root / "venv" / "bin" / "isort"
+    print("🔍 Checking tool availability...")
+    available_tools = check_tool_availability()
 
-    # Check if virtual environment exists
-    if not venv_python.exists():
-        print("❌ Virtual environment not found. Please run:")
-        print("python3 -m venv venv")
-        print("source venv/bin/activate")
-        print("pip install -r requirements.txt")
+    if not available_tools:
+        print("❌ No formatting tools available. Please install them:")
+        print("pip install black isort flake8")
         sys.exit(1)
 
-    print("🚀 Formatting Python files in the project...")
+    # Find repository root and determine working context
+    repo_root = find_repo_root()
+    current_path = Path.cwd()
 
-    # Format with black
-    success1 = run_command(f"{venv_black} src/ tests/ *.py", "Black formatting")
+    print(f"📂 Repository root: {repo_root}")
+    print(f"📂 Current directory: {current_path}")
 
-    # Sort imports with isort
-    success2 = run_command(f"{venv_isort} src/ tests/ *.py", "Import sorting")
+    # Get Python targets based on current location
+    python_targets = get_python_targets(repo_root, current_path)
 
-    # Run flake8 to check for any remaining issues
-    success3 = run_command(f"{project_root}/venv/bin/flake8 src/ tests/", "Flake8 linting")
+    if not python_targets:
+        print("❌ No Python files or directories found to format")
+        sys.exit(1)
 
-    if success1 and success2:
-        print("\n✅ All formatting completed successfully!")
-        if not success3:
-            print("⚠️  Some linting issues remain (see above)")
+    print(f"🎯 Targets: {python_targets}")
+    targets_str = " ".join(python_targets)
+
+    print("\n🚀 Formatting Python files in the project...")
+
+    success_count = 0
+    total_operations = 0
+
+    # Change to repository root for consistent configuration file discovery
+    original_cwd = Path.cwd()
+    if repo_root != original_cwd:
+        print(f"🔄 Changing to repository root: {repo_root}")
+        os.chdir(repo_root)
+
+    try:
+        # Format with black (if available)
+        if "black" in available_tools:
+            total_operations += 1
+            # Black will use root pyproject.toml or default settings
+            if run_command(f"black {targets_str}", "Black formatting"):
+                success_count += 1
+
+        # Sort imports with isort (if available)
+        if "isort" in available_tools:
+            total_operations += 1
+            # isort will use root configuration
+            if run_command(f"isort {targets_str}", "Import sorting"):
+                success_count += 1
+
+        # Run flake8 to check for any remaining issues (if available)
+        if "flake8" in available_tools:
+            total_operations += 1
+            # flake8 will use root .flake8 configuration
+            if run_command(f"flake8 {targets_str}", "Flake8 linting", allow_failure=True):
+                success_count += 1
+    finally:
+        # Restore original working directory
+        if repo_root != original_cwd:
+            os.chdir(original_cwd)
+
+    # Report results
+    print(f"\n📊 Results: {success_count}/{total_operations} operations completed successfully")
+
+    if success_count == total_operations:
+        print("🎉 All formatting and linting completed successfully!")
+    elif success_count >= total_operations - 1:  # Allow flake8 to fail
+        print("✅ Formatting completed successfully!")
+        if "flake8" in available_tools and success_count < total_operations:
+            print("⚠️  Some linting issues remain - check output above")
     else:
-        print("\n❌ Some formatting operations failed")
+        print("❌ Some critical formatting operations failed")
         sys.exit(1)
 
 

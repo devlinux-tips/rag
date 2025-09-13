@@ -182,6 +182,8 @@ preserve_formatting = true
 extract_metadata = true
 handle_images = false
 ocr_enabled = false
+max_file_size_mb = 50  # Maximum file size for processing
+enable_logging = true  # Enable extraction logging
 encoding_detection = true
 text_encodings = ["utf-8", "cp1252", "iso-8859-1", "iso-8859-2"]
 
@@ -212,10 +214,14 @@ remove_page_numbers = true
 clean_ocr_artifacts = true
 normalize_punctuation = true
 
-# Text quality settings
+# Regex patterns for text cleaning
+multiple_whitespace = "\\s+"
+multiple_linebreaks = "\\n{3,}"
 min_meaningful_words = 3
+min_word_char_ratio = 0.7
+
+# Text quality settings
 min_character_ratio = 0.7
-min_word_char_ratio = 0.5
 
 [formatting_patterns]
 # Croatian-specific formatting patterns (references croatian.toml)

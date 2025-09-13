@@ -20,7 +20,9 @@ from src.pipeline.rag_system import RAGSystem, create_rag_system
 
 
 async def process_language_documents(
-    language: str, source_dir: Optional[str] = None, file_patterns: Optional[List[str]] = None
+    language: str,
+    source_dir: Optional[str] = None,
+    file_patterns: Optional[List[str]] = None,
 ) -> dict:
     """
     Process all documents for a specific language.
@@ -130,7 +132,9 @@ async def main():
     """Main entry point for batch processing."""
     parser = argparse.ArgumentParser(description="Multilingual RAG Batch Processor")
     parser.add_argument(
-        "--language", "-l", help="Process documents for specific language (hr, en, etc.)"
+        "--language",
+        "-l",
+        help="Process documents for specific language (hr, en, etc.)",
     )
     parser.add_argument(
         "--all-languages",
@@ -139,10 +143,15 @@ async def main():
         help="Process documents for all supported languages",
     )
     parser.add_argument(
-        "--source-dir", "-s", help="Custom source directory (overrides default language-based path)"
+        "--source-dir",
+        "-s",
+        help="Custom source directory (overrides default language-based path)",
     )
     parser.add_argument(
-        "--patterns", "-p", nargs="+", help="File patterns to include (e.g., '*.pdf' '*.docx')"
+        "--patterns",
+        "-p",
+        nargs="+",
+        help="File patterns to include (e.g., '*.pdf' '*.docx')",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
 
@@ -166,7 +175,9 @@ async def main():
         elif args.language:
             # Process specific language
             await process_language_documents(
-                language=args.language, source_dir=args.source_dir, file_patterns=args.patterns
+                language=args.language,
+                source_dir=args.source_dir,
+                file_patterns=args.patterns,
             )
 
         else:
