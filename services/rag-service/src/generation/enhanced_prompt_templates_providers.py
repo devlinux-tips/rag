@@ -12,7 +12,7 @@ from src.generation.enhanced_prompt_templates import (
     PromptConfig,
     PromptType,
 )
-from src.retrieval.categorization import DocumentCategory
+from src.retrieval.categorization import CategoryType
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -30,17 +30,17 @@ class MockConfigProvider:
     def _create_default_config(self) -> PromptConfig:
         """Create default test configuration."""
         category_templates = {
-            DocumentCategory.GENERAL: {
+            CategoryType.GENERAL: {
                 PromptType.SYSTEM: "You are a helpful assistant. Answer questions based on the provided context.",
                 PromptType.USER: "Question: {query}\n\nContext: {context}\n\nAnswer:",
                 PromptType.FOLLOWUP: "Previous question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up question: {followup_query}\n\nAnswer:",
             },
-            DocumentCategory.TECHNICAL: {
+            CategoryType.TECHNICAL: {
                 PromptType.SYSTEM: "You are a technical expert. Provide detailed technical answers based on the context.",
                 PromptType.USER: "Technical question: {query}\n\nTechnical documentation: {context}\n\nDetailed answer:",
                 PromptType.FOLLOWUP: "Previous technical question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up: {followup_query}\n\nTechnical answer:",
             },
-            DocumentCategory.CULTURAL: {
+            CategoryType.CULTURAL: {
                 PromptType.SYSTEM: "You are a cultural expert. Provide culturally sensitive answers based on context.",
                 PromptType.USER: "Cultural question: {query}\n\nCultural context: {context}\n\nCulturally aware answer:",
                 PromptType.FOLLOWUP: "Previous cultural question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up: {followup_query}\n\nCultural answer:",
@@ -72,14 +72,14 @@ class MockConfigProvider:
         self.config = config
 
     def add_category_template(
-        self, category: DocumentCategory, prompt_type: PromptType, template: str
+        self, category: CategoryType, prompt_type: PromptType, template: str
     ) -> None:
         """Add a template for specific category and type."""
         if category not in self.config.category_templates:
             self.config.category_templates[category] = {}
         self.config.category_templates[category][prompt_type] = template
 
-    def remove_template(self, category: DocumentCategory, prompt_type: PromptType) -> None:
+    def remove_template(self, category: CategoryType, prompt_type: PromptType) -> None:
         """Remove a template (for testing missing template scenarios)."""
         if category in self.config.category_templates:
             if prompt_type in self.config.category_templates[category]:
@@ -175,7 +175,7 @@ class ProductionConfigProvider:
 
             for category_name, category_data in prompts_config.items():
                 try:
-                    category = DocumentCategory(category_name)
+                    category = CategoryType(category_name)
                     category_templates[category] = {}
 
                     for prompt_type_name, template_text in category_data.items():
@@ -234,7 +234,7 @@ class StandardLoggerProvider:
 
 def create_mock_setup(
     config: Optional[PromptConfig] = None,
-    custom_templates: Optional[Dict[DocumentCategory, Dict[PromptType, str]]] = None,
+    custom_templates: Optional[Dict[CategoryType, Dict[PromptType, str]]] = None,
     custom_messages: Optional[Dict[str, str]] = None,
     custom_formatting: Optional[Dict[str, str]] = None,
     language: str = "hr",
@@ -298,24 +298,24 @@ def create_test_config(
     category_templates = {}
 
     # Always include GENERAL
-    category_templates[DocumentCategory.GENERAL] = {
+    category_templates[CategoryType.GENERAL] = {
         PromptType.SYSTEM: "You are a helpful assistant. Answer based on context.",
         PromptType.USER: "Q: {query}\nContext: {context}\nA:",
     }
 
     if include_followup:
-        category_templates[DocumentCategory.GENERAL][
+        category_templates[CategoryType.GENERAL][
             PromptType.FOLLOWUP
         ] = "Previous: {original_query} -> {original_answer}\nNew: {followup_query}\nAnswer:"
 
     if include_technical:
-        category_templates[DocumentCategory.TECHNICAL] = {
+        category_templates[CategoryType.TECHNICAL] = {
             PromptType.SYSTEM: "Technical expert. Provide detailed answers.",
             PromptType.USER: "Tech Q: {query}\nDocs: {context}\nTech A:",
         }
 
     if include_cultural:
-        category_templates[DocumentCategory.CULTURAL] = {
+        category_templates[CategoryType.CULTURAL] = {
             PromptType.SYSTEM: "Cultural expert. Provide culturally aware answers.",
             PromptType.USER: "Cultural Q: {query}\nContext: {context}\nCultural A:",
         }
@@ -342,7 +342,7 @@ def create_test_config(
 def create_minimal_config(language: str = "hr") -> PromptConfig:
     """Create minimal configuration for basic testing."""
     category_templates = {
-        DocumentCategory.GENERAL: {
+        CategoryType.GENERAL: {
             PromptType.SYSTEM: "Basic assistant.",
             PromptType.USER: "{query} - {context}",
         }
@@ -360,7 +360,7 @@ def create_invalid_config(language: str = "hr") -> PromptConfig:
     """Create configuration with missing required templates for testing error scenarios."""
     # Missing USER template for GENERAL category
     category_templates = {
-        DocumentCategory.GENERAL: {
+        CategoryType.GENERAL: {
             PromptType.SYSTEM: "You are a helpful assistant.",
             # Missing PromptType.USER intentionally
         }
@@ -392,7 +392,7 @@ def create_development_prompt_builder():
 def create_test_prompt_builder(
     language: str = "hr",
     config: Optional[PromptConfig] = None,
-    custom_templates: Optional[Dict[DocumentCategory, Dict[PromptType, str]]] = None,
+    custom_templates: Optional[Dict[CategoryType, Dict[PromptType, str]]] = None,
     custom_messages: Optional[Dict[str, str]] = None,
     custom_formatting: Optional[Dict[str, str]] = None,
 ):
@@ -421,7 +421,7 @@ def create_test_prompt_builder(
 
 def build_category_templates(
     templates: Dict[str, str],
-) -> Dict[DocumentCategory, Dict[PromptType, str]]:
+) -> Dict[CategoryType, Dict[PromptType, str]]:
     """Helper to build category templates from flat dictionary."""
     result = {}
 
@@ -432,7 +432,7 @@ def build_category_templates(
         category_name, prompt_type_name = key.split(".", 1)
 
         try:
-            category = DocumentCategory(category_name)
+            category = CategoryType(category_name)
             prompt_type = PromptType(prompt_type_name)
 
             if category not in result:

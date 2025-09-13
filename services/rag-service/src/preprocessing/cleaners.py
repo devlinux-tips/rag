@@ -651,7 +651,7 @@ class MultilingualTextCleaner:
 
 
 # ================================
-# CONVENIENCE FUNCTIONS (Backward Compatibility)
+# CONVENIENCE FUNCTIONS
 # ================================
 
 

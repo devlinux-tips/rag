@@ -946,7 +946,7 @@ def create_mock_cli(
     )
 
 
-# Entry point (kept for compatibility)
+# Main entry point
 async def main():
     """Main CLI entry point using dependency injection."""
     import logging

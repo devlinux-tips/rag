@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-from src.retrieval.categorization import DocumentCategory
+from src.retrieval.categorization import CategoryType
 
 
 class PromptType(Enum):
@@ -26,7 +26,7 @@ class PromptTemplate:
     """A prompt template with metadata."""
 
     template: str
-    category: DocumentCategory
+    category: CategoryType
     prompt_type: PromptType
     language: str
     priority: int = 0
@@ -45,7 +45,7 @@ class PromptTemplate:
 class PromptConfig:
     """Complete prompt configuration."""
 
-    category_templates: Dict[DocumentCategory, Dict[PromptType, str]]
+    category_templates: Dict[CategoryType, Dict[PromptType, str]]
     messages: Dict[str, str]
     formatting: Dict[str, str]
     language: str
@@ -131,13 +131,13 @@ class LoggerProvider(Protocol):
 
 def parse_config_templates(
     config_data: Dict[str, Dict[str, str]], language: str
-) -> Dict[DocumentCategory, Dict[PromptType, PromptTemplate]]:
+) -> Dict[CategoryType, Dict[PromptType, PromptTemplate]]:
     """Pure function to parse configuration templates into PromptTemplate objects."""
     templates = {}
 
     for category_name, category_templates in config_data.items():
         try:
-            category = DocumentCategory(category_name)
+            category = CategoryType(category_name)
         except ValueError:
             # Skip unknown categories
             continue
@@ -207,8 +207,8 @@ def format_context_chunks(
 def build_category_prompt(
     query: str,
     context_chunks: List[str],
-    category: DocumentCategory,
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
+    category: CategoryType,
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
     formatting_options: ContextFormattingOptions,
     no_context_message: str = "No relevant context available.",
 ) -> BuildPromptResult:
@@ -254,8 +254,8 @@ def build_followup_prompt(
     original_query: str,
     original_answer: str,
     followup_query: str,
-    category: DocumentCategory,
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
+    category: CategoryType,
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
 ) -> str:
     """Pure function to generate a follow-up prompt that maintains conversation context."""
 
@@ -279,7 +279,7 @@ def build_followup_prompt(
 
 
 def calculate_template_stats(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]], language: str
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]], language: str
 ) -> TemplateStats:
     """Pure function to calculate statistics about loaded templates."""
     categories = {}
@@ -299,7 +299,7 @@ def calculate_template_stats(
 
 
 def validate_templates(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
 ) -> ValidationResult:
     """Pure function to validate all templates for common issues."""
     issues = []
@@ -347,8 +347,8 @@ def validate_templates(
 
 
 def suggest_template_improvements(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
-    category: DocumentCategory,
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
+    category: CategoryType,
     usage_stats: Dict[str, Any],
 ) -> List[str]:
     """Pure function to suggest improvements for prompt templates based on usage statistics."""
@@ -386,8 +386,8 @@ def suggest_template_improvements(
 
 
 def get_missing_templates(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
-    required_categories: List[DocumentCategory],
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
+    required_categories: List[CategoryType],
     required_types: List[PromptType],
 ) -> Dict[str, List[str]]:
     """Pure function to identify missing templates for given categories and types."""
@@ -407,9 +407,9 @@ def get_missing_templates(
 
 
 def find_template_by_content(
-    templates: Dict[DocumentCategory, Dict[PromptType, PromptTemplate]],
+    templates: Dict[CategoryType, Dict[PromptType, PromptTemplate]],
     search_text: str,
-) -> List[Tuple[DocumentCategory, PromptType]]:
+) -> List[Tuple[CategoryType, PromptType]]:
     """Pure function to find templates containing specific text."""
     matches = []
 
@@ -470,7 +470,7 @@ class _EnhancedPromptBuilder:
         self,
         query: str,
         context_chunks: List[str],
-        category: DocumentCategory = DocumentCategory.GENERAL,
+        category: CategoryType = CategoryType.GENERAL,
         max_context_length: int = 2000,
         include_source_attribution: bool = True,
     ) -> Tuple[str, str]:
@@ -528,7 +528,7 @@ class _EnhancedPromptBuilder:
         original_query: str,
         original_answer: str,
         followup_query: str,
-        category: DocumentCategory = DocumentCategory.GENERAL,
+        category: CategoryType = CategoryType.GENERAL,
     ) -> str:
         """Generate a follow-up prompt that maintains conversation context."""
 
@@ -545,7 +545,7 @@ class _EnhancedPromptBuilder:
             raise
 
     def suggest_template_improvements(
-        self, category: DocumentCategory, usage_stats: Dict[str, Any]
+        self, category: CategoryType, usage_stats: Dict[str, Any]
     ) -> List[str]:
         """Suggest improvements for prompt templates based on usage statistics."""
         suggestions = suggest_template_improvements(
@@ -588,12 +588,12 @@ class _EnhancedPromptBuilder:
 
     def get_missing_templates(
         self,
-        required_categories: List[DocumentCategory] = None,
+        required_categories: List[CategoryType] = None,
         required_types: List[PromptType] = None,
     ) -> Dict[str, List[str]]:
         """Get missing templates for specified categories and types."""
         if required_categories is None:
-            required_categories = list(DocumentCategory)
+            required_categories = list(CategoryType)
 
         if required_types is None:
             required_types = [PromptType.SYSTEM, PromptType.USER]

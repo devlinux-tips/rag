@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.retrieval.categorization import DocumentCategory, RetrievalStrategy
+from src.retrieval.categorization import CategoryType
 
 
 class TenantStatus(Enum):
@@ -240,9 +240,9 @@ class SearchQuery:
     query_text: str
     query_language: str = "auto"
     detected_language: Optional[str] = None
-    primary_category: Optional[DocumentCategory] = None
-    secondary_categories: List[DocumentCategory] = field(default_factory=list)
-    retrieval_strategy: Optional[RetrievalStrategy] = None
+    primary_category: Optional[CategoryType] = None
+    secondary_categories: List[CategoryType] = field(default_factory=list)
+    retrieval_strategy: Optional[str] = None  # String strategy name
     scope_searched: List[DocumentScope] = field(
         default_factory=lambda: [DocumentScope.USER, DocumentScope.TENANT]
     )
@@ -264,7 +264,7 @@ class CategorizationTemplate:
     id: str
     tenant_id: Optional[str]
     name: str
-    category: DocumentCategory
+    category: CategoryType
     language: str
     keywords: List[str] = field(default_factory=list)
     patterns: List[str] = field(default_factory=list)
@@ -396,8 +396,8 @@ class MultiTenantQueryResult:
     user_results_count: int = 0
     tenant_results_count: int = 0
     response_time_ms: int = 0
-    primary_category: Optional[DocumentCategory] = None
-    retrieval_strategy: Optional[RetrievalStrategy] = None
+    primary_category: Optional[CategoryType] = None
+    retrieval_strategy: Optional[str] = None  # String strategy name
 
 
 # ===============================================

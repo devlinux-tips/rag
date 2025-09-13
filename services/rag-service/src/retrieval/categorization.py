@@ -442,169 +442,26 @@ class QueryCategorizer:
 
 
 # ================================
-# CONVENIENCE FUNCTIONS (Backward Compatibility)
+# FACTORY FUNCTIONS
 # ================================
 
 
-def categorize_query(
-    query: str, language: str, config_provider: Optional[ConfigProvider] = None
-) -> CategoryMatch:
+def create_query_categorizer(
+    language: str, config_provider: Optional[ConfigProvider] = None
+) -> QueryCategorizer:
     """
-    Convenience function for backward compatibility.
+    Create a QueryCategorizer instance with proper dependency injection.
 
     Args:
-        query: Query text to categorize
         language: Language for categorization
         config_provider: Optional config provider (uses production if None)
 
     Returns:
-        CategoryMatch with categorization results
+        QueryCategorizer instance
     """
     from .categorization_providers import create_config_provider
 
     # Use injected provider or create default
     config = config_provider or create_config_provider()
 
-    categorizer = QueryCategorizer(language, config)
-    return categorizer.categorize_query(query)
-
-
-# ================================
-# BACKWARD COMPATIBILITY ALIASES
-# ================================
-
-
-# Legacy class name for compatibility
-# Removed simple alias - full implementation below at line 530
-
-
-# Legacy aliases for classes that other files are importing
-class DocumentCategory(Enum):
-    """Legacy enum for backward compatibility with hierarchical_retriever.py and other files."""
-
-    CULTURAL = "cultural"
-    TOURISM = "tourism"
-    TECHNICAL = "technical"
-    LEGAL = "legal"
-    BUSINESS = "business"
-    EDUCATIONAL = "educational"
-    NEWS = "news"
-    REFERENCE = "reference"
-    FAQ = "faq"
-    PROCEDURAL = "procedural"
-    COMPARATIVE = "comparative"
-    HISTORICAL = "historical"
-    GENERAL = "general"
-
-
-class RetrievalStrategy(Enum):
-    """Legacy enum for backward compatibility."""
-
-    SEMANTIC_FOCUSED = "semantic_focused"
-    KEYWORD_HYBRID = "keyword_hybrid"
-    TECHNICAL_PRECISE = "technical_precise"
-    TEMPORAL_AWARE = "temporal_aware"
-    FAQ_OPTIMIZED = "faq_optimized"
-    COMPARATIVE_STRUCTURED = "comparative_structured"
-    CULTURAL_CONTEXT = "cultural_context"
-    DEFAULT = "default"
-
-
-@dataclass
-class CategorizationResult:
-    """Legacy dataclass for backward compatibility."""
-
-    primary_category: DocumentCategory
-    secondary_categories: List[DocumentCategory]
-    confidence: float
-    signals: Dict[str, float]
-    suggested_strategy: RetrievalStrategy
-    filters: Dict[str, Any]
-    metadata: Dict[str, Any]
-
-
-# Legacy class alias - the main backward compatibility class
-class EnhancedQueryCategorizer(QueryCategorizer):
-    """
-    Legacy class for backward compatibility.
-    Maps old interface to new dependency injection interface.
-    """
-
-    def __init__(self, language: str):
-        """Initialize with legacy interface pattern."""
-        from .categorization_providers import create_config_provider
-
-        # Use production config provider by default
-        config_provider = create_config_provider(use_mock=False)
-
-        # Initialize parent with dependency injection
-        super().__init__(language, config_provider, None)
-
-    def categorize(self, query: str) -> CategorizationResult:
-        """
-        Legacy categorize method that returns old CategorizationResult format.
-        Maps new CategoryMatch to old CategorizationResult.
-        """
-        # Use new categorization method
-        modern_result = self.categorize_query(query)
-
-        # Map to legacy format
-        legacy_primary = DocumentCategory.GENERAL
-        try:
-            # Map new CategoryType to legacy DocumentCategory
-            category_mapping = {
-                CategoryType.GENERAL: DocumentCategory.GENERAL,
-                CategoryType.TECHNICAL: DocumentCategory.TECHNICAL,
-                CategoryType.CULTURAL: DocumentCategory.CULTURAL,
-                CategoryType.HISTORICAL: DocumentCategory.HISTORICAL,
-                CategoryType.ACADEMIC: DocumentCategory.EDUCATIONAL,
-                CategoryType.LEGAL: DocumentCategory.LEGAL,
-                CategoryType.MEDICAL: DocumentCategory.REFERENCE,  # Map medical to reference
-                CategoryType.BUSINESS: DocumentCategory.BUSINESS,
-                CategoryType.TOURISM: DocumentCategory.TOURISM,
-                CategoryType.EDUCATION: DocumentCategory.EDUCATIONAL,
-            }
-            if modern_result.category not in category_mapping:
-                raise ValueError(f"Missing category mapping for '{modern_result.category}'")
-            legacy_primary = category_mapping[modern_result.category]
-        except (KeyError, AttributeError):
-            legacy_primary = DocumentCategory.GENERAL
-
-        # Map retrieval strategy
-        legacy_strategy = RetrievalStrategy.DEFAULT
-        try:
-            strategy_mapping = {
-                "hybrid": RetrievalStrategy.KEYWORD_HYBRID,
-                "dense": RetrievalStrategy.SEMANTIC_FOCUSED,
-                "cultural_context": RetrievalStrategy.CULTURAL_CONTEXT,
-                "cultural_aware": RetrievalStrategy.CULTURAL_CONTEXT,
-                "sparse": RetrievalStrategy.TECHNICAL_PRECISE,
-                "hierarchical": RetrievalStrategy.COMPARATIVE_STRUCTURED,
-                "default": RetrievalStrategy.DEFAULT,
-            }
-            if modern_result.retrieval_strategy not in strategy_mapping:
-                raise ValueError(
-                    f"Missing strategy mapping for '{modern_result.retrieval_strategy}'"
-                )
-            legacy_strategy = strategy_mapping[modern_result.retrieval_strategy]
-        except (KeyError, AttributeError):
-            legacy_strategy = RetrievalStrategy.DEFAULT
-
-        # Create legacy result
-        return CategorizationResult(
-            primary_category=legacy_primary,
-            secondary_categories=[],  # New system doesn't have secondary categories
-            confidence=modern_result.confidence,
-            signals={
-                "complexity": modern_result.complexity.value,
-                "cultural_indicators": len(modern_result.cultural_indicators),
-                "matched_patterns": len(modern_result.matched_patterns),
-            },
-            suggested_strategy=legacy_strategy,
-            filters={},
-            metadata={
-                "matched_patterns": modern_result.matched_patterns,
-                "cultural_indicators": modern_result.cultural_indicators,
-                "complexity": modern_result.complexity.value,
-            },
-        )
+    return QueryCategorizer(language, config)

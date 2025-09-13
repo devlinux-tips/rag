@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
-from .categorization import CategoryMatch, DocumentCategory, RetrievalStrategy
+from .categorization import CategoryMatch, CategoryType
 
 
 class RetrievalStrategyType(Enum):
