@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
 """
-Multi-tenant RAG System CLI entry point.
+Multi-tenant RAG System CLI - Main Entry Point
 
-This script provides a convenient way to run the RAG system CLI with full
-multi-tenant support, including --tenant and --user switches.
+This is the primary interface for the multilingual RAG system with Croatian and English support.
+Provides document processing, semantic search, and answer generation capabilities.
 
 Usage:
-    python rag_new.py --tenant development --user dev_user --language hr query "Što je RAG sustav?"
-    python rag_new.py --tenant acme --user john --language en process-docs ./docs/
-    python rag_new.py --help
+    python rag.py --tenant development --user dev_user --language hr query "Što je RAG sustav?"
+    python rag.py --tenant acme --user john --language en process-docs ./docs/
+    python rag.py --language hr status
+    python rag.py --help
+
+Best Practice: Always use this script as the main entry point rather than module imports.
 """
 
 import sys
 from pathlib import Path
 
-# Add src to Python path
+# Add src to Python path for proper module resolution
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.cli.rag_cli import main
+from src.cli.rag_cli import cli_main
 
 if __name__ == "__main__":
-    main()
+    cli_main()
