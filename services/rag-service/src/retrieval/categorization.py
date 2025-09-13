@@ -280,8 +280,6 @@ def determine_retrieval_strategy(
     complexity_key = f"complexity_{complexity.value}"
     if complexity_key in strategy_config:
         return strategy_config[complexity_key]
-    if complexity_strategy:
-        return complexity_strategy
 
     # Default strategy - validate required key
     if "default" not in strategy_config:
@@ -477,10 +475,7 @@ def categorize_query(
 
 
 # Legacy class name for compatibility
-class EnhancedQueryCategorizer(QueryCategorizer):
-    """Backward compatibility alias for QueryCategorizer."""
-
-    pass
+# Removed simple alias - full implementation below at line 530
 
 
 # Legacy aliases for classes that other files are importing

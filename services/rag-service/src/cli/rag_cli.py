@@ -950,7 +950,6 @@ def create_mock_cli(
 async def main():
     """Main CLI entry point using dependency injection."""
     import logging
-    import sys
 
     # Parse arguments
     args = parse_cli_arguments(sys.argv[1:])
@@ -1120,8 +1119,6 @@ async def main():
                     # Handle directory vs individual files
                     all_files = []
                     for doc_path in document_paths:
-                        from pathlib import Path
-
                         path_obj = Path(doc_path)
                         if path_obj.is_dir():
                             # Process all supported files in directory

@@ -28,6 +28,17 @@
 - **Debate and challenge first** - question requirements and architectural implications
 - **Analyze the problem** - describe it, debate alternatives, then plan
 - **No "AI cargo culting"** - don't fix for the sake of fixing
+
+#### **5. Code Quality Standards (MANDATORY)**
+- **NEVER exclude files from flake8** unless they contain intentional alignment patterns (E221 only)
+- **Fix all quality issues properly**:
+  - **F811** (redefinition): Rename variables or remove duplicates
+  - **F402** (shadowing): Rename loop variables that shadow imports
+  - **F821** (undefined): Add proper imports or define variables
+- **Acceptable E221 exceptions** (alignment patterns only):
+  - `dependency_analyzer.py` - Complex dependency tables
+  - `validate_language_configs.py` - Configuration matrices
+- **Quality workflow**: `format_code.py` → `git add .` → `git commit` (all pre-commit hooks must pass)
 - **Push critical thinking** - force explicit discussion of pros/cons
 
 #### **5. Architecture Rules**
