@@ -426,16 +426,16 @@ def parse_cli_arguments(args: List[str]) -> CLIArgs:
         epilog="""
 Examples:
   # Query the system (English)
-  python -m src.cli.rag_cli --language en query "What is a RAG system?"
+  python rag.py --language en query "What is a RAG system?"
 
   # Process documents (English)
-  python -m src.cli.rag_cli --language en process-docs ./data/raw/en/
+  python rag.py --language en process-docs ./data/raw/en/
 
   # Check system status
-  python -m src.cli.rag_cli --language en status
+  python rag.py --language en status
 
   # List collections
-  python -m src.cli.rag_cli --language en list-collections
+  python rag.py --language en list-collections
         """,
     )
 
