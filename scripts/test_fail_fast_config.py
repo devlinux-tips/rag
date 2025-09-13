@@ -4,7 +4,6 @@ Test script for fail-fast configuration system.
 Validates that system fails immediately when essential config is missing.
 """
 
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -25,9 +24,11 @@ def test_fail_fast_with_valid_config():
     logger.info("🧪 Testing fail-fast config with valid configuration...")
 
     try:
-        from src.utils.fail_fast_config import (get_default_language_strict,
-                                                get_supported_languages_strict,
-                                                validate_essential_config)
+        from src.utils.fail_fast_config import (
+            get_default_language_strict,
+            get_supported_languages_strict,
+            validate_essential_config,
+        )
 
         # This should work with existing config.toml
         validate_essential_config()
@@ -35,7 +36,7 @@ def test_fail_fast_with_valid_config():
         languages = get_supported_languages_strict()
         default_lang = get_default_language_strict()
 
-        logger.info(f"✅ Valid config test passed")
+        logger.info("✅ Valid config test passed")
         logger.info(f"  Languages: {languages}")
         logger.info(f"  Default: {default_lang}")
 
@@ -70,8 +71,10 @@ cache_dir = "./data/cache"
 
         try:
             # Import and test with temp config directory
-            from src.utils.fail_fast_config import (ConfigurationError,
-                                                    FailFastConfigLoader)
+            from src.utils.fail_fast_config import (
+                ConfigurationError,
+                FailFastConfigLoader,
+            )
 
             loader = FailFastConfigLoader(config_dir=temp_config_dir)
 
@@ -202,8 +205,10 @@ default = "fr"  # not in supported
             config_file.write_text(config_content)
 
             try:
-                from src.utils.fail_fast_config import (ConfigurationError,
-                                                        FailFastConfigLoader)
+                from src.utils.fail_fast_config import (
+                    ConfigurationError,
+                    FailFastConfigLoader,
+                )
 
                 loader = FailFastConfigLoader(config_dir=temp_config_dir)
 
@@ -212,7 +217,7 @@ default = "fr"  # not in supported
                     loader.get_supported_languages()
                     loader.get_default_language()
                     results.append(f"❌ {test_name}: Expected failure but succeeded")
-                except ConfigurationError as e:
+                except ConfigurationError:
                     results.append(f"✅ {test_name}: Correctly failed")
                 except Exception as e:
                     results.append(f"⚠️ {test_name}: Unexpected error type: {e}")

@@ -4,7 +4,6 @@ Test: Does RAGSystem startup now include ConfigValidator?
 """
 
 import asyncio
-import os
 import sys
 
 sys.path.append("services/rag-service/src")

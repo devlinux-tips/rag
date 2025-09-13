@@ -31,9 +31,9 @@ class ProcessedQuery:
     original: str
     processed: str
     query_type: str
-    keywords: List[str]
-    expanded_terms: List[str]
-    metadata: Dict[str, Any]
+    keywords: list[str]
+    expanded_terms: list[str]
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -41,23 +41,23 @@ class SearchResult:
     """Individual search result."""
 
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     similarity_score: float
     final_score: float
-    boosts: Dict[str, float]
+    boosts: dict[str, float]
 
 
 @dataclass
 class HierarchicalRetrievalResult:
     """Result of hierarchical retrieval with routing information."""
 
-    documents: List[Dict[str, Any]]
+    documents: list[dict[str, Any]]
     category: str
     strategy_used: str
     retrieval_time: float
     total_results: int
     confidence: float
-    routing_metadata: Dict[str, Any]
+    routing_metadata: dict[str, Any]
 
 
 @dataclass
@@ -65,9 +65,9 @@ class RetrievalConfig:
     """Configuration for hierarchical retrieval."""
 
     default_max_results: int
-    similarity_thresholds: Dict[str, float]
-    boost_weights: Dict[str, float]
-    strategy_mappings: Dict[str, str]
+    similarity_thresholds: dict[str, float]
+    boost_weights: dict[str, float]
+    strategy_mappings: dict[str, str]
     performance_tracking: bool
 
 
@@ -75,7 +75,9 @@ class RetrievalConfig:
 class QueryProcessor(Protocol):
     """Protocol for query processing operations."""
 
-    def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> ProcessedQuery:
+    def process_query(
+        self, query: str, context: Optional[dict[str, Any]] = None
+    ) -> ProcessedQuery:
         """Process query into structured format."""
         ...
 
@@ -85,7 +87,7 @@ class Categorizer(Protocol):
     """Protocol for query categorization operations."""
 
     def categorize_query(
-        self, query: str, context: Optional[Dict[str, Any]] = None
+        self, query: str, context: Optional[dict[str, Any]] = None
     ) -> CategoryMatch:
         """Categorize query and determine retrieval strategy."""
         ...
@@ -97,7 +99,7 @@ class SearchEngine(Protocol):
 
     async def search(
         self, query_text: str, k: int = 5, similarity_threshold: float = 0.3
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Execute semantic search."""
         ...
 
@@ -109,9 +111,9 @@ class Reranker(Protocol):
     async def rerank(
         self,
         query: str,
-        documents: List[Dict[str, Any]],
+        documents: list[dict[str, Any]],
         category: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Rerank documents based on relevance."""
         ...
 
@@ -138,7 +140,9 @@ class LoggerProvider(Protocol):
 # ================================
 
 
-def calculate_keyword_boost(content: str, keywords: List[str], boost_weight: float = 0.2) -> float:
+def calculate_keyword_boost(
+    content: str, keywords: list[str], boost_weight: float = 0.2
+) -> float:
     """
     Calculate keyword match boost for content.
     Pure function with no side effects.
@@ -195,7 +199,7 @@ def calculate_technical_boost(content: str, boost_weight: float = 0.1) -> float:
 
 def calculate_temporal_boost(
     content: str,
-    metadata: Dict[str, Any],
+    metadata: dict[str, Any],
     current_year: int = 2024,
     boost_weight: float = 0.15,
 ) -> float:
@@ -277,11 +281,14 @@ def calculate_faq_boost(content: str, boost_weight: float = 0.1) -> float:
 
     content_lower = content.lower()
     faq_score = (
-        sum(boost_weight for indicator in faq_indicators if indicator in content_lower) * 0.3
+        sum(boost_weight for indicator in faq_indicators if indicator in content_lower)
+        * 0.3
     )  # Moderate FAQ boost
 
     # Question-answer structure boost
-    if any(pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]):
+    if any(
+        pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]
+    ):
         faq_score += 0.2
 
     # Short, concise answer boost (FAQ answers are usually brief)
@@ -327,13 +334,15 @@ def calculate_comparative_boost(content: str, boost_weight: float = 0.1) -> floa
 
     # Structure indicators boost (tables, lists, comparisons)
     structure_indicators = ["|", "vs", "•", "-", "1.", "2.", "prvo", "drugo"]
-    structure_score = sum(0.05 for indicator in structure_indicators if indicator in content)
+    structure_score = sum(
+        0.05 for indicator in structure_indicators if indicator in content
+    )
 
     return comparative_score + structure_score
 
 
 def calculate_exact_match_boost(
-    content: str, query_words: List[str], boost_weight: float = 0.2
+    content: str, query_words: list[str], boost_weight: float = 0.2
 ) -> float:
     """
     Calculate exact term matching boost.
@@ -358,11 +367,11 @@ def calculate_exact_match_boost(
 
 
 def apply_strategy_specific_processing(
-    results: List[SearchResult],
+    results: list[SearchResult],
     strategy: RetrievalStrategyType,
     processed_query: ProcessedQuery,
     config: RetrievalConfig,
-) -> List[SearchResult]:
+) -> list[SearchResult]:
     """
     Apply strategy-specific processing to search results.
     Pure function with no side effects.
@@ -465,8 +474,8 @@ def apply_strategy_specific_processing(
 
 
 def filter_results_by_threshold(
-    results: List[SearchResult], similarity_threshold: float
-) -> List[SearchResult]:
+    results: list[SearchResult], similarity_threshold: float
+) -> list[SearchResult]:
     """
     Filter results by similarity threshold.
     Pure function with no side effects.
@@ -478,13 +487,15 @@ def filter_results_by_threshold(
     Returns:
         Filtered search results
     """
-    return [result for result in results if result.similarity_score >= similarity_threshold]
+    return [
+        result for result in results if result.similarity_score >= similarity_threshold
+    ]
 
 
 def calculate_overall_confidence(
     category_confidence: float,
-    top_results: List[SearchResult],
-    weights: Tuple[float, float] = (0.6, 0.4),
+    top_results: list[SearchResult],
+    weights: tuple[float, float] = (0.6, 0.4),
 ) -> float:
     """
     Calculate overall retrieval confidence.
@@ -514,10 +525,10 @@ def create_routing_metadata(
     processed_query: ProcessedQuery,
     categorization: CategoryMatch,
     strategy_used: RetrievalStrategyType,
-    results: List[SearchResult],
+    results: list[SearchResult],
     retrieval_time: float,
     reranking_applied: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create routing metadata for result tracking.
     Pure function with no side effects.
@@ -593,7 +604,7 @@ class HierarchicalRetriever:
         self,
         query: str,
         max_results: int = None,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
     ) -> HierarchicalRetrievalResult:
         """
         Execute hierarchical retrieval with intelligent routing.
@@ -624,7 +635,9 @@ class HierarchicalRetriever:
         # Step 2: Map strategy and get threshold
         strategy_type = self._map_retrieval_strategy(categorization.retrieval_strategy)
         if strategy_type.value not in self._config.similarity_thresholds:
-            raise ValueError(f"Missing similarity threshold for strategy '{strategy_type.value}'")
+            raise ValueError(
+                f"Missing similarity threshold for strategy '{strategy_type.value}'"
+            )
         similarity_threshold = self._config.similarity_thresholds[strategy_type.value]
 
         # Step 3: Execute search with expanded results for processing
@@ -641,9 +654,9 @@ class HierarchicalRetriever:
         )
 
         # Step 5: Filter and limit results
-        filtered_results = filter_results_by_threshold(processed_results, similarity_threshold)[
-            :max_results
-        ]
+        filtered_results = filter_results_by_threshold(
+            processed_results, similarity_threshold
+        )[:max_results]
 
         # Step 6: Convert to dict format for compatibility
         result_dicts = [
@@ -748,11 +761,13 @@ class HierarchicalRetriever:
 
         self._retrieval_count += 1
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics."""
         return {
             "total_retrievals": self._retrieval_count,
-            "strategy_stats": (self._strategy_stats.copy() if self._strategy_stats else {}),
+            "strategy_stats": (
+                self._strategy_stats.copy() if self._strategy_stats else {}
+            ),
             "reranking_enabled": self._reranker is not None,
             "performance_tracking": self._config.performance_tracking,
         }

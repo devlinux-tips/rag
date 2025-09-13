@@ -34,7 +34,7 @@ class RankingSignal:
     name: str
     score: float
     weight: float
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -43,23 +43,23 @@ class RankedDocument:
 
     id: str
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     original_score: float
     final_score: float
     rank: int
-    ranking_signals: List[RankingSignal]
-    ranking_metadata: Dict[str, Any]
+    ranking_signals: list[RankingSignal]
+    ranking_metadata: dict[str, Any]
 
 
 @dataclass
 class LanguageFeatures:
     """Language-specific features - pure data structure."""
 
-    importance_words: Set[str]
-    quality_indicators: Dict[str, List[str]]  # positive/negative patterns
-    cultural_patterns: List[str]
-    grammar_patterns: List[str]
-    type_weights: Dict[str, float]
+    importance_words: set[str]
+    quality_indicators: dict[str, list[str]]  # positive/negative patterns
+    cultural_patterns: list[str]
+    grammar_patterns: list[str]
+    type_weights: dict[str, float]
 
 
 @dataclass
@@ -67,14 +67,16 @@ class ProcessedQuery:
     """Processed query information - pure data structure."""
 
     text: str
-    keywords: List[str]
+    keywords: list[str]
     query_type: str
     language: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
     # ===== PROTOCOL DEFINITIONS =====
 
-    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
+    def get_language_specific_config(
+        self, section: str, language: str
+    ) -> dict[str, Any]:
         ...
 
 
@@ -84,7 +86,7 @@ class LanguageProvider(Protocol):
     def get_language_features(self, language: str) -> LanguageFeatures:
         ...
 
-    def detect_language_content(self, text: str) -> Dict[str, Any]:
+    def detect_language_content(self, text: str) -> dict[str, Any]:
         ...
 
 
@@ -95,8 +97,8 @@ class LanguageProvider(Protocol):
 
 
 def calculate_keyword_relevance_score(
-    content: str, keywords: List[str], boost_unique_coverage: bool = True
-) -> Tuple[float, Dict[str, Any]]:
+    content: str, keywords: list[str], boost_unique_coverage: bool = True
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate keyword relevance score.
     Pure function - no side effects, deterministic output.
@@ -154,10 +156,10 @@ def calculate_keyword_relevance_score(
 
 def calculate_content_quality_score(
     content: str,
-    quality_indicators: Dict[str, List[str]],
-    metadata: Dict[str, Any],
+    quality_indicators: dict[str, list[str]],
+    metadata: dict[str, Any],
     structured_content_boost: bool = True,
-) -> Tuple[float, Dict[str, Any]]:
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate content quality score.
     Pure function - no side effects, deterministic output.
@@ -193,7 +195,9 @@ def calculate_content_quality_score(
     score -= min(0.2, negative_matches * 0.1)
 
     # Boost for having title
-    has_title = bool(metadata.get("title"))  # Keep .get() - document metadata from external sources
+    has_title = bool(
+        metadata.get("title")
+    )  # Keep .get() - document metadata from external sources
     if has_title:
         score += 0.1
 
@@ -228,7 +232,7 @@ def calculate_content_quality_score(
 
 def calculate_language_relevance_score(
     content: str, language: str, language_features: LanguageFeatures
-) -> Tuple[float, Dict[str, Any]]:
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate language-specific relevance boost using configuration-driven approach.
 
@@ -296,14 +300,18 @@ def calculate_language_relevance_score(
         word_boost = importance_config["word_boost"]
         max_score = importance_config["max_score"]
 
-        importance_matches = sum(1 for word in importance_words if word in content_lower)
+        importance_matches = sum(
+            1 for word in importance_words if word in content_lower
+        )
         importance_score = min(max_score, importance_matches * word_boost)
         total_score += importance_score
 
         metadata["features_detected"]["importance_words"] = {
             "score": importance_score,
             "matches": importance_matches,
-            "matched_words": [word for word in importance_words if word in content_lower],
+            "matched_words": [
+                word for word in importance_words if word in content_lower
+            ],
         }
 
     # 3. Cultural Patterns
@@ -314,7 +322,8 @@ def calculate_language_relevance_score(
         max_score = cultural_config["max_score"]
 
         cultural_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in cultural_patterns
+            len(re.findall(pattern, content_lower, re.IGNORECASE))
+            for pattern in cultural_patterns
         )
         cultural_score = min(max_score, cultural_matches * pattern_boost)
         total_score += cultural_score
@@ -336,7 +345,9 @@ def calculate_language_relevance_score(
         )
         grammar_score = 0.0
         if word_count > 0:
-            grammar_score = min(max_score, grammar_matches / word_count * density_factor)
+            grammar_score = min(
+                max_score, grammar_matches / word_count * density_factor
+            )
         total_score += grammar_score
 
         metadata["features_detected"]["grammar_patterns"] = {
@@ -356,7 +367,9 @@ def calculate_language_relevance_score(
 
         # Analyze general capitalization patterns
         sentence_count = len(re.findall(r"[.!?]+", content))
-        capital_starts = len(re.findall(r"(?:^|[.!?]\\s+)([A-Z][a-z])", content, re.MULTILINE))
+        capital_starts = len(
+            re.findall(r"(?:^|[.!?]\\s+)([A-Z][a-z])", content, re.MULTILINE)
+        )
 
         capitalization_score = 0.0
         if sentence_count > 0:
@@ -364,7 +377,9 @@ def calculate_language_relevance_score(
             capitalization_score = min(max_score, capitalization_ratio * 0.5)
 
         # Add proper noun bonus
-        capitalization_score += min(max_score * 0.5, proper_noun_matches * capitalization_boost)
+        capitalization_score += min(
+            max_score * 0.5, proper_noun_matches * capitalization_boost
+        )
         capitalization_score = min(max_score, capitalization_score)
 
         total_score += capitalization_score
@@ -372,7 +387,9 @@ def calculate_language_relevance_score(
         metadata["features_detected"]["capitalization"] = {
             "score": capitalization_score,
             "proper_noun_matches": proper_noun_matches,
-            "sentence_capitalization_ratio": (capitalization_ratio if sentence_count > 0 else 0.0),
+            "sentence_capitalization_ratio": (
+                capitalization_ratio if sentence_count > 0 else 0.0
+            ),
         }
 
     # 6. Vocabulary Patterns
@@ -383,7 +400,8 @@ def calculate_language_relevance_score(
         max_score = vocabulary_config["max_score"]
 
         vocab_matches = sum(
-            len(re.findall(pattern, content_lower, re.IGNORECASE)) for pattern in vocab_patterns
+            len(re.findall(pattern, content_lower, re.IGNORECASE))
+            for pattern in vocab_patterns
         )
         vocab_score = 0.0
         if word_count > 0:
@@ -406,10 +424,10 @@ def calculate_language_relevance_score(
 
 
 def calculate_authority_score(
-    metadata: Dict[str, Any],
-    type_weights: Dict[str, float],
-    authoritative_sources: List[str],
-) -> Tuple[float, Dict[str, Any]]:
+    metadata: dict[str, Any],
+    type_weights: dict[str, float],
+    authoritative_sources: list[str],
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate document authority score.
     Pure function - no side effects, deterministic output.
@@ -469,8 +487,8 @@ def calculate_authority_score(
 
 
 def calculate_length_appropriateness_score(
-    content: str, query_type: str, optimal_ranges: Dict[str, Tuple[int, int]]
-) -> Tuple[float, Dict[str, Any]]:
+    content: str, query_type: str, optimal_ranges: dict[str, tuple[int, int]]
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate how appropriate content length is for query type.
     Pure function - no side effects, deterministic output.
@@ -519,8 +537,8 @@ def calculate_length_appropriateness_score(
 
 
 def calculate_query_type_match_score(
-    content: str, query_type: str, type_patterns: Dict[str, List[str]]
-) -> Tuple[float, Dict[str, Any]]:
+    content: str, query_type: str, type_patterns: dict[str, list[str]]
+) -> tuple[float, dict[str, Any]]:
     """
     Calculate how well content matches the query type.
     Pure function - no side effects, deterministic output.
@@ -538,7 +556,9 @@ def calculate_query_type_match_score(
 
     # Check type-specific patterns
     patterns = type_patterns[query_type] if query_type in type_patterns else []
-    pattern_matches = sum(len(re.findall(pattern, content_lower)) for pattern in patterns)
+    pattern_matches = sum(
+        len(re.findall(pattern, content_lower)) for pattern in patterns
+    )
     pattern_score = min(0.3, pattern_matches * 0.1)
     score += pattern_score
 
@@ -550,7 +570,9 @@ def calculate_query_type_match_score(
             structural_score = 0.2
     elif query_type == "explanatory":
         # Look for step-by-step or process indicators
-        if re.search(r"\b\d+\.\s+\w+", content) or re.search(r"prvo|drugo|treće", content_lower):
+        if re.search(r"\b\d+\.\s+\w+", content) or re.search(
+            r"prvo|drugo|treće", content_lower
+        ):
             structural_score = 0.2
 
     score += structural_score
@@ -565,7 +587,7 @@ def calculate_query_type_match_score(
     return score, metadata
 
 
-def combine_ranking_signals(signals: List[RankingSignal]) -> float:
+def combine_ranking_signals(signals: list[RankingSignal]) -> float:
     """
     Combine multiple ranking signals into final score.
     Pure function - no side effects, deterministic output.
@@ -593,10 +615,10 @@ def combine_ranking_signals(signals: List[RankingSignal]) -> float:
 
 
 def apply_diversity_filtering(
-    ranked_docs: List[RankedDocument],
+    ranked_docs: list[RankedDocument],
     diversity_threshold: float = 0.8,
     min_results: int = 2,
-) -> List[RankedDocument]:
+) -> list[RankedDocument]:
     """
     Apply diversity filtering to avoid too similar results.
     Pure function - no side effects, deterministic output.
@@ -624,7 +646,9 @@ def apply_diversity_filtering(
         for existing_hash in used_content_hashes:
             if len(content_words) == 0 or len(existing_hash) == 0:
                 continue
-            similarity = len(content_words & existing_hash) / len(content_words | existing_hash)
+            similarity = len(content_words & existing_hash) / len(
+                content_words | existing_hash
+            )
             if similarity > diversity_threshold:
                 is_similar = True
                 break
@@ -701,10 +725,10 @@ class DocumentRanker:
 
     def rank_documents(
         self,
-        documents: List[Dict[str, Any]],
+        documents: list[dict[str, Any]],
         query: ProcessedQuery,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[RankedDocument]:
+        context: Optional[dict[str, Any]] = None,
+    ) -> list[RankedDocument]:
         """
         Rank and re-order documents for better relevance.
 
@@ -721,7 +745,9 @@ class DocumentRanker:
 
         context = context or {}
 
-        self.logger.info(f"Ranking {len(documents)} documents using {self.config.method.value}")
+        self.logger.info(
+            f"Ranking {len(documents)} documents using {self.config.method.value}"
+        )
 
         # Step 1: Calculate ranking signals for each document
         ranked_docs = []
@@ -731,7 +757,9 @@ class DocumentRanker:
 
         # Step 2: Apply diversity filtering if enabled
         if self.config.enable_diversity:
-            ranked_docs = apply_diversity_filtering(ranked_docs, self.config.diversity_threshold)
+            ranked_docs = apply_diversity_filtering(
+                ranked_docs, self.config.diversity_threshold
+            )
 
         # Step 3: Final sort by score
         ranked_docs.sort(key=lambda x: x.final_score, reverse=True)
@@ -744,11 +772,15 @@ class DocumentRanker:
         return ranked_docs
 
     def _rank_single_document(
-        self, document: Dict[str, Any], query: ProcessedQuery, context: Dict[str, Any]
+        self, document: dict[str, Any], query: ProcessedQuery, context: dict[str, Any]
     ) -> RankedDocument:
         """Calculate ranking signals for a single document."""
-        content = document.get("content", "")  # Keep .get() - document data from external sources
-        metadata = document.get("metadata", {})  # Keep .get() - document data from external sources
+        content = document.get(
+            "content", ""
+        )  # Keep .get() - document data from external sources
+        metadata = document.get(
+            "metadata", {}
+        )  # Keep .get() - document data from external sources
         original_score = document.get(
             "relevance_score", 0.0
         )  # Keep .get() - document data from external sources
@@ -765,7 +797,9 @@ class DocumentRanker:
         ranking_signals.append(semantic_signal)
 
         # Signal 2: Keyword relevance
-        keyword_score, keyword_metadata = calculate_keyword_relevance_score(content, query.keywords)
+        keyword_score, keyword_metadata = calculate_keyword_relevance_score(
+            content, query.keywords
+        )
         keyword_signal = RankingSignal(
             name="keyword_relevance",
             score=keyword_score,
@@ -829,7 +863,9 @@ class DocumentRanker:
         }
 
         return RankedDocument(
-            id=document.get("id", "unknown"),  # Keep .get() - document data from external sources
+            id=document.get(
+                "id", "unknown"
+            ),  # Keep .get() - document data from external sources
             content=content,
             metadata=metadata,
             original_score=original_score,
@@ -876,7 +912,7 @@ def create_document_ranker(
 
 
 def create_mock_ranker(
-    language: str = "hr", config_dict: Optional[Dict[str, Any]] = None
+    language: str = "hr", config_dict: Optional[dict[str, Any]] = None
 ) -> DocumentRanker:
     """
     Factory function to create mock ranker for testing.
@@ -889,7 +925,10 @@ def create_mock_ranker(
         DocumentRanker with mock providers
     """
     # Import here to avoid circular imports
-    from .ranker_providers import create_mock_config_provider, create_mock_language_provider
+    from .ranker_providers import (
+        create_mock_config_provider,
+        create_mock_language_provider,
+    )
 
     config_provider = create_mock_config_provider(config_dict or {})
     language_provider = create_mock_language_provider()

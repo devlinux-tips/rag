@@ -40,7 +40,7 @@ class OllamaConfig:
     confidence_threshold: float = 0.5
 
     # Fallback models
-    fallback_models: List[str] = field(
+    fallback_models: list[str] = field(
         default_factory=lambda: ["qwen2.5:7b-instruct", "llama3.1:8b", "mistral:7b"]
     )
 
@@ -50,11 +50,11 @@ class GenerationRequest:
     """Request for text generation - pure data structure."""
 
     prompt: str
-    context: List[str]
+    context: list[str]
     query: str
     query_type: str = "general"
     language: str = "hr"
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -66,7 +66,7 @@ class GenerationResponse:
     tokens_used: int
     generation_time: float
     confidence: float
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     language: str = "hr"
 
 
@@ -76,9 +76,9 @@ class HttpResponse:
 
     status_code: int
     content: bytes
-    json_data: Optional[Dict[str, Any]] = None
+    json_data: Optional[dict[str, Any]] = None
 
-    def json(self) -> Dict[str, Any]:
+    def json(self) -> dict[str, Any]:
         """Get JSON data from response."""
         if self.json_data is not None:
             return self.json_data
@@ -113,14 +113,14 @@ class HttpClient(Protocol):
         ...
 
     async def post(
-        self, url: str, json_data: Dict[str, Any], timeout: float = 30.0
+        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
     ) -> HttpResponse:
         """Make POST request."""
         ...
 
     async def stream_post(
-        self, url: str, json_data: Dict[str, Any], timeout: float = 30.0
-    ) -> List[str]:
+        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
+    ) -> list[str]:
         """Make streaming POST request, return lines."""
         ...
 
@@ -132,7 +132,7 @@ class HttpClient(Protocol):
 class LanguageConfigProvider(Protocol):
     """Language-specific configuration provider."""
 
-    def get_formal_prompts(self, language: str) -> Dict[str, str]:
+    def get_formal_prompts(self, language: str) -> dict[str, str]:
         """Get formal prompt templates for language."""
         ...
 
@@ -140,14 +140,14 @@ class LanguageConfigProvider(Protocol):
         """Get error message template for language."""
         ...
 
-    def get_confidence_settings(self, language: str) -> Dict[str, Any]:
+    def get_confidence_settings(self, language: str) -> dict[str, Any]:
         """Get confidence calculation settings for language."""
         ...
 
 
 # Pure functions for business logic
 def build_complete_prompt(
-    query: str, context: Optional[List[str]] = None, system_prompt: Optional[str] = None
+    query: str, context: Optional[list[str]] = None, system_prompt: Optional[str] = None
 ) -> str:
     """
     Build complete prompt from components.
@@ -179,7 +179,7 @@ def build_complete_prompt(
 
 
 def enhance_prompt_with_formality(
-    prompt: str, formal_prompts: Dict[str, str], use_formal_style: bool = True
+    prompt: str, formal_prompts: dict[str, str], use_formal_style: bool = True
 ) -> str:
     """
     Enhance prompt with formal language instructions.
@@ -199,7 +199,7 @@ def enhance_prompt_with_formality(
     return f"{formal_instruction}\n\n{prompt}"
 
 
-def create_ollama_request(prompt: str, config: OllamaConfig) -> Dict[str, Any]:
+def create_ollama_request(prompt: str, config: OllamaConfig) -> dict[str, Any]:
     """
     Create Ollama API request from prompt and config.
 
@@ -223,7 +223,7 @@ def create_ollama_request(prompt: str, config: OllamaConfig) -> Dict[str, Any]:
     }
 
 
-def parse_streaming_response(json_lines: List[str]) -> str:
+def parse_streaming_response(json_lines: list[str]) -> str:
     """
     Parse streaming JSON lines into complete text.
 
@@ -252,7 +252,7 @@ def parse_streaming_response(json_lines: List[str]) -> str:
     return "".join(generated_chunks)
 
 
-def parse_non_streaming_response(response_data: Dict[str, Any]) -> str:
+def parse_non_streaming_response(response_data: dict[str, Any]) -> str:
     """
     Parse non-streaming response into text.
 
@@ -268,7 +268,7 @@ def parse_non_streaming_response(response_data: Dict[str, Any]) -> str:
 
 
 def calculate_generation_confidence(
-    generated_text: str, request: GenerationRequest, confidence_settings: Dict[str, Any]
+    generated_text: str, request: GenerationRequest, confidence_settings: dict[str, Any]
 ) -> float:
     """
     Calculate confidence score for generated text.
@@ -335,7 +335,7 @@ def estimate_token_count(text: str) -> int:
     return len(text.split()) if text else 0
 
 
-def extract_model_list(api_response: Dict[str, Any]) -> List[str]:
+def extract_model_list(api_response: dict[str, Any]) -> list[str]:
     """
     Extract model names from Ollama API tags response.
 
@@ -356,7 +356,7 @@ def extract_model_list(api_response: Dict[str, Any]) -> List[str]:
     return result
 
 
-def check_model_availability(model_name: str, available_models: List[str]) -> bool:
+def check_model_availability(model_name: str, available_models: list[str]) -> bool:
     """
     Check if a model is available in the list.
 
@@ -446,7 +446,9 @@ class MultilingualOllamaClient:
 
         return DefaultLanguageProvider()
 
-    async def generate_text_async(self, request: GenerationRequest) -> GenerationResponse:
+    async def generate_text_async(
+        self, request: GenerationRequest
+    ) -> GenerationResponse:
         """
         Generate text using Ollama with async support.
 
@@ -463,13 +465,17 @@ class MultilingualOllamaClient:
             raise ConnectionError("Ollama service is not available")
 
         # Step 2: Get language-specific configuration
-        formal_prompts = self.language_config_provider.get_formal_prompts(request.language)
+        formal_prompts = self.language_config_provider.get_formal_prompts(
+            request.language
+        )
 
         # Get appropriate system prompt based on query type
         system_prompt = self._get_system_prompt_for_query(request, formal_prompts)
 
         # Step 3: Build and enhance prompt
-        base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
+        base_prompt = build_complete_prompt(
+            request.query, request.context, system_prompt
+        )
 
         enhanced_prompt = enhance_prompt_with_formality(
             base_prompt, formal_prompts, self.config.prefer_formal_style
@@ -487,7 +493,9 @@ class MultilingualOllamaClient:
             )
             generated_text = parse_streaming_response(json_lines)
         else:
-            response = await self.http_client.post(url, ollama_request, self.config.timeout)
+            response = await self.http_client.post(
+                url, ollama_request, self.config.timeout
+            )
             generated_text = parse_non_streaming_response(response.json())
 
         # Step 6: Apply text preservation if needed
@@ -498,7 +506,9 @@ class MultilingualOllamaClient:
         confidence_settings = self.language_config_provider.get_confidence_settings(
             request.language
         )
-        confidence = calculate_generation_confidence(generated_text, request, confidence_settings)
+        confidence = calculate_generation_confidence(
+            generated_text, request, confidence_settings
+        )
 
         # Step 8: Build response
         metadata = {
@@ -532,7 +542,7 @@ class MultilingualOllamaClient:
         response = await self.http_client.get(url, timeout=5.0)
         return response.status_code == 200
 
-    async def get_available_models(self) -> List[str]:
+    async def get_available_models(self) -> list[str]:
         """
         Get list of available models.
 
@@ -585,7 +595,7 @@ class MultilingualOllamaClient:
     def generate_response(
         self,
         prompt: str,
-        context: Optional[List[str]] = None,
+        context: Optional[list[str]] = None,
         system_prompt: Optional[str] = None,
         language: str = "hr",
     ) -> str:
@@ -633,7 +643,7 @@ class MultilingualOllamaClient:
         return await self.is_service_available()
 
     def _get_system_prompt_for_query(
-        self, request: GenerationRequest, formal_prompts: Dict[str, str]
+        self, request: GenerationRequest, formal_prompts: dict[str, str]
     ) -> str:
         """
         Select appropriate system prompt based on query type and language using configuration.

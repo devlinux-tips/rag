@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class MockConfigProvider(ConfigProvider):
     """Mock configuration provider for testing."""
 
-    def __init__(self, config_dict: Dict[str, Any]):
+    def __init__(self, config_dict: dict[str, Any]):
         """
         Initialize with test configuration.
 
@@ -88,7 +88,7 @@ class MockConfigProvider(ConfigProvider):
             },
         }
 
-    def get_ranking_config(self) -> Dict[str, Any]:
+    def get_ranking_config(self) -> dict[str, Any]:
         """Get ranking configuration for testing."""
         return self.config_dict.get(
             "ranking",
@@ -104,7 +104,9 @@ class MockConfigProvider(ConfigProvider):
             },
         )
 
-    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
+    def get_language_specific_config(
+        self, section: str, language: str
+    ) -> dict[str, Any]:
         """Get language-specific configuration for testing."""
         return self.language_configs.get(language, {})
 
@@ -238,7 +240,7 @@ class MockLanguageProvider(LanguageProvider):
         self.language_features_cache[language] = features
         return features
 
-    def detect_language_content(self, text: str) -> Dict[str, Any]:
+    def detect_language_content(self, text: str) -> dict[str, Any]:
         """Mock language detection for testing."""
         # Simple mock detection based on character patterns
         if any(char in text.lower() for char in "čćšžđ"):
@@ -256,24 +258,31 @@ class ProductionConfigProvider(ConfigProvider):
     def __init__(self):
         """Initialize production config provider."""
         # Import here to avoid circular imports
-        from ..utils.config_loader import get_language_specific_config, get_ranking_config
+        from ..utils.config_loader import (
+            get_language_specific_config,
+            get_ranking_config,
+        )
 
         self._get_ranking_config = get_ranking_config
         self._get_language_specific_config = get_language_specific_config
         self.logger = logging.getLogger(__name__)
 
-    def get_ranking_config(self) -> Dict[str, Any]:
+    def get_ranking_config(self) -> dict[str, Any]:
         """Get ranking configuration from config files."""
         config = self._get_ranking_config()
         if not config:
             raise ValueError("Missing ranking configuration in config files")
         return config
 
-    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
+    def get_language_specific_config(
+        self, section: str, language: str
+    ) -> dict[str, Any]:
         """Get language-specific configuration from config files."""
         config = self._get_language_specific_config(section, language)
         if not config:
-            raise ValueError(f"Missing {section} configuration for language '{language}'")
+            raise ValueError(
+                f"Missing {section} configuration for language '{language}'"
+            )
         return config
 
 
@@ -319,7 +328,7 @@ class ProductionLanguageProvider(LanguageProvider):
             raise
 
     def _build_language_features(
-        self, language: str, morphology: Dict[str, Any]
+        self, language: str, morphology: dict[str, Any]
     ) -> LanguageFeatures:
         """Build language features from configuration."""
 
@@ -379,7 +388,7 @@ class ProductionLanguageProvider(LanguageProvider):
             type_weights=type_weights,
         )
 
-    def _get_default_importance_words(self, language: str) -> Set[str]:
+    def _get_default_importance_words(self, language: str) -> set[str]:
         """Get default importance words for language."""
         defaults = {
             "hr": {
@@ -419,7 +428,7 @@ class ProductionLanguageProvider(LanguageProvider):
         }
         return defaults.get(language, set())
 
-    def _get_default_quality_positive(self, language: str) -> List[str]:
+    def _get_default_quality_positive(self, language: str) -> list[str]:
         """Get default positive quality indicators."""
         defaults = {
             "hr": [
@@ -435,7 +444,7 @@ class ProductionLanguageProvider(LanguageProvider):
         }
         return defaults.get(language, [])
 
-    def _get_default_quality_negative(self, language: str) -> List[str]:
+    def _get_default_quality_negative(self, language: str) -> list[str]:
         """Get default negative quality indicators."""
         defaults = {
             "hr": [
@@ -451,7 +460,7 @@ class ProductionLanguageProvider(LanguageProvider):
         }
         return defaults.get(language, [])
 
-    def _get_default_cultural_patterns(self, language: str) -> List[str]:
+    def _get_default_cultural_patterns(self, language: str) -> list[str]:
         """Get default cultural patterns."""
         defaults = {
             "hr": [
@@ -467,7 +476,7 @@ class ProductionLanguageProvider(LanguageProvider):
         }
         return defaults.get(language, [])
 
-    def _get_default_grammar_patterns(self, language: str) -> List[str]:
+    def _get_default_grammar_patterns(self, language: str) -> list[str]:
         """Get default grammar patterns."""
         defaults = {
             "hr": [r"\b\w+ić\b", r"\b\w+ović\b", r"\b\w+ski\b", r"\b\w+nja\b"],
@@ -475,7 +484,7 @@ class ProductionLanguageProvider(LanguageProvider):
         }
         return defaults.get(language, [])
 
-    def detect_language_content(self, text: str) -> Dict[str, Any]:
+    def detect_language_content(self, text: str) -> dict[str, Any]:
         """Detect language from content."""
         # Import here to avoid circular imports
         try:
@@ -507,7 +516,7 @@ def create_language_provider(
     return ProductionLanguageProvider(config_provider)
 
 
-def create_mock_config_provider(config_dict: Dict[str, Any] = None) -> ConfigProvider:
+def create_mock_config_provider(config_dict: dict[str, Any] = None) -> ConfigProvider:
     """Create mock configuration provider for testing."""
     return MockConfigProvider(config_dict or {})
 

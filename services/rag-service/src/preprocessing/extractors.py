@@ -43,8 +43,8 @@ class ExtractionResult:
 class ExtractionConfig:
     """Configuration for document extraction."""
 
-    supported_formats: List[str]
-    text_encodings: List[str]
+    supported_formats: list[str]
+    text_encodings: list[str]
     max_file_size_mb: int = 50
     enable_logging: bool = True
 
@@ -74,7 +74,7 @@ class FileSystemProvider(Protocol):
 class ConfigProvider(Protocol):
     """Protocol for configuration access."""
 
-    def get_extraction_config(self) -> Dict[str, Any]:
+    def get_extraction_config(self) -> dict[str, Any]:
         """Get extraction configuration."""
         ...
 
@@ -98,8 +98,8 @@ class LoggerProvider(Protocol):
 
 
 def validate_file_format(
-    file_path: Path, supported_formats: List[str]
-) -> Tuple[bool, Optional[str]]:
+    file_path: Path, supported_formats: list[str]
+) -> tuple[bool, Optional[str]]:
     """
     Validate if file format is supported.
 
@@ -117,7 +117,7 @@ def validate_file_format(
     return True, None
 
 
-def extract_text_from_pdf_binary(pdf_binary: bytes) -> Tuple[str, int]:
+def extract_text_from_pdf_binary(pdf_binary: bytes) -> tuple[str, int]:
     """
     Extract text from PDF binary data.
     Pure function with no side effects.
@@ -133,7 +133,9 @@ def extract_text_from_pdf_binary(pdf_binary: bytes) -> Tuple[str, int]:
         ImportError: If pypdf is not available
     """
     if not PYPDF_AVAILABLE:
-        raise ImportError("pypdf is required for PDF extraction. Install with: pip install pypdf")
+        raise ImportError(
+            "pypdf is required for PDF extraction. Install with: pip install pypdf"
+        )
 
     from io import BytesIO
 
@@ -189,8 +191,8 @@ def extract_text_from_docx_binary(docx_binary: bytes) -> str:
 
 
 def extract_text_with_encoding_fallback(
-    text_binary: bytes, encodings: List[str]
-) -> Tuple[str, str]:
+    text_binary: bytes, encodings: list[str]
+) -> tuple[str, str]:
     """
     Extract text with multiple encoding fallback.
     Pure function with no side effects.
@@ -300,7 +302,9 @@ class DocumentExtractor:
             )
 
         # Format validation
-        is_valid, error_msg = validate_file_format(file_path, self._config.supported_formats)
+        is_valid, error_msg = validate_file_format(
+            file_path, self._config.supported_formats
+        )
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -398,7 +402,10 @@ def extract_document_text(
     Returns:
         Extracted text content
     """
-    from .extractors_providers import create_config_provider, create_file_system_provider
+    from .extractors_providers import (
+        create_config_provider,
+        create_file_system_provider,
+    )
 
     if isinstance(file_path, str):
         file_path = Path(file_path)

@@ -20,7 +20,7 @@ def extract_actual_schema():
         hr_config = get_language_config("hr")
         en_config = get_language_config("en")
 
-        print(f"✅ Loaded configs successfully")
+        print("✅ Loaded configs successfully")
         print(f"   Main config sections: {list(main_config.keys())}")
         print(f"   HR config sections: {list(hr_config.keys())}")
         print(f"   EN config sections: {list(en_config.keys())}")
@@ -42,20 +42,20 @@ def extract_actual_schema():
         main_count, main_keys = count_keys(main_config)
         hr_count, hr_keys = count_keys(hr_config)
 
-        print(f"\n📊 ACTUAL CONFIG STRUCTURE:")
+        print("\n📊 ACTUAL CONFIG STRUCTURE:")
         print(f"   Main config: {main_count} keys")
         print(f"   Language config: {hr_count} keys")
         print(f"   Total: {main_count + hr_count} keys")
 
-        print(f"\n🎯 ConfigValidator was expecting 189 keys")
+        print("\n🎯 ConfigValidator was expecting 189 keys")
         print(f"   Reality: {main_count + hr_count} keys")
         print(f"   Difference: {189 - (main_count + hr_count)} extra keys in schema")
 
-        print(f"\n📋 SAMPLE MAIN CONFIG KEYS:")
+        print("\n📋 SAMPLE MAIN CONFIG KEYS:")
         for key in sorted(main_keys)[:20]:
             print(f"   {key}")
 
-        print(f"\n📋 SAMPLE LANGUAGE CONFIG KEYS:")
+        print("\n📋 SAMPLE LANGUAGE CONFIG KEYS:")
         for key in sorted(hr_keys)[:20]:
             print(f"   {key}")
 

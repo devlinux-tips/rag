@@ -49,19 +49,19 @@ class ConfigLoader:
     def __init__(self, config_dir: Path = CONFIG_DIR):
         """Initialize config loader with directory path."""
         self.config_dir = config_dir
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: dict[str, dict[str, Any]] = {}
 
         # Validate config directory exists
         if not self.config_dir.exists():
             raise ConfigError(f"Configuration directory not found: {self.config_dir}")
 
-    def _get_language_config_files(self) -> Dict[str, str]:
+    def _get_language_config_files(self) -> dict[str, str]:
         """Get available language config files dynamically."""
         # Convention-based approach: language code maps to filename (hr -> hr.toml, en -> en.toml)
         # This matches the actual architecture used in the project
         return {}
 
-    def load(self, config_name: str, use_cache: bool = True) -> Dict[str, Any]:
+    def load(self, config_name: str, use_cache: bool = True) -> dict[str, Any]:
         """
         Load a TOML configuration file.
 
@@ -110,7 +110,7 @@ class ConfigLoader:
         except Exception as e:
             raise ConfigError(f"Failed to load {config_path}: {e}")
 
-    def get_section(self, config_name: str, section: str) -> Dict[str, Any]:
+    def get_section(self, config_name: str, section: str) -> dict[str, Any]:
         """
         Get a specific section from a config file.
 
@@ -131,7 +131,7 @@ class ConfigLoader:
 
         return config[section]
 
-    def merge_configs(self, *config_names: str) -> Dict[str, Any]:
+    def merge_configs(self, *config_names: str) -> dict[str, Any]:
         """
         Merge multiple configuration files.
 
@@ -159,7 +159,7 @@ class ConfigLoader:
 _config_loader = ConfigLoader()
 
 
-def load_config(config_name: str, use_cache: bool = True) -> Dict[str, Any]:
+def load_config(config_name: str, use_cache: bool = True) -> dict[str, Any]:
     """
     Load a configuration file using the global config loader.
 
@@ -173,7 +173,7 @@ def load_config(config_name: str, use_cache: bool = True) -> Dict[str, Any]:
     return _config_loader.load(config_name, use_cache=use_cache)
 
 
-def get_config_section(config_name: str, section: str) -> Dict[str, Any]:
+def get_config_section(config_name: str, section: str) -> dict[str, Any]:
     """
     Get a specific section from a config file.
 
@@ -187,7 +187,7 @@ def get_config_section(config_name: str, section: str) -> Dict[str, Any]:
     return _config_loader.get_section(config_name, section)
 
 
-def get_shared_config() -> Dict[str, Any]:
+def get_shared_config() -> dict[str, Any]:
     """Get shared configuration from main config (constants and common settings)."""
     main_config = load_config("config")
     return main_config["shared"]
@@ -198,7 +198,7 @@ def get_shared_config() -> Dict[str, Any]:
 # ============================================================================
 
 
-def get_language_config(language: str) -> Dict[str, Any]:
+def get_language_config(language: str) -> dict[str, Any]:
     """
     Get configuration for specified language.
 
@@ -224,7 +224,7 @@ def get_language_config(language: str) -> Dict[str, Any]:
     return load_config(config_name)
 
 
-def get_language_shared(language: str) -> Dict[str, Any]:
+def get_language_shared(language: str) -> dict[str, Any]:
     """
     Get shared configuration for specified language.
 
@@ -238,7 +238,7 @@ def get_language_shared(language: str) -> Dict[str, Any]:
     return config["shared"]
 
 
-def get_language_specific_config(section: str, language: str) -> Dict[str, Any]:
+def get_language_specific_config(section: str, language: str) -> dict[str, Any]:
     """
     Get specific configuration section for specified language.
 
@@ -319,7 +319,7 @@ def discover_available_languages() -> list[str]:
     return language_files
 
 
-def validate_language_configuration() -> Dict[str, str]:
+def validate_language_configuration() -> dict[str, str]:
     """
     Validate that all supported languages have config files.
 
@@ -350,7 +350,7 @@ def validate_language_configuration() -> Dict[str, str]:
     return valid_mapping
 
 
-def get_generation_config() -> Dict[str, Any]:
+def get_generation_config() -> dict[str, Any]:
     """
     Get generation module configuration.
 
@@ -360,7 +360,7 @@ def get_generation_config() -> Dict[str, Any]:
     return load_config("generation")
 
 
-def get_ollama_config() -> Dict[str, Any]:
+def get_ollama_config() -> dict[str, Any]:
     """
     Get Ollama-specific configuration.
 
@@ -370,36 +370,36 @@ def get_ollama_config() -> Dict[str, Any]:
     return get_config_section("generation", "ollama")
 
 
-def get_response_parsing_config() -> Dict[str, Any]:
+def get_response_parsing_config() -> dict[str, Any]:
     """Get response parsing configuration."""
     generation_config = get_generation_config()
     return generation_config["response_parsing"]
 
 
-def get_preprocessing_config() -> Dict[str, Any]:
+def get_preprocessing_config() -> dict[str, Any]:
     """Get preprocessing configuration."""
     return _config_loader.load("preprocessing")
 
 
-def get_extraction_config() -> Dict[str, Any]:
+def get_extraction_config() -> dict[str, Any]:
     """Get extraction configuration."""
     preprocessing_config = get_preprocessing_config()
     return preprocessing_config["extraction"]
 
 
-def get_chunking_config() -> Dict[str, Any]:
+def get_chunking_config() -> dict[str, Any]:
     """Get chunking configuration."""
     preprocessing_config = get_preprocessing_config()
     return preprocessing_config["chunking"]
 
 
-def get_cleaning_config() -> Dict[str, Any]:
+def get_cleaning_config() -> dict[str, Any]:
     """Get cleaning configuration."""
     preprocessing_config = get_preprocessing_config()
     return preprocessing_config["cleaning"]
 
 
-def get_generation_prompts_config() -> Dict[str, Any]:
+def get_generation_prompts_config() -> dict[str, Any]:
     """
     Get generation prompts configuration.
 
@@ -409,7 +409,7 @@ def get_generation_prompts_config() -> Dict[str, Any]:
     return get_config_section("generation", "prompts")
 
 
-def merge_configs(*config_names: str) -> Dict[str, Any]:
+def merge_configs(*config_names: str) -> dict[str, Any]:
     """
     Merge multiple configuration files.
 
@@ -422,7 +422,7 @@ def merge_configs(*config_names: str) -> Dict[str, Any]:
     return _config_loader.merge_configs(*config_names)
 
 
-def reload_config(config_name: str) -> Dict[str, Any]:
+def reload_config(config_name: str) -> dict[str, Any]:
     """
     Force reload a configuration file (bypass cache).
 
@@ -435,7 +435,7 @@ def reload_config(config_name: str) -> Dict[str, Any]:
     return _config_loader.load(config_name, use_cache=False)
 
 
-def get_project_info() -> Dict[str, Any]:
+def get_project_info() -> dict[str, Any]:
     """
     Get main project information.
 
@@ -445,7 +445,7 @@ def get_project_info() -> Dict[str, Any]:
     return get_config_section("main", "project")
 
 
-def get_paths_config() -> Dict[str, str]:
+def get_paths_config() -> dict[str, str]:
     """
     Get project paths configuration.
 
@@ -456,48 +456,48 @@ def get_paths_config() -> Dict[str, str]:
 
 
 # Vector Database Configuration Functions
-def get_vectordb_config() -> Dict[str, Any]:
+def get_vectordb_config() -> dict[str, Any]:
     """Get complete vectordb configuration."""
     return load_config("vectordb")
 
 
-def get_embeddings_config() -> Dict[str, Any]:
+def get_embeddings_config() -> dict[str, Any]:
     """Get embeddings configuration."""
     vectordb_config = get_vectordb_config()
     return vectordb_config["embeddings"]
 
 
-def get_storage_config() -> Dict[str, Any]:
+def get_storage_config() -> dict[str, Any]:
     """Get storage configuration."""
     vectordb_config = get_vectordb_config()
     return vectordb_config["storage"]
 
 
-def get_search_config() -> Dict[str, Any]:
+def get_search_config() -> dict[str, Any]:
     """Get search configuration."""
     vectordb_config = get_vectordb_config()
     return vectordb_config["search"]
 
 
 # Retrieval Configuration Functions
-def get_retrieval_config() -> Dict[str, Any]:
+def get_retrieval_config() -> dict[str, Any]:
     """Get main retrieval configuration."""
     return _config_loader.load("retrieval")
 
 
-def get_query_processing_config() -> Dict[str, Any]:
+def get_query_processing_config() -> dict[str, Any]:
     """Get query processing configuration."""
     retrieval_config = get_retrieval_config()
     return retrieval_config["query_processing"]
 
 
-def get_ranking_config() -> Dict[str, Any]:
+def get_ranking_config() -> dict[str, Any]:
     """Get ranking configuration."""
     retrieval_config = get_retrieval_config()
     return retrieval_config["ranking"]
 
 
-def get_language_ranking_features(language: str) -> Dict[str, Any]:
+def get_language_ranking_features(language: str) -> dict[str, Any]:
     """
     Get language-specific ranking features configuration.
 
@@ -541,46 +541,48 @@ def get_language_ranking_features(language: str) -> Dict[str, Any]:
     except ConfigError:
         raise
     except Exception as e:
-        raise ConfigError(f"Failed to load language ranking features for '{language}': {e}")
+        raise ConfigError(
+            f"Failed to load language ranking features for '{language}': {e}"
+        )
 
 
-def get_reranking_config() -> Dict[str, Any]:
+def get_reranking_config() -> dict[str, Any]:
     """Get reranking configuration."""
     retrieval_config = get_retrieval_config()
     return retrieval_config["reranking"]
 
 
-def get_hybrid_retrieval_config() -> Dict[str, Any]:
+def get_hybrid_retrieval_config() -> dict[str, Any]:
     """Get hybrid retrieval configuration."""
     retrieval_config = get_retrieval_config()
     return retrieval_config["hybrid_retrieval"]
 
 
 # Pipeline configuration functions
-def get_pipeline_config() -> Dict[str, Any]:
+def get_pipeline_config() -> dict[str, Any]:
     """Get complete pipeline configuration."""
     return load_config("pipeline")
 
 
-def get_processing_config() -> Dict[str, Any]:
+def get_processing_config() -> dict[str, Any]:
     """Get document processing configuration."""
     pipeline_config = get_pipeline_config()
     return pipeline_config["processing"]
 
 
-def get_chroma_config() -> Dict[str, Any]:
+def get_chroma_config() -> dict[str, Any]:
     """Get ChromaDB configuration."""
     pipeline_config = get_pipeline_config()
     return pipeline_config["chroma"]
 
 
-def get_performance_config() -> Dict[str, Any]:
+def get_performance_config() -> dict[str, Any]:
     """Get performance configuration."""
     pipeline_config = get_pipeline_config()
     return pipeline_config["performance"]
 
 
-def get_system_config() -> Dict[str, Any]:
+def get_system_config() -> dict[str, Any]:
     """Get system configuration."""
     main_config = load_config("config")
     return main_config["system"]

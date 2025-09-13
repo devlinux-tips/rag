@@ -15,7 +15,12 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
 # Module logger
 logger = logging.getLogger(__name__)
 
-from ..utils.config_models import EmbeddingConfig, OllamaConfig, ProcessingConfig, RetrievalConfig
+from ..utils.config_models import (
+    EmbeddingConfig,
+    OllamaConfig,
+    ProcessingConfig,
+    RetrievalConfig,
+)
 from ..utils.config_validator import ConfigurationError
 
 
@@ -28,9 +33,9 @@ class RAGQuery:
     language: str  # Language code (hr, en, etc.)
     query_id: Optional[str] = None
     user_id: Optional[str] = None
-    context_filters: Optional[Dict[str, Any]] = None
+    context_filters: Optional[dict[str, Any]] = None
     max_results: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -39,13 +44,13 @@ class RAGResponse:
 
     answer: str
     query: str
-    retrieved_chunks: List[Dict[str, Any]]
+    retrieved_chunks: list[dict[str, Any]]
     confidence: float
     generation_time: float
     retrieval_time: float
     total_time: float
-    sources: List[str]
-    metadata: Dict[str, Any]
+    sources: list[str]
+    metadata: dict[str, Any]
 
     @property
     def has_high_confidence(self) -> bool:
@@ -59,7 +64,7 @@ class ComponentHealth:
 
     status: str  # "healthy", "degraded", "unhealthy"
     details: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -67,8 +72,8 @@ class SystemHealth:
     """Overall system health status."""
 
     system_status: str  # "healthy", "degraded", "unhealthy", "error"
-    components: Dict[str, ComponentHealth]
-    metrics: Dict[str, Any]
+    components: dict[str, ComponentHealth]
+    metrics: dict[str, Any]
     timestamp: float
     error: Optional[str] = None
 
@@ -77,10 +82,10 @@ class SystemHealth:
 class SystemStats:
     """System statistics and configuration."""
 
-    system: Dict[str, Any]
-    collections: Dict[str, Any]
-    models: Dict[str, Any]
-    performance: Dict[str, Any]
+    system: dict[str, Any]
+    collections: dict[str, Any]
+    models: dict[str, Any]
+    performance: dict[str, Any]
 
 
 @dataclass
@@ -92,7 +97,7 @@ class DocumentProcessingResult:
     total_chunks: int
     processing_time: float
     documents_per_second: float
-    errors: List[str] = None
+    errors: list[str] = None
 
 
 # Protocol definitions for dependency injection
@@ -116,7 +121,7 @@ class TextCleanerProtocol(Protocol):
 class DocumentChunkerProtocol(Protocol):
     """Protocol for document chunking."""
 
-    def chunk_document(self, content: str, source_file: str) -> List[Any]:
+    def chunk_document(self, content: str, source_file: str) -> list[Any]:
         ...
 
 
@@ -133,7 +138,9 @@ class EmbeddingModelProtocol(Protocol):
 class VectorStorageProtocol(Protocol):
     """Protocol for vector storage operations."""
 
-    def add_documents(self, documents: List[str], metadatas: List[Dict], embeddings: List) -> None:
+    def add_documents(
+        self, documents: list[str], metadatas: list[dict], embeddings: list
+    ) -> None:
         ...
 
     def create_collection(self) -> None:
@@ -162,7 +169,7 @@ class RetrieverProtocol(Protocol):
     """Protocol for document retrieval."""
 
     async def retrieve(
-        self, query: str, max_results: int = 5, context: Optional[Dict] = None
+        self, query: str, max_results: int = 5, context: Optional[dict] = None
     ) -> Any:
         ...
 
@@ -182,7 +189,7 @@ class GenerationClientProtocol(Protocol):
     def health_check(self) -> bool:
         ...
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         ...
 
     async def close(self) -> None:
@@ -192,14 +199,16 @@ class GenerationClientProtocol(Protocol):
 class ResponseParserProtocol(Protocol):
     """Protocol for response parsing."""
 
-    def parse_response(self, text: str, query: str, context: List[str]) -> Any:
+    def parse_response(self, text: str, query: str, context: list[str]) -> Any:
         ...
 
 
 class PromptBuilderProtocol(Protocol):
     """Protocol for prompt building."""
 
-    def build_prompt(self, query: str, context_chunks: List[str], **kwargs) -> Tuple[str, str]:
+    def build_prompt(
+        self, query: str, context_chunks: list[str], **kwargs
+    ) -> tuple[str, str]:
         ...
 
 
@@ -213,7 +222,9 @@ def validate_language_code(language: str) -> str:
     valid_languages = {"hr", "en", "multilingual"}
 
     if language not in valid_languages:
-        raise ValueError(f"Unsupported language: {language}. Supported: {valid_languages}")
+        raise ValueError(
+            f"Unsupported language: {language}. Supported: {valid_languages}"
+        )
 
     return language
 
@@ -233,7 +244,7 @@ def create_language_collection_name(language: str) -> str:
     return language_collection_map[language]
 
 
-def validate_document_paths(document_paths: List[str]) -> List[Path]:
+def validate_document_paths(document_paths: list[str]) -> list[Path]:
     """Validate and convert document paths to Path objects."""
     if not document_paths:
         raise ValueError("Document paths list cannot be empty")
@@ -277,7 +288,7 @@ def validate_query(query: RAGQuery) -> RAGQuery:
 
 def calculate_processing_metrics(
     processed_count: int, total_time: float, total_chunks: int
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Calculate document processing metrics."""
     if total_time <= 0:
         return {
@@ -303,7 +314,7 @@ def create_chunk_metadata(
     chunk: Any,
     language: str,
     processing_timestamp: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create metadata for a document chunk."""
     return {
         "source": doc_path,
@@ -318,7 +329,7 @@ def create_chunk_metadata(
     }
 
 
-def extract_sources_from_chunks(retrieved_chunks: List[Dict[str, Any]]) -> List[str]:
+def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[str]:
     """Extract unique sources from retrieved document chunks."""
     sources = set()
     for chunk in retrieved_chunks:
@@ -328,7 +339,9 @@ def extract_sources_from_chunks(retrieved_chunks: List[Dict[str, Any]]) -> List[
         metadata = chunk["metadata"]
 
         if "source" not in metadata:
-            raise ValueError(f"Chunk metadata missing required 'source' field: {metadata}")
+            raise ValueError(
+                f"Chunk metadata missing required 'source' field: {metadata}"
+            )
         source = metadata["source"]
         if source and source != "Unknown":
             sources.add(source)
@@ -337,8 +350,8 @@ def extract_sources_from_chunks(retrieved_chunks: List[Dict[str, Any]]) -> List[
 
 
 def prepare_chunk_info(
-    chunk_result: Dict[str, Any], return_debug_info: bool = False
-) -> Dict[str, Any]:
+    chunk_result: dict[str, Any], return_debug_info: bool = False
+) -> dict[str, Any]:
     """Prepare chunk information for response."""
     chunk_info = {
         "content": chunk_result["content"],
@@ -383,22 +396,30 @@ def build_response_metadata(
     return_debug_info: bool = False,
     system_prompt: str = None,
     user_prompt: str = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build comprehensive response metadata."""
     metadata = {
         "query_id": query.query_id,
         "user_id": query.user_id,
         "categorization": {
-            "detected_category": getattr(hierarchical_results.category, "value", "unknown"),
-            "strategy_used": getattr(hierarchical_results.strategy_used, "value", "unknown"),
+            "detected_category": getattr(
+                hierarchical_results.category, "value", "unknown"
+            ),
+            "strategy_used": getattr(
+                hierarchical_results.strategy_used, "value", "unknown"
+            ),
             "confidence": getattr(hierarchical_results, "confidence", 0.0),
             "routing_metadata": getattr(hierarchical_results, "routing_metadata", {}),
         },
         "retrieval": {
             "total_results": len(hierarchical_results.documents),
-            "strategy_used": getattr(hierarchical_results.strategy_used, "value", "unknown"),
+            "strategy_used": getattr(
+                hierarchical_results.strategy_used, "value", "unknown"
+            ),
             "filters_applied": query.context_filters or {},
-            "retrieval_time": getattr(hierarchical_results, "retrieval_time", retrieval_time),
+            "retrieval_time": getattr(
+                hierarchical_results, "retrieval_time", retrieval_time
+            ),
         },
         "generation": {
             "model": getattr(generation_response, "model", "unknown"),
@@ -427,7 +448,9 @@ def build_response_metadata(
     return metadata
 
 
-def create_error_response(query: RAGQuery, error: Exception, start_time: float) -> RAGResponse:
+def create_error_response(
+    query: RAGQuery, error: Exception, start_time: float
+) -> RAGResponse:
     """Create error response in the appropriate language."""
     error_msg = (
         "I apologize, an error occurred while processing your question"
@@ -453,7 +476,7 @@ def create_error_response(query: RAGQuery, error: Exception, start_time: float) 
 
 
 def evaluate_component_health(
-    component_name: str, components: List[Any], details: str = ""
+    component_name: str, components: list[Any], details: str = ""
 ) -> ComponentHealth:
     """Evaluate health of system components."""
     all_healthy = all(comp is not None for comp in components)
@@ -474,11 +497,15 @@ def evaluate_ollama_health(
 ) -> ComponentHealth:
     """Evaluate Ollama service health."""
     if not client:
-        return ComponentHealth(status="unhealthy", details="Ollama client not initialized")
+        return ComponentHealth(
+            status="unhealthy", details="Ollama client not initialized"
+        )
 
     ollama_healthy = client.health_check()
     if not ollama_healthy:
-        return ComponentHealth(status="unhealthy", details="Ollama service not available")
+        return ComponentHealth(
+            status="unhealthy", details="Ollama service not available"
+        )
 
     available_models = client.get_available_models()
     model_available = model_name in available_models
@@ -491,7 +518,7 @@ def evaluate_ollama_health(
     )
 
 
-def calculate_overall_health(component_healths: Dict[str, ComponentHealth]) -> str:
+def calculate_overall_health(component_healths: dict[str, ComponentHealth]) -> str:
     """Calculate overall system health from component healths."""
     statuses = [comp.status for comp in component_healths.values()]
 
@@ -593,10 +620,14 @@ class RAGSystem:
                 ConfigValidator.validate_startup_config(
                     main_config, {self.language: language_config}
                 )
-                logger.info("✅ ConfigValidator: All configuration keys validated successfully")
+                logger.info(
+                    "✅ ConfigValidator: All configuration keys validated successfully"
+                )
             except ConfigurationError as e:
                 # Log warning but continue - development system
-                logger.warning(f"⚠️  ConfigValidator found missing keys (development mode): {e}")
+                logger.warning(
+                    f"⚠️  ConfigValidator found missing keys (development mode): {e}"
+                )
                 logger.info("🔧 System will continue with current configuration")
 
         except ImportError:
@@ -607,7 +638,7 @@ class RAGSystem:
             logger.warning(f"Configuration validation failed: {e}")
 
     async def add_documents(
-        self, document_paths: List[str], batch_size: int = 10
+        self, document_paths: list[str], batch_size: int = 10
     ) -> DocumentProcessingResult:
         """Add documents to the RAG system using pure functions."""
         if not self._initialized:
@@ -666,7 +697,9 @@ class RAGSystem:
                             documents=[chunk.content],
                             metadatas=[metadata],
                             embeddings=[
-                                (embedding.tolist() if hasattr(embedding, "tolist") else embedding)
+                                embedding.tolist()
+                                if hasattr(embedding, "tolist")
+                                else embedding
                             ],
                         )
 
@@ -682,7 +715,9 @@ class RAGSystem:
         self._document_count += processed_docs
 
         # Calculate metrics using pure function
-        metrics = calculate_processing_metrics(processed_docs, processing_time, total_chunks)
+        metrics = calculate_processing_metrics(
+            processed_docs, processing_time, total_chunks
+        )
 
         return DocumentProcessingResult(
             processed_documents=processed_docs,
@@ -722,7 +757,9 @@ class RAGSystem:
             generation_start = time.time()
 
             # Build prompts
-            context_chunks = [result["content"] for result in hierarchical_results.documents]
+            context_chunks = [
+                result["content"] for result in hierarchical_results.documents
+            ]
             system_prompt, user_prompt = self._prompt_builder.build_prompt(
                 query=validated_query.text,
                 context_chunks=context_chunks,
@@ -736,7 +773,9 @@ class RAGSystem:
                 "prompt": user_prompt,
                 "context": context_chunks,
                 "query": validated_query.text,
-                "query_type": getattr(hierarchical_results.category, "value", "general"),
+                "query_type": getattr(
+                    hierarchical_results.category, "value", "general"
+                ),
                 "language": validated_query.language,
                 "metadata": validated_query.metadata,
             }
@@ -891,18 +930,28 @@ class RAGSystem:
             },
             models={
                 "embedding_model": (
-                    self.embedding_config.model_name if self.embedding_config else "unknown"
+                    self.embedding_config.model_name
+                    if self.embedding_config
+                    else "unknown"
                 ),
-                "llm_model": (self.ollama_config.model if self.ollama_config else "unknown"),
+                "llm_model": (
+                    self.ollama_config.model if self.ollama_config else "unknown"
+                ),
                 "device": "auto",
             },
             performance={
                 "chunk_size": (
-                    self.processing_config.chunk_size if self.processing_config else 1000
+                    self.processing_config.chunk_size
+                    if self.processing_config
+                    else 1000
                 ),
-                "max_retrieval": (self.retrieval_config.max_k if self.retrieval_config else 10),
+                "max_retrieval": (
+                    self.retrieval_config.max_k if self.retrieval_config else 10
+                ),
                 "similarity_threshold": (
-                    self.retrieval_config.similarity_threshold if self.retrieval_config else 0.0
+                    self.retrieval_config.similarity_threshold
+                    if self.retrieval_config
+                    else 0.0
                 ),
                 "timeout": self.ollama_config.timeout if self.ollama_config else 60,
             },

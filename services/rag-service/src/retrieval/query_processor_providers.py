@@ -16,11 +16,13 @@ from .query_processor import LanguageDataProvider, QueryProcessingConfig
 class ConfigProvider(Protocol):
     """Protocol for configuration providers."""
 
-    def load_config(self, config_name: str) -> Dict[str, Any]:
+    def load_config(self, config_name: str) -> dict[str, Any]:
         """Load configuration by name."""
         ...
 
-    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
+    def get_language_specific_config(
+        self, section: str, language: str
+    ) -> dict[str, Any]:
         """Get language-specific configuration."""
         ...
 
@@ -38,7 +40,7 @@ class ProductionLanguageDataProvider:
         self.config_provider = config_provider
         self._cache = {}
 
-    def get_stop_words(self, language: str) -> Set[str]:
+    def get_stop_words(self, language: str) -> set[str]:
         """Get stop words for language."""
         cache_key = f"stop_words_{language}"
         if cache_key not in self._cache:
@@ -46,13 +48,15 @@ class ProductionLanguageDataProvider:
                 "language_data", language
             )
             if "stop_words" not in lang_config:
-                raise ValueError(f"Missing 'stop_words' in language configuration for {language}")
+                raise ValueError(
+                    f"Missing 'stop_words' in language configuration for {language}"
+                )
             stop_words = lang_config["stop_words"]
             self._cache[cache_key] = set(stop_words)
 
         return self._cache[cache_key]
 
-    def get_question_patterns(self, language: str) -> List[str]:
+    def get_question_patterns(self, language: str) -> list[str]:
         """Get question patterns for language."""
         cache_key = f"question_patterns_{language}"
         if cache_key not in self._cache:
@@ -68,7 +72,7 @@ class ProductionLanguageDataProvider:
 
         return self._cache[cache_key]
 
-    def get_synonym_groups(self, language: str) -> Dict[str, List[str]]:
+    def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get synonym groups for language."""
         cache_key = f"synonym_groups_{language}"
         if cache_key not in self._cache:
@@ -84,7 +88,7 @@ class ProductionLanguageDataProvider:
 
         return self._cache[cache_key]
 
-    def get_morphological_patterns(self, language: str) -> Dict[str, List[str]]:
+    def get_morphological_patterns(self, language: str) -> dict[str, list[str]]:
         """Get morphological patterns for language."""
         cache_key = f"morphological_patterns_{language}"
         if cache_key not in self._cache:
@@ -116,35 +120,37 @@ class MockLanguageDataProvider:
         self.synonym_groups = {}
         self.morphological_patterns = {}
 
-    def set_stop_words(self, language: str, stop_words: Set[str]) -> None:
+    def set_stop_words(self, language: str, stop_words: set[str]) -> None:
         """Set mock stop words for language."""
         self.stop_words[language] = stop_words
 
-    def set_question_patterns(self, language: str, patterns: List[str]) -> None:
+    def set_question_patterns(self, language: str, patterns: list[str]) -> None:
         """Set mock question patterns for language."""
         self.question_patterns[language] = patterns
 
-    def set_synonym_groups(self, language: str, synonyms: Dict[str, List[str]]) -> None:
+    def set_synonym_groups(self, language: str, synonyms: dict[str, list[str]]) -> None:
         """Set mock synonym groups for language."""
         self.synonym_groups[language] = synonyms
 
-    def set_morphological_patterns(self, language: str, patterns: Dict[str, List[str]]) -> None:
+    def set_morphological_patterns(
+        self, language: str, patterns: dict[str, list[str]]
+    ) -> None:
         """Set mock morphological patterns for language."""
         self.morphological_patterns[language] = patterns
 
-    def get_stop_words(self, language: str) -> Set[str]:
+    def get_stop_words(self, language: str) -> set[str]:
         """Get mock stop words for language."""
         return self.stop_words.get(language, set())
 
-    def get_question_patterns(self, language: str) -> List[str]:
+    def get_question_patterns(self, language: str) -> list[str]:
         """Get mock question patterns for language."""
         return self.question_patterns.get(language, [])
 
-    def get_synonym_groups(self, language: str) -> Dict[str, List[str]]:
+    def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get mock synonym groups for language."""
         return self.synonym_groups.get(language, {})
 
-    def get_morphological_patterns(self, language: str) -> Dict[str, List[str]]:
+    def get_morphological_patterns(self, language: str) -> dict[str, list[str]]:
         """Get mock morphological patterns for language."""
         return self.morphological_patterns.get(language, {})
 
@@ -157,20 +163,24 @@ class MockConfigProvider:
         self.configs = {}
         self.language_configs = {}
 
-    def set_config(self, config_name: str, config: Dict[str, Any]) -> None:
+    def set_config(self, config_name: str, config: dict[str, Any]) -> None:
         """Set mock configuration."""
         self.configs[config_name] = config
 
-    def set_language_config(self, section: str, language: str, config: Dict[str, Any]) -> None:
+    def set_language_config(
+        self, section: str, language: str, config: dict[str, Any]
+    ) -> None:
         """Set mock language-specific configuration."""
         key = f"{section}_{language}"
         self.language_configs[key] = config
 
-    def load_config(self, config_name: str) -> Dict[str, Any]:
+    def load_config(self, config_name: str) -> dict[str, Any]:
         """Load mock configuration by name."""
         return self.configs.get(config_name, {})
 
-    def get_language_specific_config(self, section: str, language: str) -> Dict[str, Any]:
+    def get_language_specific_config(
+        self, section: str, language: str
+    ) -> dict[str, Any]:
         """Get mock language-specific configuration."""
         key = f"{section}_{language}"
         return self.language_configs.get(key, {})
@@ -228,7 +238,7 @@ def create_production_language_provider(
 
 
 def create_mock_language_provider(
-    language: str = "hr", custom_data: Optional[Dict[str, Any]] = None
+    language: str = "hr", custom_data: Optional[dict[str, Any]] = None
 ) -> MockLanguageDataProvider:
     """
     Create mock language data provider with optional custom data.
@@ -289,8 +299,8 @@ def create_mock_language_provider(
 
 def create_test_providers(
     language: str = "hr",
-    custom_config: Optional[Dict[str, Any]] = None,
-    custom_language_data: Optional[Dict[str, Any]] = None,
+    custom_config: Optional[dict[str, Any]] = None,
+    custom_language_data: Optional[dict[str, Any]] = None,
 ) -> tuple:
     """
     Create complete set of test providers for query processing.

@@ -26,11 +26,11 @@ class MockFileSystemProvider:
 
     def __init__(self):
         """Initialize with in-memory filesystem simulation."""
-        self.created_folders: List[str] = []
-        self.existing_folders: Dict[str, bool] = {}
-        self.folder_stats: Dict[str, FolderStats] = {}
-        self.call_history: List[Dict] = []
-        self.should_fail: Dict[str, bool] = {}
+        self.created_folders: list[str] = []
+        self.existing_folders: dict[str, bool] = {}
+        self.folder_stats: dict[str, FolderStats] = {}
+        self.call_history: list[dict] = []
+        self.should_fail: dict[str, bool] = {}
 
     def set_folder_exists(self, folder_path: Path, exists: bool = True) -> None:
         """Set whether a folder should be considered to exist."""
@@ -46,7 +46,9 @@ class MockFileSystemProvider:
 
     def create_folder(self, folder_path: Path) -> bool:
         """Mock folder creation."""
-        self.call_history.append({"operation": "create_folder", "path": str(folder_path)})
+        self.call_history.append(
+            {"operation": "create_folder", "path": str(folder_path)}
+        )
 
         if self.should_fail.get("create_folder", False):
             return False
@@ -60,7 +62,9 @@ class MockFileSystemProvider:
 
     def folder_exists(self, folder_path: Path) -> bool:
         """Mock folder existence check."""
-        self.call_history.append({"operation": "folder_exists", "path": str(folder_path)})
+        self.call_history.append(
+            {"operation": "folder_exists", "path": str(folder_path)}
+        )
         path_str = str(folder_path)
         if path_str not in self.existing_folders:
             raise ValueError(f"Mock folder existence not configured for {folder_path}")
@@ -68,7 +72,9 @@ class MockFileSystemProvider:
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Mock folder removal."""
-        self.call_history.append({"operation": "remove_folder", "path": str(folder_path)})
+        self.call_history.append(
+            {"operation": "remove_folder", "path": str(folder_path)}
+        )
 
         if self.should_fail.get("remove_folder", False):
             return False
@@ -82,7 +88,9 @@ class MockFileSystemProvider:
 
     def get_folder_stats(self, folder_path: Path) -> FolderStats:
         """Mock folder statistics."""
-        self.call_history.append({"operation": "get_folder_stats", "path": str(folder_path)})
+        self.call_history.append(
+            {"operation": "get_folder_stats", "path": str(folder_path)}
+        )
 
         path_str = str(folder_path)
         if path_str not in self.folder_stats:
@@ -93,7 +101,7 @@ class MockFileSystemProvider:
         """Clear operation history."""
         self.call_history.clear()
 
-    def get_created_folders(self) -> List[str]:
+    def get_created_folders(self) -> list[str]:
         """Get list of folders that were created."""
         return self.created_folders.copy()
 
@@ -104,7 +112,7 @@ class MockConfigProvider:
     def __init__(self, config: Optional[FolderConfig] = None):
         """Initialize with optional mock configuration."""
         self.config = config or self._create_default_config()
-        self.call_history: List[str] = []
+        self.call_history: list[str] = []
 
     def _create_default_config(self) -> FolderConfig:
         """Create default test configuration."""
@@ -137,7 +145,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: Dict[str, List[str]] = {
+        self.messages: dict[str, list[str]] = {
             "info": [],
             "debug": [],
             "warning": [],
@@ -165,7 +173,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
+    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -288,9 +296,9 @@ class StandardLoggerProvider:
 
 def create_mock_setup(
     config: Optional[FolderConfig] = None,
-    existing_folders: Optional[Dict[str, bool]] = None,
-    folder_stats: Optional[Dict[str, FolderStats]] = None,
-    filesystem_failures: Optional[Dict[str, bool]] = None,
+    existing_folders: Optional[dict[str, bool]] = None,
+    folder_stats: Optional[dict[str, FolderStats]] = None,
+    filesystem_failures: Optional[dict[str, bool]] = None,
 ) -> tuple:
     """
     Create complete mock setup for testing.
@@ -384,9 +392,9 @@ def create_development_folder_manager():
 
 def create_test_folder_manager(
     config: Optional[FolderConfig] = None,
-    existing_folders: Optional[Dict[str, bool]] = None,
-    folder_stats: Optional[Dict[str, FolderStats]] = None,
-    filesystem_failures: Optional[Dict[str, bool]] = None,
+    existing_folders: Optional[dict[str, bool]] = None,
+    folder_stats: Optional[dict[str, FolderStats]] = None,
+    filesystem_failures: Optional[dict[str, bool]] = None,
 ):
     """Create folder manager configured for testing."""
     from .folder_manager import create_tenant_folder_manager

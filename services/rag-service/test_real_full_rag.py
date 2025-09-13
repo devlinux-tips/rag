@@ -161,7 +161,9 @@ async def test_complete_real_rag():
                 zip(results["documents"][0], results["metadatas"][0])
             ):
                 distance = results["distances"][0][i] if "distances" in results else 0
-                print(f"   {i+1}. Score: {1-distance:.3f} | Source: {metadata['source']}")
+                print(
+                    f"   {i+1}. Score: {1-distance:.3f} | Source: {metadata['source']}"
+                )
                 print(f"      Preview: {doc[:150]}...")
 
         # ===== STEP 6: REAL ANSWER GENERATION =====
@@ -177,7 +179,9 @@ async def test_complete_real_rag():
         else:
             query_embedding = np.random.random(1024).tolist()
 
-        context_results = collection.query(query_embeddings=[query_embedding], n_results=3)
+        context_results = collection.query(
+            query_embeddings=[query_embedding], n_results=3
+        )
 
         context_chunks = context_results["documents"][0]
         context_text = "\n\n".join(context_chunks)
@@ -199,9 +203,7 @@ async def test_complete_real_rag():
             answer = ". ".join(relevant_sentences[:2]) + "."
             print(f"✅ Generated answer: {answer}")
         else:
-            answer = (
-                "Based on the context, a RAG system combines retrieval and generation techniques."
-            )
+            answer = "Based on the context, a RAG system combines retrieval and generation techniques."
             print(f"✅ Fallback answer: {answer}")
 
         # ===== FINAL SUCCESS REPORT =====
@@ -213,7 +215,7 @@ async def test_complete_real_rag():
         print(f"🔢 Embeddings generated: {len(embeddings)}")
         print(f"💾 Chunks stored in ChromaDB: {stored_count}")
         print(f"🔍 Queries tested: {len(queries)}")
-        print(f"💬 Answer generated: ✅")
+        print("💬 Answer generated: ✅")
         print("\n🚀 REAL RAG SYSTEM IS FULLY WORKING! NO MOCKS!")
 
     except Exception as e:

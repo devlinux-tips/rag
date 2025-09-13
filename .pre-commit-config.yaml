@@ -16,14 +16,16 @@ repos:
       - id: black
         language_version: python3
 
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.6
     hooks:
-      - id: isort
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 6.0.0
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.0
     hooks:
-      - id: flake8
-        # Only exclude files with intentional alignment patterns (E221)
-        exclude: ^(services/rag-service/dependency_analyzer\.py|services/rag-service/validate_language_configs\.py|services/rag-service/src/cli/rag_cli\.py)$
+      - id: mypy
+        additional_dependencies: [types-requests, types-PyYAML, types-toml]
+        exclude: ^(tests/|notebooks/|.*test.*\.py$)

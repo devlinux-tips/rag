@@ -66,7 +66,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
         doc_id: str,
         content: str,
         embedding: np.ndarray,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ):
         """Add document for testing."""
         self.documents[doc_id] = {
@@ -79,9 +79,9 @@ class MockVectorSearchProvider(VectorSearchProvider):
         self,
         query_embedding: np.ndarray,
         top_k: int,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Mock embedding-based search."""
         if not self.documents:
             return {
@@ -137,9 +137,9 @@ class MockVectorSearchProvider(VectorSearchProvider):
         self,
         query_text: str,
         top_k: int,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Mock text-based search using simple keyword matching."""
         if not self.documents:
             return {
@@ -201,7 +201,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
             "distances": distances,
         }
 
-    async def get_document(self, document_id: str) -> Optional[Dict[str, Any]]:
+    async def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
         """Get document by ID."""
         if document_id in self.documents:
             return {
@@ -211,7 +211,9 @@ class MockVectorSearchProvider(VectorSearchProvider):
             }
         return None
 
-    def _matches_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+    def _matches_filters(
+        self, metadata: dict[str, Any], filters: dict[str, Any]
+    ) -> bool:
         """Check if metadata matches filters."""
         for key, value in filters.items():
             if key not in metadata or metadata[key] != value:
@@ -222,7 +224,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
 class MockConfigProvider(ConfigProvider):
     """Mock configuration provider for testing."""
 
-    def __init__(self, custom_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, custom_config: Optional[dict[str, Any]] = None):
         """
         Initialize mock config provider.
 
@@ -232,15 +234,15 @@ class MockConfigProvider(ConfigProvider):
         self.config = custom_config or self._default_config()
         self.logger = logging.getLogger(__name__)
 
-    def get_search_config(self) -> Dict[str, Any]:
+    def get_search_config(self) -> dict[str, Any]:
         """Get search configuration."""
         return self.config["search"]
 
-    def get_scoring_weights(self) -> Dict[str, float]:
+    def get_scoring_weights(self) -> dict[str, float]:
         """Get scoring weights for hybrid search."""
         return self.config["scoring"]["weights"]
 
-    def _default_config(self) -> Dict[str, Any]:
+    def _default_config(self) -> dict[str, Any]:
         """Default test configuration."""
         return {
             "search": {
@@ -333,9 +335,9 @@ class ChromaDBSearchProvider(VectorSearchProvider):
         self,
         query_embedding: np.ndarray,
         top_k: int,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Search using embedding vector."""
         try:
             # Run ChromaDB query in thread pool
@@ -371,9 +373,9 @@ class ChromaDBSearchProvider(VectorSearchProvider):
         self,
         query_text: str,
         top_k: int,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Search using query text (relies on ChromaDB's built-in embedding)."""
         try:
             loop = asyncio.get_event_loop()
@@ -404,21 +406,27 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             self.logger.error(f"ChromaDB text search failed: {e}")
             raise
 
-    async def get_document(self, document_id: str) -> Optional[Dict[str, Any]]:
+    async def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
         """Get document by ID from ChromaDB."""
         try:
             loop = asyncio.get_event_loop()
 
             results = await loop.run_in_executor(
                 None,
-                lambda: self.collection.get(ids=[document_id], include=["documents", "metadatas"]),
+                lambda: self.collection.get(
+                    ids=[document_id], include=["documents", "metadatas"]
+                ),
             )
 
             if results and results.get("ids") and results["ids"]:
                 return {
                     "id": document_id,
-                    "content": (results["documents"][0] if results.get("documents") else ""),
-                    "metadata": (results["metadatas"][0] if results.get("metadatas") else {}),
+                    "content": (
+                        results["documents"][0] if results.get("documents") else ""
+                    ),
+                    "metadata": (
+                        results["metadatas"][0] if results.get("metadatas") else {}
+                    ),
                 }
 
             return None
@@ -453,7 +461,7 @@ class ProductionConfigProvider(ConfigProvider):
 
         self.logger = logging.getLogger(__name__)
 
-    def get_search_config(self) -> Dict[str, Any]:
+    def get_search_config(self) -> dict[str, Any]:
         """Get search configuration from config files."""
         if self.get_search_config_func:
             return self.get_search_config_func()
@@ -469,7 +477,7 @@ class ProductionConfigProvider(ConfigProvider):
                 "include_distances": True,
             }
 
-    def get_scoring_weights(self) -> Dict[str, float]:
+    def get_scoring_weights(self) -> dict[str, float]:
         """Get scoring weights from configuration."""
         search_config = self.get_search_config()
         if "weights" not in search_config:
@@ -478,7 +486,9 @@ class ProductionConfigProvider(ConfigProvider):
 
         # Validate required weight keys
         if "semantic_weight" not in weights:
-            raise ValueError("Missing 'semantic_weight' in search weights configuration")
+            raise ValueError(
+                "Missing 'semantic_weight' in search weights configuration"
+            )
         if "keyword_weight" not in weights:
             raise ValueError("Missing 'keyword_weight' in search weights configuration")
 
@@ -500,7 +510,7 @@ def create_mock_search_provider() -> VectorSearchProvider:
 
 
 def create_mock_config_provider(
-    custom_config: Optional[Dict[str, Any]] = None,
+    custom_config: Optional[dict[str, Any]] = None,
 ) -> ConfigProvider:
     """Create mock config provider for testing."""
     return MockConfigProvider(custom_config=custom_config)

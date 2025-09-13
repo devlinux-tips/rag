@@ -22,7 +22,7 @@ from src.pipeline.rag_system import RAGSystem, create_rag_system
 async def process_language_documents(
     language: str,
     source_dir: Optional[str] = None,
-    file_patterns: Optional[List[str]] = None,
+    file_patterns: Optional[list[str]] = None,
 ) -> dict:
     """
     Process all documents for a specific language.
@@ -74,7 +74,7 @@ async def process_language_documents(
         print(f"🔄 Processing {len(file_paths)} documents...")
         result = await system.add_documents(file_paths)
 
-        print(f"✅ Processing complete!")
+        print("✅ Processing complete!")
         print(f"   📄 Processed: {result.get('processed_documents', 0)}")
         print(f"   ❌ Failed: {result.get('failed_documents', 0)}")
         print(f"   🔢 Total chunks: {result.get('total_chunks', 0)}")
@@ -91,7 +91,7 @@ async def process_language_documents(
         await system.close()
 
 
-async def batch_process_all_languages(languages: List[str]) -> dict:
+async def batch_process_all_languages(languages: list[str]) -> dict:
     """
     Process documents for multiple languages.
 
@@ -119,7 +119,7 @@ async def batch_process_all_languages(languages: List[str]) -> dict:
             print(f"❌ Error processing {language}: {e}")
             all_results[language] = {"error": str(e)}
 
-    print(f"\n📊 SUMMARY")
+    print("\n📊 SUMMARY")
     print("=" * 50)
     print(f"Languages processed: {len(languages)}")
     print(f"Total documents processed: {total_processed}")
@@ -153,7 +153,9 @@ async def main():
         nargs="+",
         help="File patterns to include (e.g., '*.pdf' '*.docx')",
     )
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
 
     args = parser.parse_args()
 

@@ -29,7 +29,7 @@ class CLIArgs:
     top_k: Optional[int] = None
     no_sources: bool = False
     docs_path: Optional[str] = None
-    languages: Optional[List[str]] = None
+    languages: Optional[list[str]] = None
     # Data management args
     confirm: bool = False
     dry_run: bool = False
@@ -54,10 +54,10 @@ class QueryResult:
 
     success: bool
     answer: str
-    sources: List[str]
+    sources: list[str]
     query_time: float
     documents_retrieved: int
-    retrieved_chunks: List[Dict[str, Any]]
+    retrieved_chunks: list[dict[str, Any]]
     error_message: Optional[str] = None
 
 
@@ -67,7 +67,7 @@ class DocumentProcessingResult:
 
     success: bool
     processing_time: float
-    processing_result: Optional[Dict[str, Any]] = None
+    processing_result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
 
 
@@ -78,8 +78,8 @@ class CollectionInfo:
     user_collection_name: str
     tenant_collection_name: str
     base_path: str
-    available_collections: List[str]
-    document_counts: Dict[str, int]
+    available_collections: list[str]
+    document_counts: dict[str, int]
 
 
 @dataclass
@@ -87,9 +87,9 @@ class SystemStatus:
     """System status information - pure data structure."""
 
     rag_system_status: str  # "initialized", "failed"
-    folder_structure: Dict[str, bool]  # path -> exists
+    folder_structure: dict[str, bool]  # path -> exists
     config_status: str  # "loaded", "failed"
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 @dataclass
@@ -97,9 +97,9 @@ class DataClearResult:
     """Result of data clearing operation - pure data structure."""
 
     success: bool
-    cleared_paths: List[str]
-    preserved_paths: List[str]
-    errors: List[str]
+    cleared_paths: list[str]
+    preserved_paths: list[str]
+    errors: list[str]
     message: str
 
 
@@ -136,7 +136,7 @@ class RAGSystemProtocol(Protocol):
     async def query(self, query: Any) -> Any:
         ...
 
-    async def add_documents(self, document_paths: List[str]) -> Dict[str, Any]:
+    async def add_documents(self, document_paths: list[str]) -> dict[str, Any]:
         ...
 
 
@@ -146,22 +146,26 @@ class FolderManagerProtocol(Protocol):
     def ensure_context_folders(self, context: Any, language: str) -> bool:
         ...
 
-    def get_collection_storage_paths(self, context: Any, language: str) -> Dict[str, Any]:
+    def get_collection_storage_paths(
+        self, context: Any, language: str
+    ) -> dict[str, Any]:
         ...
 
-    def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> Dict[str, Any]:
+    def get_tenant_folder_structure(
+        self, tenant: Any, user: Any, language: str
+    ) -> dict[str, Any]:
         ...
 
     def create_tenant_folder_structure(
-        self, tenant: Any, user: Any, languages: List[str]
-    ) -> tuple[bool, List[str]]:
+        self, tenant: Any, user: Any, languages: list[str]
+    ) -> tuple[bool, list[str]]:
         ...
 
 
 class StorageProtocol(Protocol):
     """Protocol for storage operations."""
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         ...
 
     def get_document_count(self, collection_name: str) -> int:
@@ -171,10 +175,10 @@ class StorageProtocol(Protocol):
 class ConfigLoaderProtocol(Protocol):
     """Protocol for configuration loading."""
 
-    def get_shared_config(self) -> Dict[str, Any]:
+    def get_shared_config(self) -> dict[str, Any]:
         ...
 
-    def get_storage_config(self) -> Dict[str, Any]:
+    def get_storage_config(self) -> dict[str, Any]:
         ...
 
 
@@ -188,7 +192,9 @@ def validate_language_code(language: str) -> str:
     valid_languages = {"hr", "en", "multilingual"}
 
     if language not in valid_languages:
-        raise ValueError(f"Unsupported language: {language}. Supported: {valid_languages}")
+        raise ValueError(
+            f"Unsupported language: {language}. Supported: {valid_languages}"
+        )
 
     return language
 
@@ -249,7 +255,9 @@ def create_tenant_context(tenant_slug: str, user_id: str) -> TenantContext:
         )
 
 
-def format_query_results(result: QueryResult, context: TenantContext, language: str) -> List[str]:
+def format_query_results(
+    result: QueryResult, context: TenantContext, language: str
+) -> list[str]:
     """Format query results for display using pure logic."""
     if not result.success:
         return [
@@ -297,7 +305,7 @@ def format_processing_results(
     context: TenantContext,
     language: str,
     docs_path: str,
-) -> List[str]:
+) -> list[str]:
     """Format document processing results using pure logic."""
     lines = [
         f"📁 Processing documents for tenant: {context.tenant_slug}, user: {context.user_username}",
@@ -322,7 +330,7 @@ def format_processing_results(
 
 def format_collection_info(
     collection_info: CollectionInfo, context: TenantContext, language: str
-) -> List[str]:
+) -> list[str]:
     """Format collection information using pure logic."""
     lines = [
         f"📋 Listing collections for tenant: {context.tenant_slug}",
@@ -351,7 +359,9 @@ def format_collection_info(
     return lines
 
 
-def format_system_status(status: SystemStatus, context: TenantContext, language: str) -> List[str]:
+def format_system_status(
+    status: SystemStatus, context: TenantContext, language: str
+) -> list[str]:
     """Format system status using pure logic."""
     lines = [
         f"📊 System status for tenant: {context.tenant_slug}",
@@ -364,11 +374,15 @@ def format_system_status(status: SystemStatus, context: TenantContext, language:
     if status.rag_system_status == "initialized":
         lines.append("✅ RAG System: Initialized successfully")
     else:
-        lines.append(f"❌ RAG System: Failed to initialize")
+        lines.append("❌ RAG System: Failed to initialize")
 
     # Folder structure
-    existing_folders = [path for path, exists in status.folder_structure.items() if exists]
-    missing_folders = [path for path, exists in status.folder_structure.items() if not exists]
+    existing_folders = [
+        path for path, exists in status.folder_structure.items() if exists
+    ]
+    missing_folders = [
+        path for path, exists in status.folder_structure.items() if not exists
+    ]
 
     lines.append(
         f"📁 Folder structure ({len(existing_folders)} existing, {len(missing_folders)} missing):"
@@ -398,7 +412,9 @@ def format_system_status(status: SystemStatus, context: TenantContext, language:
     return lines
 
 
-def format_create_folders_result(result: Dict[str, Any], context: TenantContext) -> List[str]:
+def format_create_folders_result(
+    result: dict[str, Any], context: TenantContext
+) -> list[str]:
     """Format create-folders result using pure logic."""
     lines = [
         f"📁 Folder creation result for tenant: {context.tenant_slug}",
@@ -426,17 +442,19 @@ def format_create_folders_result(result: Dict[str, Any], context: TenantContext)
         lines.append(f"\n{result['message'] if 'message' in result else ''}")
     else:
         lines.append("❌ Folder creation failed")
-        lines.append(f"Error: {result['error'] if 'error' in result else 'Unknown error'}")
+        lines.append(
+            f"Error: {result['error'] if 'error' in result else 'Unknown error'}"
+        )
 
     return lines
 
 
 def format_clear_data_result(
     result: DataClearResult, context: TenantContext, language: str
-) -> List[str]:
+) -> list[str]:
     """Format clear-data result using pure logic."""
     lines = [
-        f"🧹 Data Clearing Result",
+        "🧹 Data Clearing Result",
         f"🏢 Tenant: {context.tenant_slug}",
         f"👤 User: {context.user_username}",
         f"🌐 Language: {language}",
@@ -486,11 +504,11 @@ def format_clear_data_result(
 
 
 def format_reprocess_result(
-    result: Dict[str, Any], context: TenantContext, language: str
-) -> List[str]:
+    result: dict[str, Any], context: TenantContext, language: str
+) -> list[str]:
     """Format reprocess result using pure logic."""
     lines = [
-        f"🔄 Document Reprocessing Result",
+        "🔄 Document Reprocessing Result",
         f"🏢 Tenant: {context.tenant_slug}",
         f"👤 User: {context.user_username}",
         f"🌐 Language: {language}",
@@ -563,7 +581,7 @@ def format_reprocess_result(
     return lines
 
 
-def parse_cli_arguments(args: List[str]) -> CLIArgs:
+def parse_cli_arguments(args: list[str]) -> CLIArgs:
     """Parse command-line arguments using pure logic."""
     parser = argparse.ArgumentParser(
         description="Multi-tenant RAG System CLI",
@@ -595,7 +613,9 @@ Examples:
     parser.add_argument(
         "--tenant", default="development", help="Tenant slug (default: development)"
     )
-    parser.add_argument("--user", default="dev_user", help="User ID (default: dev_user)")
+    parser.add_argument(
+        "--user", default="dev_user", help="User ID (default: dev_user)"
+    )
     parser.add_argument(
         "--language",
         choices=["hr", "en", "multilingual"],
@@ -618,7 +638,9 @@ Examples:
     query_parser.add_argument(
         "--top-k", type=int, default=5, help="Number of documents to retrieve"
     )
-    query_parser.add_argument("--no-sources", action="store_true", help="Don't return sources")
+    query_parser.add_argument(
+        "--no-sources", action="store_true", help="Don't return sources"
+    )
 
     # Process documents command
     process_parser = subparsers.add_parser("process-docs", help="Process documents")
@@ -711,7 +733,7 @@ class MultiTenantRAGCLI:
         self.storage = storage
         self.config_loader = config_loader
 
-    def write_output(self, lines: List[str]) -> None:
+    def write_output(self, lines: list[str]) -> None:
         """Write formatted output."""
         for line in lines:
             self.output_writer.write(line + "\n")
@@ -806,7 +828,9 @@ class MultiTenantRAGCLI:
     ) -> CollectionInfo:
         """Execute list collections command using pure business logic."""
         try:
-            collections_info = self.folder_manager.get_collection_storage_paths(context, language)
+            collections_info = self.folder_manager.get_collection_storage_paths(
+                context, language
+            )
 
             # Get available collections from storage
             available_collections = self.storage.list_collections()
@@ -817,7 +841,9 @@ class MultiTenantRAGCLI:
             tenant_collection = collections_info["tenant_collection_name"]
 
             if user_collection in available_collections:
-                document_counts[user_collection] = self.storage.get_document_count(user_collection)
+                document_counts[user_collection] = self.storage.get_document_count(
+                    user_collection
+                )
 
             if tenant_collection in available_collections:
                 document_counts[tenant_collection] = self.storage.get_document_count(
@@ -842,7 +868,9 @@ class MultiTenantRAGCLI:
                 document_counts={},
             )
 
-    async def execute_status_command(self, context: TenantContext, language: str) -> SystemStatus:
+    async def execute_status_command(
+        self, context: TenantContext, language: str
+    ) -> SystemStatus:
         """Execute status command using pure business logic."""
         error_messages = []
 
@@ -857,7 +885,9 @@ class MultiTenantRAGCLI:
 
         # Check folder structure
         try:
-            paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
+            paths = self.folder_manager.get_tenant_folder_structure(
+                context, None, language
+            )
             folder_structure = {}
             for path_name, path in paths.items():
                 folder_structure[f"{path_name}: {path}"] = Path(str(path)).exists()
@@ -883,15 +913,17 @@ class MultiTenantRAGCLI:
         )
 
     async def execute_create_folders_command(
-        self, context: TenantContext, languages: List[str]
-    ) -> Dict[str, Any]:
+        self, context: TenantContext, languages: list[str]
+    ) -> dict[str, Any]:
         """Execute create-folders command using pure business logic."""
         try:
             created_folders = []
             existing_folders = []
 
             for language in languages:
-                paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
+                paths = self.folder_manager.get_tenant_folder_structure(
+                    context, None, language
+                )
 
                 for path_name, path in paths.items():
                     path_obj = Path(str(path))
@@ -1005,7 +1037,7 @@ class MultiTenantRAGCLI:
 
     async def execute_reprocess_command(
         self, context: TenantContext, language: str, dry_run: bool, confirm: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute reprocess command - clear data then process documents."""
         if not dry_run and not confirm:
             return {
@@ -1042,7 +1074,9 @@ class MultiTenantRAGCLI:
             # Step 2: Process documents from scratch
             tenant_slug = context.tenant_slug
             user_username = context.user_username
-            docs_path = f"./data/{tenant_slug}/users/{user_username}/documents/{language}"
+            docs_path = (
+                f"./data/{tenant_slug}/users/{user_username}/documents/{language}"
+            )
 
             process_result = await self.execute_process_documents_command(
                 context, language, docs_path
@@ -1066,7 +1100,9 @@ class MultiTenantRAGCLI:
     async def execute_command(self, args: CLIArgs) -> None:
         """Execute the requested command using pure business logic."""
         if not args.command:
-            self.write_output(["❌ No command specified. Use --help for available commands."])
+            self.write_output(
+                ["❌ No command specified. Use --help for available commands."]
+            )
             return
 
         # Create context using pure function
@@ -1107,7 +1143,9 @@ class MultiTenantRAGCLI:
                 collection_info = await self.execute_list_collections_command(
                     context, args.language
                 )
-                formatted_output = format_collection_info(collection_info, context, args.language)
+                formatted_output = format_collection_info(
+                    collection_info, context, args.language
+                )
                 self.write_output(formatted_output)
 
             elif args.command == "status":
@@ -1116,7 +1154,9 @@ class MultiTenantRAGCLI:
                 self.write_output(formatted_output)
 
             elif args.command == "create-folders":
-                result = await self.execute_create_folders_command(context, args.languages)
+                result = await self.execute_create_folders_command(
+                    context, args.languages
+                )
                 formatted_output = format_create_folders_result(result, context)
                 self.write_output(formatted_output)
 
@@ -1124,14 +1164,18 @@ class MultiTenantRAGCLI:
                 result = await self.execute_clear_data_command(
                     context, args.language, args.dry_run, args.confirm
                 )
-                formatted_output = format_clear_data_result(result, context, args.language)
+                formatted_output = format_clear_data_result(
+                    result, context, args.language
+                )
                 self.write_output(formatted_output)
 
             elif args.command == "reprocess":
                 result = await self.execute_reprocess_command(
                     context, args.language, args.dry_run, args.confirm
                 )
-                formatted_output = format_reprocess_result(result, context, args.language)
+                formatted_output = format_reprocess_result(
+                    result, context, args.language
+                )
                 self.write_output(formatted_output)
 
             else:
@@ -1210,7 +1254,7 @@ class MockRAGSystem:
 
         return MockResponse()
 
-    async def add_documents(self, document_paths: List[str]) -> Dict[str, Any]:
+    async def add_documents(self, document_paths: list[str]) -> dict[str, Any]:
         if self.should_fail:
             raise Exception("Mock processing failure")
 
@@ -1229,14 +1273,18 @@ class MockFolderManager:
     def ensure_context_folders(self, context: Any, language: str) -> bool:
         return True
 
-    def get_collection_storage_paths(self, context: Any, language: str) -> Dict[str, Any]:
+    def get_collection_storage_paths(
+        self, context: Any, language: str
+    ) -> dict[str, Any]:
         return {
             "user_collection_name": f"user_{context.user_username}_{language}",
             "tenant_collection_name": f"tenant_{context.tenant_slug}_{language}",
             "base_path": f"/mock/path/{context.tenant_slug}",
         }
 
-    def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> Dict[str, Any]:
+    def get_tenant_folder_structure(
+        self, tenant: Any, user: Any, language: str
+    ) -> dict[str, Any]:
         return {
             "data_folder": Path(f"/mock/{tenant.tenant_slug}/data"),
             "models_folder": Path(f"/mock/{tenant.tenant_slug}/models"),
@@ -1244,8 +1292,8 @@ class MockFolderManager:
         }
 
     def create_tenant_folder_structure(
-        self, tenant: Any, user: Any, languages: List[str]
-    ) -> tuple[bool, List[str]]:
+        self, tenant: Any, user: Any, languages: list[str]
+    ) -> tuple[bool, list[str]]:
         created_folders = [f"/mock/{tenant.tenant_slug}/{lang}" for lang in languages]
         return True, created_folders
 
@@ -1253,7 +1301,7 @@ class MockFolderManager:
 class MockStorage:
     """Mock storage for testing."""
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         return ["collection1", "collection2", "user_dev_user_hr"]
 
     def get_document_count(self, collection_name: str) -> int:
@@ -1263,10 +1311,10 @@ class MockStorage:
 class MockConfigLoader:
     """Mock config loader for testing."""
 
-    def get_shared_config(self) -> Dict[str, Any]:
+    def get_shared_config(self) -> dict[str, Any]:
         return {"key": "value"}
 
-    def get_storage_config(self) -> Dict[str, Any]:
+    def get_storage_config(self) -> dict[str, Any]:
         return {"storage": "config"}
 
 
@@ -1357,7 +1405,9 @@ async def main():
                         if self.tenant_context:
                             # Use proper tenant-specific path from configuration template
                             tenant_slug = self.tenant_context.tenant_slug
-                            persist_dir = os.path.join(data_base_dir, tenant_slug, "vectordb")
+                            persist_dir = os.path.join(
+                                data_base_dir, tenant_slug, "vectordb"
+                            )
                         else:
                             # Fallback for testing without tenant context - still avoid hardcoded "vectordb_cli"
                             persist_dir = os.path.join(data_base_dir, "cli_vectordb")
@@ -1365,7 +1415,9 @@ async def main():
                         os.makedirs(persist_dir, exist_ok=True)
 
                         self._client = chromadb.PersistentClient(path=persist_dir)
-                        print(f"✅ ChromaDB persistent client initialized: {persist_dir}")
+                        print(
+                            f"✅ ChromaDB persistent client initialized: {persist_dir}"
+                        )
 
                         # Create or get collection for this tenant/user/language
                         if self.tenant_context:
@@ -1376,7 +1428,9 @@ async def main():
 
                         # Try to get existing collection first
                         try:
-                            self._collection = self._client.get_collection(collection_name)
+                            self._collection = self._client.get_collection(
+                                collection_name
+                            )
                             existing_count = self._collection.count()
                             print(
                                 f"📦 Found existing collection: {collection_name} ({existing_count} documents)"
@@ -1406,7 +1460,9 @@ async def main():
                         try:
                             from sentence_transformers import SentenceTransformer
 
-                            from ..utils.config_loader import get_language_specific_config
+                            from ..utils.config_loader import (
+                                get_language_specific_config,
+                            )
                             from ..utils.config_validator import ConfigurationError
 
                             # Get language-specific embedding configuration
@@ -1427,8 +1483,12 @@ async def main():
                                 self._model_name = primary_model
 
                                 # Validate embedding dimension matches expectation
-                                actual_dim = self._model.get_sentence_embedding_dimension()
-                                expected_dim = embedding_config.get("expected_dimension")
+                                actual_dim = (
+                                    self._model.get_sentence_embedding_dimension()
+                                )
+                                expected_dim = embedding_config.get(
+                                    "expected_dimension"
+                                )
                                 if expected_dim and actual_dim != expected_dim:
                                     print(
                                         f"⚠️ Dimension mismatch: {primary_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
@@ -1439,14 +1499,22 @@ async def main():
                                     )
                             except Exception as e:
                                 if fallback_model:
-                                    print(f"⚠️ Primary model {primary_model} failed: {e}")
-                                    print(f"🔧 Trying fallback model {fallback_model}...")
+                                    print(
+                                        f"⚠️ Primary model {primary_model} failed: {e}"
+                                    )
+                                    print(
+                                        f"🔧 Trying fallback model {fallback_model}..."
+                                    )
                                     self._model = SentenceTransformer(fallback_model)
                                     self._model_name = fallback_model
 
                                     # Validate fallback model dimension too
-                                    actual_dim = self._model.get_sentence_embedding_dimension()
-                                    expected_dim = embedding_config.get("expected_dimension")
+                                    actual_dim = (
+                                        self._model.get_sentence_embedding_dimension()
+                                    )
+                                    expected_dim = embedding_config.get(
+                                        "expected_dimension"
+                                    )
                                     if expected_dim and actual_dim != expected_dim:
                                         print(
                                             f"⚠️ Fallback dimension mismatch: {fallback_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
@@ -1461,7 +1529,9 @@ async def main():
                                     )
                                     raise
                         except ImportError:
-                            print("⚠️ sentence-transformers not installed, using dummy embeddings")
+                            print(
+                                "⚠️ sentence-transformers not installed, using dummy embeddings"
+                            )
                             self._model = None
                             # Keep self._model_name from config for logging purposes
 
@@ -1471,10 +1541,14 @@ async def main():
                         print(f"❌ Failed to initialize RAG components: {e}")
                         raise e
 
-                async def add_documents(self, document_paths: list, batch_size: int = 10):
+                async def add_documents(
+                    self, document_paths: list, batch_size: int = 10
+                ):
                     """Process documents through complete pipeline: extract → chunk → embed → store."""
                     if not self._collection:
-                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
+                        raise RuntimeError(
+                            "RAG system not initialized. Call initialize() first."
+                        )
 
                     processed_docs = 0
                     total_chunks = 0
@@ -1516,7 +1590,9 @@ async def main():
                             overlap = 50
                             chunks = []
 
-                            for i in range(0, len(extracted_text), chunk_size - overlap):
+                            for i in range(
+                                0, len(extracted_text), chunk_size - overlap
+                            ):
                                 chunk_text = extracted_text[i : i + chunk_size].strip()
                                 if chunk_text:
                                     chunks.append(
@@ -1525,7 +1601,9 @@ async def main():
                                             "chunk_id": f"doc_{processed_docs}_chunk_{len(chunks)}",
                                             "source": str(doc_path),
                                             "start_char": i,
-                                            "end_char": min(i + chunk_size, len(extracted_text)),
+                                            "end_char": min(
+                                                i + chunk_size, len(extracted_text)
+                                            ),
                                         }
                                     )
 
@@ -1543,7 +1621,9 @@ async def main():
                                 # Dummy embeddings if model not available
                                 import numpy as np
 
-                                embeddings = [np.random.random(1024).tolist() for _ in chunks]
+                                embeddings = [
+                                    np.random.random(1024).tolist() for _ in chunks
+                                ]
                                 print(f"⚠️ Generated {len(embeddings)} dummy embeddings")
 
                             # 4. Real vector storage in ChromaDB
@@ -1563,7 +1643,9 @@ async def main():
                                     ids=[chunk["chunk_id"] for chunk in chunks],
                                     embeddings=embeddings,
                                 )
-                                print(f"✅ Stored {len(chunks)} chunks in vector database")
+                                print(
+                                    f"✅ Stored {len(chunks)} chunks in vector database"
+                                )
 
                             processed_docs += 1
                             total_chunks += len(chunks)
@@ -1588,7 +1670,9 @@ async def main():
                         "stored_chunks": stored_count,
                         "processing_time": processing_time,
                         "documents_per_second": (
-                            processed_docs / processing_time if processing_time > 0 else 0
+                            processed_docs / processing_time
+                            if processing_time > 0
+                            else 0
                         ),
                         "errors": errors if errors else None,
                     }
@@ -1596,7 +1680,9 @@ async def main():
                 async def query(self, query_obj):
                     """Handle queries with REAL Ollama-powered generation."""
                     if not self._collection:
-                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
+                        raise RuntimeError(
+                            "RAG system not initialized. Call initialize() first."
+                        )
 
                     start_time = time.time()
                     query_text = query_obj.text
@@ -1625,22 +1711,30 @@ async def main():
                         context_chunks = []
 
                         if results["documents"][0]:
-                            print(f"📊 Found {len(results['documents'][0])} relevant chunks")
+                            print(
+                                f"📊 Found {len(results['documents'][0])} relevant chunks"
+                            )
 
                             for i, (doc, metadata) in enumerate(
                                 zip(results["documents"][0], results["metadatas"][0])
                             ):
                                 distance = (
-                                    results["distances"][0][i] if "distances" in results else 0
+                                    results["distances"][0][i]
+                                    if "distances" in results
+                                    else 0
                                 )
-                                score = 1 - distance  # Convert distance to similarity score
+                                score = (
+                                    1 - distance
+                                )  # Convert distance to similarity score
 
                                 chunk_data = {
                                     "content": doc,
                                     "similarity_score": score,
                                     "final_score": score,
                                     "source": (
-                                        metadata["source"] if "source" in metadata else "Unknown"
+                                        metadata["source"]
+                                        if "source" in metadata
+                                        else "Unknown"
                                     ),
                                     "chunk_id": (
                                         metadata["chunk_id"]
@@ -1692,10 +1786,14 @@ async def main():
                             answer = ollama_response.text
                             generation_time = time.time() - generation_start
 
-                            print(f"✅ Generated answer using Ollama in {generation_time:.2f}s")
+                            print(
+                                f"✅ Generated answer using Ollama in {generation_time:.2f}s"
+                            )
                             print(f"💬 Answer preview: {answer[:100]}...")
                         else:
-                            answer = "No relevant documents found in the knowledge base."
+                            answer = (
+                                "No relevant documents found in the knowledge base."
+                            )
                             generation_time = 0.0
                             print("⚠️ No documents retrieved")
 

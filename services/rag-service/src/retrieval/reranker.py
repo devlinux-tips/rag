@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 # ===== PURE FUNCTIONS =====
 
 
-def calculate_rank_changes(original_ranks: List[int], new_ranks: List[int]) -> List[int]:
+def calculate_rank_changes(
+    original_ranks: list[int], new_ranks: list[int]
+) -> list[int]:
     """
     Calculate rank change for each item.
     Pure function - no side effects, deterministic output.
@@ -53,8 +55,8 @@ def calculate_rank_changes(original_ranks: List[int], new_ranks: List[int]) -> L
 
 
 def sort_by_scores(
-    items: List[Any], scores: List[float], descending: bool = True
-) -> Tuple[List[Any], List[float], List[int]]:
+    items: list[Any], scores: list[float], descending: bool = True
+) -> tuple[list[Any], list[float], list[int]]:
     """
     Sort items by scores and return sorted items, scores, and original indices.
     Pure function - no side effects, deterministic output.
@@ -77,7 +79,9 @@ def sort_by_scores(
         raise ValueError(f"Scores must be list, got {type(scores)}")
 
     if len(items) != len(scores):
-        raise ValueError(f"Items and scores must have same length: {len(items)} vs {len(scores)}")
+        raise ValueError(
+            f"Items and scores must have same length: {len(items)} vs {len(scores)}"
+        )
 
     if not all(isinstance(score, (int, float)) for score in scores):
         raise ValueError("All scores must be numbers")
@@ -95,8 +99,8 @@ def sort_by_scores(
 
 
 def normalize_scores_to_range(
-    scores: List[float], min_val: float = 0.0, max_val: float = 1.0
-) -> List[float]:
+    scores: list[float], min_val: float = 0.0, max_val: float = 1.0
+) -> list[float]:
     """
     Normalize scores to specified range.
     Pure function - no side effects, deterministic output.
@@ -125,7 +129,9 @@ def normalize_scores_to_range(
         raise ValueError(f"Max value must be number, got {type(max_val)}")
 
     if min_val >= max_val:
-        raise ValueError(f"Min value ({min_val}) must be less than max value ({max_val})")
+        raise ValueError(
+            f"Min value ({min_val}) must be less than max value ({max_val})"
+        )
 
     if not scores:
         return []
@@ -139,7 +145,9 @@ def normalize_scores_to_range(
         return [mid_val] * len(scores)
 
     # Normalize to [0, 1] then scale to desired range
-    normalized = [(score - original_min) / (original_max - original_min) for score in scores]
+    normalized = [
+        (score - original_min) / (original_max - original_min) for score in scores
+    ]
 
     # Scale to desired range
     scaled = [min_val + norm * (max_val - min_val) for norm in normalized]
@@ -148,8 +156,8 @@ def normalize_scores_to_range(
 
 
 def calculate_reranking_metrics(
-    original_ranks: List[int], new_ranks: List[int]
-) -> Dict[str, float]:
+    original_ranks: list[int], new_ranks: list[int]
+) -> dict[str, float]:
     """
     Calculate metrics for reranking quality.
     Pure function - no side effects, deterministic output.
@@ -196,7 +204,9 @@ def calculate_reranking_metrics(
     # Simple rank correlation (Spearman-like)
     if n > 1:
         # Convert ranks to relative positions for correlation
-        orig_positions = [original_ranks.index(i) if i in original_ranks else 0 for i in range(n)]
+        orig_positions = [
+            original_ranks.index(i) if i in original_ranks else 0 for i in range(n)
+        ]
         new_positions = [new_ranks.index(i) if i in new_ranks else 0 for i in range(n)]
 
         # Simple correlation calculation
@@ -204,7 +214,8 @@ def calculate_reranking_metrics(
         mean_new = sum(new_positions) / n
 
         numerator = sum(
-            (o - mean_orig) * (n - mean_new) for o, n in zip(orig_positions, new_positions)
+            (o - mean_orig) * (n - mean_new)
+            for o, n in zip(orig_positions, new_positions)
         )
 
         orig_var = sum((o - mean_orig) ** 2 for o in orig_positions)
@@ -226,7 +237,9 @@ def calculate_reranking_metrics(
     }
 
 
-def create_query_document_pairs(query: str, documents: List[str]) -> List[Tuple[str, str]]:
+def create_query_document_pairs(
+    query: str, documents: list[str]
+) -> list[tuple[str, str]]:
     """
     Create query-document pairs for reranking.
     Pure function - no side effects, deterministic output.
@@ -270,7 +283,9 @@ class RerankerConfig:
     score_threshold: float = 0.0
 
     @classmethod
-    def from_validated_config(cls, reranking_config: ReRankingConfig) -> "RerankerConfig":
+    def from_validated_config(
+        cls, reranking_config: ReRankingConfig
+    ) -> "RerankerConfig":
         """Create RerankerConfig from validated ReRankingConfig."""
         return cls(
             model_name=reranking_config.model_name,
@@ -312,7 +327,7 @@ class RerankingResult:
     original_rank: int
     new_rank: int
     rank_change: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Validate and calculate derived fields."""
@@ -332,7 +347,11 @@ class RerankingResult:
             raise ValueError("Metadata must be dict")
 
         # Calculate rank change if not provided
-        if self.rank_change == 0 and hasattr(self, "original_rank") and hasattr(self, "new_rank"):
+        if (
+            self.rank_change == 0
+            and hasattr(self, "original_rank")
+            and hasattr(self, "new_rank")
+        ):
             self.rank_change = self.original_rank - self.new_rank
 
 
@@ -341,7 +360,7 @@ class DocumentItem:
     """Document item for reranking."""
 
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     original_score: float = 0.0
 
     def __post_init__(self):
@@ -375,8 +394,8 @@ class ScoreCalculator(Protocol):
     """Protocol for score calculation."""
 
     def calculate_scores(
-        self, query_document_pairs: List[Tuple[str, str]], batch_size: int
-    ) -> List[float]:
+        self, query_document_pairs: list[tuple[str, str]], batch_size: int
+    ) -> list[float]:
         """Calculate relevance scores for query-document pairs."""
         ...
 
@@ -425,8 +444,8 @@ class MultilingualReranker:
             self.is_ready = False
 
     def rerank(
-        self, query: str, documents: List[DocumentItem], top_k: Optional[int] = None
-    ) -> List[RerankingResult]:
+        self, query: str, documents: list[DocumentItem], top_k: Optional[int] = None
+    ) -> list[RerankingResult]:
         """
         Rerank documents based on relevance to query.
 
@@ -505,7 +524,9 @@ class MultilingualReranker:
             self.logger.error(f"Failed to rerank documents: {e}")
             raise
 
-    def calculate_reranking_quality(self, results: List[RerankingResult]) -> Dict[str, float]:
+    def calculate_reranking_quality(
+        self, results: list[RerankingResult]
+    ) -> dict[str, float]:
         """
         Calculate quality metrics for reranking.
 
@@ -541,7 +562,7 @@ class MultilingualReranker:
             self.logger.error(f"Failed to calculate reranking quality: {e}")
             return {}
 
-    def explain_reranking(self, results: List[RerankingResult]) -> str:
+    def explain_reranking(self, results: list[RerankingResult]) -> str:
         """
         Generate explanation of reranking results.
 
@@ -615,7 +636,7 @@ def create_multilingual_reranker(
 
 
 def create_multilingual_reranker_from_config(
-    main_config: Dict[str, Any],
+    main_config: dict[str, Any],
     model_loader: ModelLoader,
     score_calculator: ScoreCalculator,
 ) -> MultilingualReranker:
@@ -672,7 +693,7 @@ def create_mock_model_loader(
 
 
 def create_mock_score_calculator(
-    base_scores: Optional[List[float]] = None, add_noise: bool = False
+    base_scores: Optional[list[float]] = None, add_noise: bool = False
 ) -> ScoreCalculator:
     """
     Factory function to create mock score calculator.
@@ -691,13 +712,15 @@ def create_mock_score_calculator(
             self.add_noise = add_noise
 
         def calculate_scores(
-            self, query_document_pairs: List[Tuple[str, str]], batch_size: int
-        ) -> List[float]:
+            self, query_document_pairs: list[tuple[str, str]], batch_size: int
+        ) -> list[float]:
             n_pairs = len(query_document_pairs)
 
             if self.base_scores:
                 # Use provided scores, cycling if necessary
-                scores = [self.base_scores[i % len(self.base_scores)] for i in range(n_pairs)]
+                scores = [
+                    self.base_scores[i % len(self.base_scores)] for i in range(n_pairs)
+                ]
             else:
                 # Generate mock scores based on query-document similarity
                 scores = []
@@ -719,7 +742,10 @@ def create_mock_score_calculator(
             if self.add_noise:
                 import random
 
-                scores = [max(0.0, min(1.0, score + random.uniform(-0.1, 0.1))) for score in scores]
+                scores = [
+                    max(0.0, min(1.0, score + random.uniform(-0.1, 0.1)))
+                    for score in scores
+                ]
 
             return scores
 

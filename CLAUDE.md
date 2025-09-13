@@ -39,6 +39,7 @@
   - `dependency_analyzer.py` - Complex dependency tables
   - `validate_language_configs.py` - Configuration matrices
 - **Quality workflow**: `format_code.py` → `git add .` → `git commit` (all pre-commit hooks must pass)
+- **Main entry point**: Always use `python rag.py` - never use module imports or internal paths
 - **Push critical thinking** - force explicit discussion of pros/cons
 
 #### **5. Architecture Rules**
@@ -73,13 +74,13 @@
 source venv/bin/activate
 
 # CLI Usage (Multi-tenant)
-python -m src.cli.rag_cli --tenant development --user dev_user --language hr query "Što je RAG?"
-python -m src.cli.rag_cli --tenant development --user dev_user --language en query "What is RAG?"
-python -m src.cli.rag_cli --tenant development --user dev_user --language hr process-docs data/development/users/dev_user/documents/hr/
+python rag.py --tenant development --user dev_user --language hr query "Što je RAG?"
+python rag.py --tenant development --user dev_user --language en query "What is RAG?"
+python rag.py --tenant development --user dev_user --language hr process-docs data/development/users/dev_user/documents/hr/
 
 # System Status
-python -m src.cli.rag_cli --language hr status
-python -m src.cli.rag_cli --language hr list-collections
+python rag.py --language hr status
+python rag.py --language hr list-collections
 
 # Configuration Testing
 python -c "from src.utils.config_loader import get_unified_config; print(get_unified_config())"

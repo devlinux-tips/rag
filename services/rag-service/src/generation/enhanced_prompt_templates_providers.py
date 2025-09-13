@@ -25,7 +25,7 @@ class MockConfigProvider:
     def __init__(self, config: Optional[PromptConfig] = None):
         """Initialize with optional mock configuration."""
         self.config = config or self._create_default_config()
-        self.call_history: List[str] = []
+        self.call_history: list[str] = []
 
     def _create_default_config(self) -> PromptConfig:
         """Create default test configuration."""
@@ -104,7 +104,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: Dict[str, List[str]] = {
+        self.messages: dict[str, list[str]] = {
             "info": [],
             "debug": [],
             "warning": [],
@@ -132,7 +132,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
+    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -151,7 +151,7 @@ class ProductionConfigProvider:
 
     def __init__(self):
         """Initialize production config provider."""
-        self._config_cache: Dict[str, PromptConfig] = {}
+        self._config_cache: dict[str, PromptConfig] = {}
 
     def get_prompt_config(self, language: str) -> PromptConfig:
         """Get prompt configuration from real config system."""
@@ -234,9 +234,9 @@ class StandardLoggerProvider:
 
 def create_mock_setup(
     config: Optional[PromptConfig] = None,
-    custom_templates: Optional[Dict[CategoryType, Dict[PromptType, str]]] = None,
-    custom_messages: Optional[Dict[str, str]] = None,
-    custom_formatting: Optional[Dict[str, str]] = None,
+    custom_templates: Optional[dict[CategoryType, dict[PromptType, str]]] = None,
+    custom_messages: Optional[dict[str, str]] = None,
+    custom_formatting: Optional[dict[str, str]] = None,
     language: str = "hr",
 ) -> tuple:
     """
@@ -392,9 +392,9 @@ def create_development_prompt_builder():
 def create_test_prompt_builder(
     language: str = "hr",
     config: Optional[PromptConfig] = None,
-    custom_templates: Optional[Dict[CategoryType, Dict[PromptType, str]]] = None,
-    custom_messages: Optional[Dict[str, str]] = None,
-    custom_formatting: Optional[Dict[str, str]] = None,
+    custom_templates: Optional[dict[CategoryType, dict[PromptType, str]]] = None,
+    custom_messages: Optional[dict[str, str]] = None,
+    custom_formatting: Optional[dict[str, str]] = None,
 ):
     """Create prompt builder configured for testing."""
     from .enhanced_prompt_templates import create_enhanced_prompt_builder
@@ -420,8 +420,8 @@ def create_test_prompt_builder(
 
 
 def build_category_templates(
-    templates: Dict[str, str],
-) -> Dict[CategoryType, Dict[PromptType, str]]:
+    templates: dict[str, str],
+) -> dict[CategoryType, dict[PromptType, str]]:
     """Helper to build category templates from flat dictionary."""
     result = {}
 
@@ -446,7 +446,9 @@ def build_category_templates(
     return result
 
 
-def create_template_variants(base_template: str, variants: Dict[str, str]) -> Dict[str, str]:
+def create_template_variants(
+    base_template: str, variants: dict[str, str]
+) -> dict[str, str]:
     """Create template variants by substituting parts of base template."""
     result = {"base": base_template}
 

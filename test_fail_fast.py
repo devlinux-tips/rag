@@ -3,7 +3,6 @@
 Test: Does system fail fast now that fallbacks are removed?
 """
 
-import os
 import sys
 
 sys.path.append("services/rag-service/src")

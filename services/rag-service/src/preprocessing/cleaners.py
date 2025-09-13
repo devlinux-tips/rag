@@ -21,7 +21,7 @@ class CleaningResult:
     text: str
     original_length: int
     cleaned_length: int
-    operations_performed: List[str]
+    operations_performed: list[str]
     language_score: Optional[float] = None
     is_meaningful: Optional[bool] = None
 
@@ -30,7 +30,7 @@ class CleaningResult:
 class LanguageConfig:
     """Language-specific configuration for text processing."""
 
-    diacritic_map: Dict[str, str]
+    diacritic_map: dict[str, str]
     word_char_pattern: str
     locale_primary: Optional[str] = None
     locale_fallback: str = "C.UTF-8"
@@ -50,8 +50,8 @@ class CleaningConfig:
 class DocumentCleaningConfig:
     """Document-specific cleaning configuration."""
 
-    header_footer_patterns: List[str]
-    ocr_corrections: Dict[str, str]
+    header_footer_patterns: list[str]
+    ocr_corrections: dict[str, str]
 
 
 @dataclass
@@ -66,7 +66,7 @@ class ChunkingConfig:
 class SharedLanguageConfig:
     """Shared language configuration."""
 
-    stopwords: List[str]
+    stopwords: list[str]
     chars_pattern: str
 
 
@@ -74,23 +74,23 @@ class SharedLanguageConfig:
 class ConfigProvider(Protocol):
     """Protocol for configuration access."""
 
-    def get_language_config(self, language: str) -> Dict[str, any]:
+    def get_language_config(self, language: str) -> dict[str, any]:
         """Get language-specific text processing configuration."""
         ...
 
-    def get_cleaning_config(self) -> Dict[str, any]:
+    def get_cleaning_config(self) -> dict[str, any]:
         """Get general cleaning configuration."""
         ...
 
-    def get_document_cleaning_config(self, language: str) -> Dict[str, any]:
+    def get_document_cleaning_config(self, language: str) -> dict[str, any]:
         """Get document cleaning configuration."""
         ...
 
-    def get_chunking_config(self, language: str) -> Dict[str, any]:
+    def get_chunking_config(self, language: str) -> dict[str, any]:
         """Get chunking configuration."""
         ...
 
-    def get_shared_language_config(self, language: str) -> Dict[str, any]:
+    def get_shared_language_config(self, language: str) -> dict[str, any]:
         """Get shared language configuration."""
         ...
 
@@ -186,7 +186,7 @@ def remove_formatting_artifacts(text: str) -> str:
     return text
 
 
-def remove_headers_footers(text: str, header_footer_patterns: List[str]) -> str:
+def remove_headers_footers(text: str, header_footer_patterns: list[str]) -> str:
     """
     Remove common document headers and footers.
     Pure function with no side effects.
@@ -217,7 +217,7 @@ def remove_headers_footers(text: str, header_footer_patterns: List[str]) -> str:
     return "\n".join(cleaned_lines)
 
 
-def fix_ocr_errors(text: str, ocr_corrections: Dict[str, str]) -> str:
+def fix_ocr_errors(text: str, ocr_corrections: dict[str, str]) -> str:
     """
     Fix common OCR errors using correction mapping.
     Pure function with no side effects.
@@ -240,7 +240,7 @@ def fix_ocr_errors(text: str, ocr_corrections: Dict[str, str]) -> str:
 
 def extract_sentences(
     text: str, sentence_ending_pattern: str, min_sentence_length: int
-) -> List[str]:
+) -> list[str]:
     """
     Extract sentences from text using language-specific patterns.
     Pure function with no side effects.
@@ -268,7 +268,7 @@ def extract_sentences(
     return clean_sentences
 
 
-def normalize_diacritics(text: str, diacritic_map: Dict[str, str]) -> str:
+def normalize_diacritics(text: str, diacritic_map: dict[str, str]) -> str:
     """
     Normalize diacritics using character mapping.
     Pure function with no side effects.
@@ -324,7 +324,7 @@ def is_meaningful_text(
     return True
 
 
-def detect_language_content(text: str, language_words: List[str]) -> float:
+def detect_language_content(text: str, language_words: list[str]) -> float:
     """
     Detect how much content matches the target language using Unicode analysis.
     Pure function with no side effects.
@@ -355,11 +355,17 @@ def detect_language_content(text: str, language_words: List[str]) -> float:
     total_words = len(text.split())
 
     # Dynamic diacritic expectation based on actual text
-    char_ratio = char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0  # 5% threshold
+    char_ratio = (
+        char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0
+    )  # 5% threshold
     word_ratio = word_score / max(total_words * 0.2, 1)  # 20% common words threshold
 
     # Language-agnostic scoring
-    score = min((char_ratio + word_ratio) / 2, 1.0) if char_score > 0 else min(word_ratio, 1.0)
+    score = (
+        min((char_ratio + word_ratio) / 2, 1.0)
+        if char_score > 0
+        else min(word_ratio, 1.0)
+    )
 
     return score
 
@@ -425,7 +431,9 @@ def clean_text_comprehensive(
     cleaned = text
 
     # Remove document header/footer artifacts
-    cleaned = remove_headers_footers(cleaned, document_cleaning_config.header_footer_patterns)
+    cleaned = remove_headers_footers(
+        cleaned, document_cleaning_config.header_footer_patterns
+    )
     if len(cleaned) != len(text):
         operations.append("header_footer_removal")
 
@@ -513,7 +521,9 @@ class MultilingualTextCleaner:
         )
 
         # Document cleaning configuration
-        doc_cleaning_data = self._config_provider.get_document_cleaning_config(self.language)
+        doc_cleaning_data = self._config_provider.get_document_cleaning_config(
+            self.language
+        )
         self.document_cleaning_config = DocumentCleaningConfig(
             header_footer_patterns=doc_cleaning_data["header_footer_patterns"],
             ocr_corrections=doc_cleaning_data["ocr_corrections"],
@@ -562,7 +572,7 @@ class MultilingualTextCleaner:
 
         return result
 
-    def extract_sentences(self, text: str) -> List[str]:
+    def extract_sentences(self, text: str) -> list[str]:
         """Extract sentences from text for the specified language."""
         return extract_sentences(
             text=text,
@@ -614,7 +624,9 @@ class MultilingualTextCleaner:
         # Check for stopwords if available
         stopword_ratio = 0.0
         if hasattr(self.shared_config, "stopwords") and self.shared_config.stopwords:
-            matching_stopwords = sum(1 for word in words if word in self.shared_config.stopwords)
+            matching_stopwords = sum(
+                1 for word in words if word in self.shared_config.stopwords
+            )
             stopword_ratio = matching_stopwords / len(words) if words else 0.0
 
         # Combined score
@@ -626,9 +638,14 @@ class MultilingualTextCleaner:
             text = str(text)
 
         # Apply language-specific diacritic preservation
-        if hasattr(self.language_config, "diacritic_map") and self.language_config.diacritic_map:
+        if (
+            hasattr(self.language_config, "diacritic_map")
+            and self.language_config.diacritic_map
+        ):
             # For languages with diacritics, ensure proper UTF-8 encoding
-            text = text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+            text = text.encode("utf-8", errors="replace").decode(
+                "utf-8", errors="replace"
+            )
 
         return text
 
@@ -642,7 +659,9 @@ class MultilingualTextCleaner:
 
         # Set language-specific locale (fail-fast approach)
         if self.language_config.locale_primary:
-            self._environment.set_locale(locale.LC_ALL, self.language_config.locale_primary)
+            self._environment.set_locale(
+                locale.LC_ALL, self.language_config.locale_primary
+            )
 
     def _log_debug(self, message: str) -> None:
         """Log debug message if logger available."""
@@ -740,6 +759,8 @@ def setup_language_environment(
 
     config_prov = config_provider or create_config_provider()
     env_prov = create_environment_provider()
-    cleaner = MultilingualTextCleaner(language, config_prov, environment_provider=env_prov)
+    cleaner = MultilingualTextCleaner(
+        language, config_prov, environment_provider=env_prov
+    )
 
     cleaner.setup_language_environment()

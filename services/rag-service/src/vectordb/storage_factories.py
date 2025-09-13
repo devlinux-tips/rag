@@ -26,10 +26,10 @@ class ChromaDBCollection(VectorCollection):
 
     def add(
         self,
-        ids: List[str],
-        documents: List[str],
-        metadatas: List[Dict[str, Any]],
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict[str, Any]],
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         """Add documents to collection."""
         try:
@@ -38,7 +38,8 @@ class ChromaDBCollection(VectorCollection):
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb
+                    for emb in embeddings
                 ]
                 add_kwargs["embeddings"] = embedding_lists
 
@@ -51,13 +52,13 @@ class ChromaDBCollection(VectorCollection):
 
     def query(
         self,
-        query_texts: Optional[List[str]] = None,
-        query_embeddings: Optional[List[np.ndarray]] = None,
+        query_texts: Optional[list[str]] = None,
+        query_embeddings: Optional[list[np.ndarray]] = None,
         n_results: int = 10,
-        where: Optional[Dict[str, Any]] = None,
-        where_document: Optional[Dict[str, Any]] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        where: Optional[dict[str, Any]] = None,
+        where_document: Optional[dict[str, Any]] = None,
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Query collection for similar documents."""
         try:
             query_kwargs = {"n_results": n_results}
@@ -68,7 +69,8 @@ class ChromaDBCollection(VectorCollection):
             if query_embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in query_embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb
+                    for emb in query_embeddings
                 ]
                 query_kwargs["query_embeddings"] = embedding_lists
 
@@ -84,7 +86,7 @@ class ChromaDBCollection(VectorCollection):
                 query_kwargs["include"] = ["documents", "metadatas", "distances"]
 
             results = self._collection.query(**query_kwargs)
-            self.logger.debug(f"Query returned results for collection")
+            self.logger.debug("Query returned results for collection")
 
             return results
 
@@ -94,12 +96,12 @@ class ChromaDBCollection(VectorCollection):
 
     def get(
         self,
-        ids: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
+        ids: Optional[list[str]] = None,
+        where: Optional[dict[str, Any]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Get documents from collection."""
         try:
             get_kwargs = {}
@@ -129,10 +131,10 @@ class ChromaDBCollection(VectorCollection):
 
     def update(
         self,
-        ids: List[str],
-        documents: Optional[List[str]] = None,
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: Optional[list[str]] = None,
+        metadatas: Optional[list[dict[str, Any]]] = None,
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         """Update documents in collection."""
         try:
@@ -147,7 +149,8 @@ class ChromaDBCollection(VectorCollection):
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings
+                    emb.tolist() if isinstance(emb, np.ndarray) else emb
+                    for emb in embeddings
                 ]
                 update_kwargs["embeddings"] = embedding_lists
 
@@ -159,7 +162,7 @@ class ChromaDBCollection(VectorCollection):
             raise
 
     def delete(
-        self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None
+        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
     ) -> None:
         """Delete documents from collection."""
         try:
@@ -175,7 +178,7 @@ class ChromaDBCollection(VectorCollection):
                 raise ValueError("Either ids or where filter must be provided")
 
             self._collection.delete(**delete_kwargs)
-            self.logger.debug(f"Deleted documents from collection")
+            self.logger.debug("Deleted documents from collection")
 
         except Exception as e:
             self.logger.error(f"Failed to delete documents from collection: {e}")
@@ -195,7 +198,7 @@ class ChromaDBCollection(VectorCollection):
         return self._collection.name
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         """Get collection metadata."""
         return self._collection.metadata or {}
 
@@ -233,7 +236,9 @@ class ChromaDBDatabase(VectorDatabase):
 
             if self.persist:
                 client = chromadb.PersistentClient(path=self.db_path, settings=settings)
-                self.logger.info(f"Created persistent ChromaDB client at {self.db_path}")
+                self.logger.info(
+                    f"Created persistent ChromaDB client at {self.db_path}"
+                )
             else:
                 client = chromadb.EphemeralClient(settings=settings)
                 self.logger.info("Created ephemeral ChromaDB client")
@@ -244,7 +249,9 @@ class ChromaDBDatabase(VectorDatabase):
             self.logger.error(f"Failed to create ChromaDB client: {e}")
             raise
 
-    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
+    def create_collection(
+        self, name: str, reset_if_exists: bool = False
+    ) -> VectorCollection:
         """Create or get collection."""
         try:
             if reset_if_exists:
@@ -252,14 +259,18 @@ class ChromaDBDatabase(VectorDatabase):
                     self._client.delete_collection(name)
                     self.logger.info(f"Deleted existing collection: {name}")
                 except Exception as e:
-                    self.logger.debug(f"Collection {name} did not exist for deletion: {e}")
+                    self.logger.debug(
+                        f"Collection {name} did not exist for deletion: {e}"
+                    )
 
             # Create or get collection
             collection = self._client.get_or_create_collection(
                 name=name, metadata={"hnsw:space": self.distance_metric}
             )
 
-            self.logger.info(f"Collection '{name}' ready with {self.distance_metric} metric")
+            self.logger.info(
+                f"Collection '{name}' ready with {self.distance_metric} metric"
+            )
             return ChromaDBCollection(collection)
 
         except Exception as e:
@@ -287,7 +298,7 @@ class ChromaDBDatabase(VectorDatabase):
             self.logger.error(f"Failed to delete collection {name}: {e}")
             raise
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         """List all collections."""
         try:
             collections = self._client.list_collections()
@@ -303,7 +314,9 @@ class ChromaDBDatabase(VectorDatabase):
         """Reset entire database."""
         try:
             if not self.allow_reset:
-                raise ValueError("Database reset not allowed - check allow_reset setting")
+                raise ValueError(
+                    "Database reset not allowed - check allow_reset setting"
+                )
 
             self._client.reset()
             self.logger.warning("Database reset - all collections deleted")
@@ -319,15 +332,15 @@ class MockCollection(VectorCollection):
     def __init__(self, name: str = "test_collection"):
         self._name = name
         self._metadata = {"hnsw:space": "cosine"}
-        self._documents: Dict[str, Dict[str, Any]] = {}
+        self._documents: dict[str, dict[str, Any]] = {}
         self.logger = logging.getLogger(__name__)
 
     def add(
         self,
-        ids: List[str],
-        documents: List[str],
-        metadatas: List[Dict[str, Any]],
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict[str, Any]],
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         """Add documents to mock collection."""
         for i, doc_id in enumerate(ids):
@@ -340,13 +353,13 @@ class MockCollection(VectorCollection):
 
     def query(
         self,
-        query_texts: Optional[List[str]] = None,
-        query_embeddings: Optional[List[np.ndarray]] = None,
+        query_texts: Optional[list[str]] = None,
+        query_embeddings: Optional[list[np.ndarray]] = None,
         n_results: int = 10,
-        where: Optional[Dict[str, Any]] = None,
-        where_document: Optional[Dict[str, Any]] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        where: Optional[dict[str, Any]] = None,
+        where_document: Optional[dict[str, Any]] = None,
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Mock query returns first n_results documents."""
         include = include or ["documents", "metadatas", "distances"]
 
@@ -374,18 +387,20 @@ class MockCollection(VectorCollection):
 
     def get(
         self,
-        ids: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
+        ids: Optional[list[str]] = None,
+        where: Optional[dict[str, Any]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Get documents from mock collection."""
         include = include or ["documents", "metadatas"]
 
         if ids:
             doc_items = [
-                (doc_id, self._documents[doc_id]) for doc_id in ids if doc_id in self._documents
+                (doc_id, self._documents[doc_id])
+                for doc_id in ids
+                if doc_id in self._documents
             ]
         else:
             doc_items = list(self._documents.items())
@@ -407,10 +422,10 @@ class MockCollection(VectorCollection):
 
     def update(
         self,
-        ids: List[str],
-        documents: Optional[List[str]] = None,
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: Optional[list[str]] = None,
+        metadatas: Optional[list[dict[str, Any]]] = None,
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         """Update documents in mock collection."""
         for i, doc_id in enumerate(ids):
@@ -423,7 +438,7 @@ class MockCollection(VectorCollection):
                     self._documents[doc_id]["embedding"] = embeddings[i]
 
     def delete(
-        self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None
+        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
     ) -> None:
         """Delete documents from mock collection."""
         if ids:
@@ -443,7 +458,7 @@ class MockCollection(VectorCollection):
         return self._name
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         """Get collection metadata."""
         return self._metadata
 
@@ -462,10 +477,12 @@ class MockDatabase(VectorDatabase):
         self.distance_metric = distance_metric
         self.persist = persist
         self.allow_reset = allow_reset
-        self._collections: Dict[str, MockCollection] = {}
+        self._collections: dict[str, MockCollection] = {}
         self.logger = logging.getLogger(__name__)
 
-    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
+    def create_collection(
+        self, name: str, reset_if_exists: bool = False
+    ) -> VectorCollection:
         """Create or get mock collection."""
         if reset_if_exists and name in self._collections:
             del self._collections[name]
@@ -486,7 +503,7 @@ class MockDatabase(VectorDatabase):
         if name in self._collections:
             del self._collections[name]
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         """List all mock collections."""
         return list(self._collections.keys())
 

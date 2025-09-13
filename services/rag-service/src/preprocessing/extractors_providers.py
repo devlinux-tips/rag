@@ -15,7 +15,7 @@ from typing import Any, Dict
 class ProductionConfigProvider:
     """Production configuration provider using real TOML files."""
 
-    def get_extraction_config(self) -> Dict[str, Any]:
+    def get_extraction_config(self) -> dict[str, Any]:
         """Get extraction configuration from TOML files."""
         from ..utils.config_loader import get_extraction_config
 
@@ -66,11 +66,11 @@ class ProductionLoggerProvider:
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, extraction_config: Dict[str, Any]):
+    def __init__(self, extraction_config: dict[str, Any]):
         """Initialize with extraction configuration."""
         self.extraction_config = extraction_config
 
-    def get_extraction_config(self) -> Dict[str, Any]:
+    def get_extraction_config(self) -> dict[str, Any]:
         """Get mock extraction configuration."""
         return self.extraction_config
 
@@ -80,8 +80,8 @@ class MockFileSystemProvider:
 
     def __init__(self):
         """Initialize mock file system."""
-        self.files: Dict[str, bytes] = {}
-        self.file_sizes_mb: Dict[str, float] = {}
+        self.files: dict[str, bytes] = {}
+        self.file_sizes_mb: dict[str, float] = {}
         self.existing_files: set = set()
 
     def add_file(self, file_path: str, content: bytes, size_mb: float = None) -> None:
@@ -141,7 +141,7 @@ class MockLoggerProvider:
         """Record error message."""
         self.error_messages.append(message)
 
-    def get_all_messages(self) -> Dict[str, list]:
+    def get_all_messages(self) -> dict[str, list]:
         """Get all logged messages for testing."""
         return {"info": self.info_messages, "error": self.error_messages}
 
@@ -156,14 +156,14 @@ class MockLoggerProvider:
 # ================================
 
 
-def create_config_provider(mock_config: Dict[str, Any] = None):
+def create_config_provider(mock_config: dict[str, Any] = None):
     """Create configuration provider (production or mock)."""
     if mock_config is not None:
         return MockConfigProvider(mock_config)
     return ProductionConfigProvider()
 
 
-def create_file_system_provider(mock_files: Dict[str, bytes] = None):
+def create_file_system_provider(mock_files: dict[str, bytes] = None):
     """Create file system provider (production or mock)."""
     if mock_files is not None:
         provider = MockFileSystemProvider()
@@ -186,8 +186,8 @@ def create_logger_provider(logger_name: str = None, mock: bool = False):
 
 
 def create_test_providers(
-    config: Dict[str, Any] = None,
-    files: Dict[str, bytes] = None,
+    config: dict[str, Any] = None,
+    files: dict[str, bytes] = None,
     mock_logging: bool = True,
 ):
     """

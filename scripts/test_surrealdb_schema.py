@@ -5,7 +5,6 @@ Test SurrealDB schema for RAG system data organization
 
 import asyncio
 import json
-from datetime import datetime
 
 from surrealdb import Surreal
 

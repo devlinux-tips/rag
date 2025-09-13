@@ -81,13 +81,13 @@ class Tenant:
     slug: str
     description: Optional[str] = None
     status: TenantStatus = TenantStatus.ACTIVE
-    settings: Dict[str, Any] = field(default_factory=dict)
+    settings: dict[str, Any] = field(default_factory=dict)
     business_context: BusinessContext = BusinessContext.BUSINESS
     subscription_tier: SubscriptionTier = SubscriptionTier.BASIC
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
-    def get_supported_languages(self) -> List[str]:
+    def get_supported_languages(self) -> list[str]:
         """Get supported languages from configuration."""
         from src.utils.config_loader import get_supported_languages
 
@@ -122,12 +122,12 @@ class User:
     password_hash: str = ""
     role: UserRole = UserRole.MEMBER
     status: UserStatus = UserStatus.ACTIVE
-    settings: Dict[str, Any] = field(default_factory=dict)
+    settings: dict[str, Any] = field(default_factory=dict)
     last_login_at: Optional[datetime] = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
-    def get_preferred_languages(self) -> List[str]:
+    def get_preferred_languages(self) -> list[str]:
         """Get user's preferred languages, fallback to system supported."""
         user_prefs = self.settings["preferred_languages"]
         if user_prefs:
@@ -157,7 +157,7 @@ class User:
             UserRole.MEMBER,
         ]
 
-    def get_preferred_categories(self) -> List[str]:
+    def get_preferred_categories(self) -> list[str]:
         """Get user's preferred document categories."""
         return self.settings["preferred_categories"]
 
@@ -178,9 +178,9 @@ class Document:
     scope: DocumentScope = DocumentScope.USER
     status: DocumentStatus = DocumentStatus.UPLOADED
     content_hash: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    categories: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    categories: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     chunk_count: int = 0
     processing_started_at: Optional[datetime] = None
     processing_completed_at: Optional[datetime] = None
@@ -197,7 +197,9 @@ class Document:
 
     def can_be_promoted_to_tenant(self) -> bool:
         """Check if document can be promoted to tenant scope."""
-        return self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
+        return (
+            self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
+        )
 
     def get_display_name(self) -> str:
         """Get human-readable display name."""
@@ -220,8 +222,8 @@ class Chunk:
     embedding_model: str = "bge-m3"
     vector_collection: str = ""
     vector_id: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    categories: List[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    categories: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self):
@@ -241,20 +243,22 @@ class SearchQuery:
     query_language: str = "auto"
     detected_language: Optional[str] = None
     primary_category: Optional[CategoryType] = None
-    secondary_categories: List[CategoryType] = field(default_factory=list)
+    secondary_categories: list[CategoryType] = field(default_factory=list)
     retrieval_strategy: Optional[str] = None  # String strategy name
-    scope_searched: List[DocumentScope] = field(
+    scope_searched: list[DocumentScope] = field(
         default_factory=lambda: [DocumentScope.USER, DocumentScope.TENANT]
     )
     results_count: int = 0
     response_time_ms: int = 0
     satisfaction_rating: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
 
     def add_timing(self, start_time: datetime):
         """Add response timing to query."""
-        self.response_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        self.response_time_ms = int(
+            (datetime.now() - start_time).total_seconds() * 1000
+        )
 
 
 @dataclass
@@ -266,8 +270,8 @@ class CategorizationTemplate:
     name: str
     category: CategoryType
     language: str
-    keywords: List[str] = field(default_factory=list)
-    patterns: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
+    patterns: list[str] = field(default_factory=list)
     system_prompt: str = ""
     user_prompt_template: str = ""
     is_system_default: bool = False
@@ -284,7 +288,9 @@ class CategorizationTemplate:
         score = 0.0
 
         # Check keyword matches
-        keyword_matches = sum(1 for keyword in self.keywords if keyword.lower() in query_lower)
+        keyword_matches = sum(
+            1 for keyword in self.keywords if keyword.lower() in query_lower
+        )
         if self.keywords:
             score += (keyword_matches / len(self.keywords)) * 0.6
 
@@ -353,7 +359,7 @@ class TenantUserContext:
         """Get ChromaDB collection name for tenant documents."""
         return f"{self.tenant.slug}_tenant_{language}"
 
-    def get_search_collections(self, language: str) -> List[str]:
+    def get_search_collections(self, language: str) -> list[str]:
         """Get all collections user should search in."""
         collections = []
 
@@ -389,9 +395,9 @@ class MultiTenantQueryResult:
 
     query: str
     tenant_context: TenantUserContext
-    user_results: List[Dict[str, Any]] = field(default_factory=list)
-    tenant_results: List[Dict[str, Any]] = field(default_factory=list)
-    combined_results: List[Dict[str, Any]] = field(default_factory=list)
+    user_results: list[dict[str, Any]] = field(default_factory=list)
+    tenant_results: list[dict[str, Any]] = field(default_factory=list)
+    combined_results: list[dict[str, Any]] = field(default_factory=list)
     total_results: int = 0
     user_results_count: int = 0
     tenant_results_count: int = 0

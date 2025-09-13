@@ -28,7 +28,7 @@ class MockTextCleaner:
 class MockDocumentChunker:
     """Mock document chunker for testing."""
 
-    def chunk_document(self, content: str, source_file: str) -> List[Any]:
+    def chunk_document(self, content: str, source_file: str) -> list[Any]:
         # Create simple mock chunks
         class MockChunk:
             def __init__(self, content: str, idx: int):
@@ -52,7 +52,7 @@ class MockDocumentChunker:
 class MockEmbeddingModel:
     """Mock embedding model for testing."""
 
-    def encode_text(self, text: str) -> List[float]:
+    def encode_text(self, text: str) -> list[float]:
         # Return deterministic mock embeddings based on text hash
         text_hash = hashlib.md5(text.encode()).hexdigest()
         # Convert hash to numbers
@@ -69,7 +69,9 @@ class MockVectorStorage:
     def __init__(self):
         self._documents = []
 
-    def add_documents(self, documents: List[str], metadatas: List[Dict], embeddings: List) -> None:
+    def add_documents(
+        self, documents: list[str], metadatas: list[dict], embeddings: list
+    ) -> None:
         for doc, meta, emb in zip(documents, metadatas, embeddings):
             self._documents.append({"content": doc, "metadata": meta, "embedding": emb})
 
@@ -86,7 +88,7 @@ class MockVectorStorage:
 class MockGenerationClient:
     """Mock generation client for testing."""
 
-    def __init__(self, healthy: bool = True, available_models: List[str] = None):
+    def __init__(self, healthy: bool = True, available_models: list[str] = None):
         self.healthy = healthy
         self.available_models = available_models or ["mock-model"]
 
@@ -103,7 +105,7 @@ class MockGenerationClient:
     def health_check(self) -> bool:
         return self.healthy
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         return self.available_models
 
     async def close(self) -> None:
@@ -113,7 +115,7 @@ class MockGenerationClient:
 class MockResponseParser:
     """Mock response parser for testing."""
 
-    def parse_response(self, text: str, query: str, context: List[str]) -> Any:
+    def parse_response(self, text: str, query: str, context: list[str]) -> Any:
         class MockParsedResponse:
             content = text
             confidence = 0.8
@@ -126,7 +128,9 @@ class MockResponseParser:
 class MockPromptBuilder:
     """Mock prompt builder for testing."""
 
-    def build_prompt(self, query: str, context_chunks: List[str], **kwargs) -> Tuple[str, str]:
+    def build_prompt(
+        self, query: str, context_chunks: list[str], **kwargs
+    ) -> tuple[str, str]:
         system_prompt = "You are a helpful assistant."
         user_prompt = f"Query: {query}\nContext: {' '.join(context_chunks[:2])}"
         return system_prompt, user_prompt
@@ -136,7 +140,7 @@ class MockRetriever:
     """Mock retriever for testing."""
 
     async def retrieve(
-        self, query: str, max_results: int = 5, context: Optional[Dict] = None
+        self, query: str, max_results: int = 5, context: Optional[dict] = None
     ) -> Any:
         class MockCategory:
             value = "general"
@@ -162,7 +166,9 @@ class MockRetriever:
         return MockResults()
 
 
-def create_mock_rag_system(language: str = "hr", config: Optional[Dict[str, Any]] = None):
+def create_mock_rag_system(
+    language: str = "hr", config: Optional[dict[str, Any]] = None
+):
     """Create a fully mocked RAG system for testing."""
     from src.pipeline.rag_system import create_rag_system
 

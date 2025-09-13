@@ -41,8 +41,8 @@ class CategoryMatch:
 
     category: CategoryType
     confidence: float
-    matched_patterns: List[str]
-    cultural_indicators: List[str]
+    matched_patterns: list[str]
+    cultural_indicators: list[str]
     complexity: QueryComplexity
     retrieval_strategy: str
 
@@ -51,18 +51,18 @@ class CategoryMatch:
 class CategorizationConfig:
     """Configuration for query categorization."""
 
-    categories: Dict[str, Dict[str, Any]]
-    patterns: Dict[str, List[str]]
-    cultural_keywords: Dict[str, List[str]]
-    complexity_thresholds: Dict[str, float]
-    retrieval_strategies: Dict[str, str]
+    categories: dict[str, dict[str, Any]]
+    patterns: dict[str, list[str]]
+    cultural_keywords: dict[str, list[str]]
+    complexity_thresholds: dict[str, float]
+    retrieval_strategies: dict[str, str]
 
 
 @runtime_checkable
 class ConfigProvider(Protocol):
     """Protocol for configuration access to enable testing."""
 
-    def get_categorization_config(self, language: str) -> Dict[str, Any]:
+    def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
         ...
 
@@ -115,7 +115,9 @@ def normalize_query_text(query: str) -> str:
     return normalized
 
 
-def extract_cultural_indicators(query: str, cultural_keywords: Dict[str, List[str]]) -> List[str]:
+def extract_cultural_indicators(
+    query: str, cultural_keywords: dict[str, list[str]]
+) -> list[str]:
     """
     Extract cultural indicators from query text.
     Pure function with no side effects.
@@ -139,7 +141,7 @@ def extract_cultural_indicators(query: str, cultural_keywords: Dict[str, List[st
 
 
 def calculate_query_complexity(
-    query: str, complexity_thresholds: Dict[str, float]
+    query: str, complexity_thresholds: dict[str, float]
 ) -> QueryComplexity:
     """
     Calculate query complexity based on various linguistic features.
@@ -167,7 +169,9 @@ def calculate_query_complexity(
             query.lower(),
         )
     )
-    conditional_words = len(re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower()))
+    conditional_words = len(
+        re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower())
+    )
     comparative_words = len(
         re.findall(r"\b(više|manje|bolji|gori|better|worse|more|less)\b", query.lower())
     )
@@ -202,8 +206,8 @@ def calculate_query_complexity(
 
 
 def match_category_patterns(
-    query: str, category_patterns: Dict[str, List[str]]
-) -> List[Tuple[CategoryType, float, List[str]]]:
+    query: str, category_patterns: dict[str, list[str]]
+) -> list[tuple[CategoryType, float, list[str]]]:
     """
     Match query against category patterns and calculate confidence scores.
     Pure function with no side effects.
@@ -249,8 +253,8 @@ def match_category_patterns(
 def determine_retrieval_strategy(
     category: CategoryType,
     complexity: QueryComplexity,
-    cultural_indicators: List[str],
-    strategy_config: Dict[str, str],
+    cultural_indicators: list[str],
+    strategy_config: dict[str, str],
 ) -> str:
     """
     Determine optimal retrieval strategy based on categorization results.
@@ -283,7 +287,9 @@ def determine_retrieval_strategy(
 
     # Default strategy - validate required key
     if "default" not in strategy_config:
-        raise ValueError("Missing 'default' strategy in retrieval_strategies configuration")
+        raise ValueError(
+            "Missing 'default' strategy in retrieval_strategies configuration"
+        )
     return strategy_config["default"]
 
 
@@ -390,11 +396,17 @@ class QueryCategorizer:
         if "patterns" not in config_data:
             raise ValueError("Missing 'patterns' in categorization configuration")
         if "cultural_keywords" not in config_data:
-            raise ValueError("Missing 'cultural_keywords' in categorization configuration")
+            raise ValueError(
+                "Missing 'cultural_keywords' in categorization configuration"
+            )
         if "complexity_thresholds" not in config_data:
-            raise ValueError("Missing 'complexity_thresholds' in categorization configuration")
+            raise ValueError(
+                "Missing 'complexity_thresholds' in categorization configuration"
+            )
         if "retrieval_strategies" not in config_data:
-            raise ValueError("Missing 'retrieval_strategies' in categorization configuration")
+            raise ValueError(
+                "Missing 'retrieval_strategies' in categorization configuration"
+            )
 
         self._config = CategorizationConfig(
             categories=config_data["categories"],

@@ -133,7 +133,9 @@ def fix_spaced_diacritics(text: str, language: str = None) -> str:
     return text
 
 
-def apply_ocr_corrections(text: str, config: Dict[str, Any], language: str = None) -> str:
+def apply_ocr_corrections(
+    text: str, config: dict[str, Any], language: str = None
+) -> str:
     """
     Apply OCR corrections based on configuration flags.
 
@@ -164,7 +166,7 @@ def apply_ocr_corrections(text: str, config: Dict[str, Any], language: str = Non
     return text
 
 
-def get_ocr_correction_stats(original_text: str, corrected_text: str) -> Dict[str, int]:
+def get_ocr_correction_stats(original_text: str, corrected_text: str) -> dict[str, int]:
     """
     Get statistics on OCR corrections applied.
 
@@ -178,6 +180,8 @@ def get_ocr_correction_stats(original_text: str, corrected_text: str) -> Dict[st
     return {
         "original_length": len(original_text),
         "corrected_length": len(corrected_text),
-        "characters_changed": sum(1 for a, b in zip(original_text, corrected_text) if a != b),
+        "characters_changed": sum(
+            1 for a, b in zip(original_text, corrected_text) if a != b
+        ),
         "length_difference": len(corrected_text) - len(original_text),
     }

@@ -3,7 +3,6 @@
 Quick test: Does ConfigValidator work with existing configs?
 """
 
-import os
 import sys
 
 sys.path.append("services/rag-service/src")

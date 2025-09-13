@@ -1,5 +1,7 @@
+# DEPRECATED: This configuration is replaced by Ruff in pyproject.toml
+# TODO: Remove this file after confirming Ruff works correctly
 [flake8]
-max-line-length = 100
+max-line-length = 88
 # E231: missing whitespace after ':' - ignored for f-string format specifiers (common practice)
 extend-ignore = E203,W503,E501,F401,F841,W291,W293,E402,F541,E231,E722,E713
 exclude = .git,__pycache__,build,dist,.eggs,*.egg-info,.tox,.venv,temp_cache,data,notebooks

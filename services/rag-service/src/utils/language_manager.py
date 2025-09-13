@@ -37,11 +37,11 @@ class LanguageConfig:
 class LanguageSettings:
     """Complete language settings configuration."""
 
-    supported_languages: List[str]
+    supported_languages: list[str]
     default_language: str
     auto_detect: bool
     fallback_language: str
-    language_names: Dict[str, str]
+    language_names: dict[str, str]
     embedding_model: str
     chunk_size: int
     chunk_overlap: int
@@ -51,8 +51,8 @@ class LanguageSettings:
 class LanguagePatterns:
     """Language detection and processing patterns."""
 
-    detection_patterns: Dict[str, List[str]]
-    stopwords: Dict[str, Set[str]]
+    detection_patterns: dict[str, list[str]]
+    stopwords: dict[str, set[str]]
 
 
 @dataclass
@@ -61,7 +61,7 @@ class DetectionResult:
 
     detected_language: str
     confidence: float
-    scores: Dict[str, float]
+    scores: dict[str, float]
     fallback_used: bool = False
 
 
@@ -132,7 +132,7 @@ def create_language_config(
     )
 
 
-def build_languages_dict(settings: LanguageSettings) -> Dict[str, LanguageConfig]:
+def build_languages_dict(settings: LanguageSettings) -> dict[str, LanguageConfig]:
     """Pure function to build languages dictionary from settings."""
     languages = {}
 
@@ -154,7 +154,7 @@ def build_languages_dict(settings: LanguageSettings) -> Dict[str, LanguageConfig
     return languages
 
 
-def normalize_text_for_detection(text: str) -> List[str]:
+def normalize_text_for_detection(text: str) -> list[str]:
     """Pure function to normalize text for language detection."""
     if not text:
         return []
@@ -167,8 +167,8 @@ def normalize_text_for_detection(text: str) -> List[str]:
 
 
 def calculate_pattern_scores(
-    words: List[str], detection_patterns: Dict[str, List[str]]
-) -> Dict[str, float]:
+    words: list[str], detection_patterns: dict[str, list[str]]
+) -> dict[str, float]:
     """Pure function to calculate pattern match scores for languages."""
     if not words:
         return {}
@@ -190,7 +190,7 @@ def calculate_pattern_scores(
 
 def detect_language_from_text(
     text: str,
-    detection_patterns: Dict[str, List[str]],
+    detection_patterns: dict[str, list[str]],
     auto_detect: bool = True,
     default_language: str = "hr",
     min_words: int = 3,
@@ -235,7 +235,7 @@ def detect_language_from_text(
     )
 
 
-def remove_stopwords_from_text(text: str, stopwords: Set[str]) -> str:
+def remove_stopwords_from_text(text: str, stopwords: set[str]) -> str:
     """Pure function to remove stopwords from text."""
     if not stopwords or not text:
         return text
@@ -246,7 +246,7 @@ def remove_stopwords_from_text(text: str, stopwords: Set[str]) -> str:
 
 
 def calculate_collection_suffix(
-    language_code: str, supported_languages: List[str], fallback_language: str
+    language_code: str, supported_languages: list[str], fallback_language: str
 ) -> str:
     """Pure function to calculate collection suffix for language."""
     if language_code == "auto":
@@ -260,8 +260,8 @@ def calculate_collection_suffix(
 
 
 def normalize_language_code_pure(
-    language_code: str, supported_languages: List[str], default_language: str
-) -> Tuple[str, bool]:
+    language_code: str, supported_languages: list[str], default_language: str
+) -> tuple[str, bool]:
     """Pure function to normalize language code - returns (normalized_code, is_valid)."""
     if not language_code or language_code == "auto":
         return default_language, True
@@ -277,8 +277,8 @@ def normalize_language_code_pure(
 
 
 def validate_languages_list(
-    language_codes: List[str], supported_languages: List[str], default_language: str
-) -> List[str]:
+    language_codes: list[str], supported_languages: list[str], default_language: str
+) -> list[str]:
     """Pure function to validate and normalize list of language codes."""
     validated = []
 
@@ -296,11 +296,11 @@ def validate_languages_list(
 
 
 def get_chunk_config_for_language(
-    languages: Dict[str, LanguageConfig],
+    languages: dict[str, LanguageConfig],
     language_code: str,
     default_chunk_size: int = 512,
     default_overlap: int = 50,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Pure function to get chunk configuration for language."""
     if language_code not in languages:
         raise ValueError(f"Language {language_code} not supported")
@@ -309,7 +309,7 @@ def get_chunk_config_for_language(
 
 
 def get_embedding_model_for_language(
-    languages: Dict[str, LanguageConfig],
+    languages: dict[str, LanguageConfig],
     language_code: str,
     default_model: str = "BAAI/bge-m3",
 ) -> str:
@@ -320,7 +320,9 @@ def get_embedding_model_for_language(
     return config.embedding_model
 
 
-def get_display_name_for_language(languages: Dict[str, LanguageConfig], language_code: str) -> str:
+def get_display_name_for_language(
+    languages: dict[str, LanguageConfig], language_code: str
+) -> str:
     """Pure function to get human-readable language name."""
     if language_code not in languages:
         raise ValueError(f"Language {language_code} not supported")
@@ -376,7 +378,7 @@ class _LanguageManager:
         if self._logger:
             self._logger.error(message)
 
-    def get_supported_languages(self) -> List[str]:
+    def get_supported_languages(self) -> list[str]:
         """Get list of supported language codes."""
         return list(self._languages.keys())
 
@@ -412,7 +414,9 @@ class _LanguageManager:
                 f"Detected language: {result.detected_language} (scores: {result.scores})"
             )
         elif result.fallback_used:
-            self._log_debug(f"No language detected, using default: {result.detected_language}")
+            self._log_debug(
+                f"No language detected, using default: {result.detected_language}"
+            )
 
         return result.detected_language
 
@@ -425,7 +429,7 @@ class _LanguageManager:
             default_language=self._settings.default_language,
         )
 
-    def get_stopwords(self, language_code: str) -> Set[str]:
+    def get_stopwords(self, language_code: str) -> set[str]:
         """Get stopwords for specific language."""
         if language_code not in self._patterns.stopwords:
             raise ValueError(f"Stopwords not available for language {language_code}")
@@ -445,7 +449,9 @@ class _LanguageManager:
         )
 
         if suffix != language_code and language_code not in ["auto", "multilingual"]:
-            self._log_warning(f"Unsupported language {language_code}, using fallback {suffix}")
+            self._log_warning(
+                f"Unsupported language {language_code}, using fallback {suffix}"
+            )
 
         return suffix
 
@@ -458,7 +464,9 @@ class _LanguageManager:
         )
 
         if not is_valid and language_code != "auto":
-            self._log_warning(f"Language {language_code} not supported, using default {normalized}")
+            self._log_warning(
+                f"Language {language_code} not supported, using default {normalized}"
+            )
 
         return normalized
 
@@ -466,7 +474,7 @@ class _LanguageManager:
         """Get human-readable language name."""
         return get_display_name_for_language(self._languages, language_code)
 
-    def validate_languages(self, language_codes: List[str]) -> List[str]:
+    def validate_languages(self, language_codes: list[str]) -> list[str]:
         """Validate and normalize list of language codes."""
         return validate_languages_list(
             language_codes=language_codes,
@@ -482,7 +490,7 @@ class _LanguageManager:
             default_model=self._settings.embedding_model,
         )
 
-    def get_chunk_config(self, language_code: str) -> Tuple[int, int]:
+    def get_chunk_config(self, language_code: str) -> tuple[int, int]:
         """Get chunk size and overlap for specific language."""
         return get_chunk_config_for_language(
             languages=self._languages,
@@ -496,8 +504,8 @@ class _LanguageManager:
         code: str,
         name: str,
         native_name: str,
-        patterns: Optional[List[str]] = None,
-        stopwords: Optional[List[str]] = None,
+        patterns: Optional[list[str]] = None,
+        stopwords: Optional[list[str]] = None,
     ) -> None:
         """Add language support at runtime."""
         self._log_info(f"Adding runtime language support: {code} ({name})")

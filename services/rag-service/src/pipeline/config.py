@@ -93,7 +93,9 @@ class RAGConfig(BaseSettings):
             # Create component configs using validated approach
             data = {
                 "processing": ProcessingConfig.from_validated_config(main_config),
-                "embedding": EmbeddingConfig.from_validated_config(main_config, language_config),
+                "embedding": EmbeddingConfig.from_validated_config(
+                    main_config, language_config
+                ),
                 "chroma": ChromaConfig.from_validated_config(main_config),
                 "retrieval": RetrievalConfig.from_validated_config(main_config),
                 "ollama": OllamaConfig.from_validated_config(main_config),
@@ -113,7 +115,7 @@ class RAGConfig(BaseSettings):
         super().__init__(**data)
         extra = "allow"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         result = {}
         for field_name, field_value in self.__dict__.items():
@@ -124,7 +126,7 @@ class RAGConfig(BaseSettings):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], language: str = "hr") -> "RAGConfig":
+    def from_dict(cls, data: dict[str, Any], language: str = "hr") -> "RAGConfig":
         """Create config from dictionary using validated approach."""
         config = cls(language=language)
 
@@ -157,10 +159,10 @@ class RAGConfig(BaseSettings):
         return config
 
 
-def load_yaml_config(config_path: str) -> Dict[str, Any]:
+def load_yaml_config(config_path: str) -> dict[str, Any]:
     """Load configuration from YAML file."""
     config_file = Path(config_path)
     if config_file.exists():
-        with open(config_file, "r", encoding="utf-8") as f:
+        with open(config_file, encoding="utf-8") as f:
             return yaml.safe_load(f)
     return {}

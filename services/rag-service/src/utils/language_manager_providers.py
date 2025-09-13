@@ -26,7 +26,7 @@ class MockConfigProvider:
     def __init__(self, settings: Optional[LanguageSettings] = None):
         """Initialize with optional mock settings."""
         self.settings = settings or self._create_default_settings()
-        self.call_history: List[str] = []
+        self.call_history: list[str] = []
 
     def _create_default_settings(self) -> LanguageSettings:
         """Create default test settings."""
@@ -61,7 +61,7 @@ class MockPatternProvider:
     def __init__(self, patterns: Optional[LanguagePatterns] = None):
         """Initialize with optional mock patterns."""
         self.patterns = patterns or self._create_default_patterns()
-        self.call_history: List[str] = []
+        self.call_history: list[str] = []
 
     def _create_default_patterns(self) -> LanguagePatterns:
         """Create default test patterns."""
@@ -93,11 +93,11 @@ class MockPatternProvider:
         """Set mock patterns."""
         self.patterns = patterns
 
-    def add_detection_pattern(self, language_code: str, patterns: List[str]) -> None:
+    def add_detection_pattern(self, language_code: str, patterns: list[str]) -> None:
         """Add detection patterns for language."""
         self.patterns.detection_patterns[language_code] = patterns
 
-    def add_stopwords(self, language_code: str, stopwords: Set[str]) -> None:
+    def add_stopwords(self, language_code: str, stopwords: set[str]) -> None:
         """Add stopwords for language."""
         self.patterns.stopwords[language_code] = stopwords
 
@@ -112,7 +112,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: Dict[str, List[str]] = {
+        self.messages: dict[str, list[str]] = {
             "info": [],
             "debug": [],
             "warning": [],
@@ -140,7 +140,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> Dict[str, List[str]] | List[str]:
+    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -171,7 +171,11 @@ class ProductionConfigProvider:
         """Load settings from the real configuration system."""
         try:
             # Import at runtime to avoid circular dependencies
-            from .config_loader import get_shared_config, get_supported_languages, load_config
+            from .config_loader import (
+                get_shared_config,
+                get_supported_languages,
+                load_config,
+            )
 
             # Load configurations
             supported_langs = get_supported_languages()
@@ -195,7 +199,8 @@ class ProductionConfigProvider:
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language settings: {e}. " f"Please check your configuration files."
+                f"Failed to load language settings: {e}. "
+                f"Please check your configuration files."
             )
 
 
@@ -265,12 +270,15 @@ class ProductionPatternProvider:
                         f"Please check configuration for {lang_code}"
                     )
 
-            return LanguagePatterns(detection_patterns=detection_patterns, stopwords=stopwords)
+            return LanguagePatterns(
+                detection_patterns=detection_patterns, stopwords=stopwords
+            )
 
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language patterns: {e}. " f"Please check your configuration files."
+                f"Failed to load language patterns: {e}. "
+                f"Please check your configuration files."
             )
 
 
@@ -306,8 +314,8 @@ class StandardLoggerProvider:
 def create_mock_setup(
     settings: Optional[LanguageSettings] = None,
     patterns: Optional[LanguagePatterns] = None,
-    custom_patterns: Optional[Dict[str, List[str]]] = None,
-    custom_stopwords: Optional[Dict[str, Set[str]]] = None,
+    custom_patterns: Optional[dict[str, list[str]]] = None,
+    custom_stopwords: Optional[dict[str, set[str]]] = None,
 ) -> tuple:
     """
     Create complete mock setup for testing.
@@ -357,7 +365,7 @@ def create_production_setup(logger_name: Optional[str] = None) -> tuple:
 
 
 def create_test_settings(
-    supported_languages: List[str] = None,
+    supported_languages: list[str] = None,
     default_language: str = "hr",
     auto_detect: bool = True,
     embedding_model: str = "BAAI/bge-m3",
@@ -390,8 +398,8 @@ def create_test_settings(
 
 
 def create_test_patterns(
-    detection_patterns: Optional[Dict[str, List[str]]] = None,
-    stopwords: Optional[Dict[str, Set[str]]] = None,
+    detection_patterns: Optional[dict[str, list[str]]] = None,
+    stopwords: Optional[dict[str, set[str]]] = None,
 ) -> LanguagePatterns:
     """Create test patterns with customizable parameters."""
     default_detection = {
@@ -432,8 +440,8 @@ def create_development_language_manager():
 def create_test_language_manager(
     settings: Optional[LanguageSettings] = None,
     patterns: Optional[LanguagePatterns] = None,
-    custom_patterns: Optional[Dict[str, List[str]]] = None,
-    custom_stopwords: Optional[Dict[str, Set[str]]] = None,
+    custom_patterns: Optional[dict[str, list[str]]] = None,
+    custom_stopwords: Optional[dict[str, set[str]]] = None,
 ):
     """Create language manager configured for testing."""
     from .language_manager import create_language_manager

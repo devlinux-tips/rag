@@ -17,24 +17,28 @@ class ProductionConfigProvider:
 
         self._config_loader = config_loader
 
-    def get_categorization_config(self, language: str) -> Dict[str, Any]:
+    def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
-        return self._config_loader.get_language_specific_config("categorization", language)
+        return self._config_loader.get_language_specific_config(
+            "categorization", language
+        )
 
 
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, mock_configs: Dict[str, Dict[str, Any]] = None):
+    def __init__(self, mock_configs: dict[str, dict[str, Any]] = None):
         """Initialize with mock configuration data."""
         self.mock_configs = mock_configs or {}
         self._default_config = self._create_default_test_config()
 
-    def set_categorization_config(self, language: str, config_data: Dict[str, Any]) -> None:
+    def set_categorization_config(
+        self, language: str, config_data: dict[str, Any]
+    ) -> None:
         """Set mock categorization configuration for specified language."""
         self.mock_configs[f"categorization_{language}"] = config_data
 
-    def get_categorization_config(self, language: str) -> Dict[str, Any]:
+    def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get mock categorization configuration."""
         config_key = f"categorization_{language}"
         if config_key in self.mock_configs:
@@ -43,7 +47,7 @@ class MockConfigProvider:
         # Return language-specific default if no mock set
         return self._get_language_default_config(language)
 
-    def _create_default_test_config(self) -> Dict[str, Any]:
+    def _create_default_test_config(self) -> dict[str, Any]:
         """Create default test configuration."""
         return {
             "categories": {
@@ -77,13 +81,15 @@ class MockConfigProvider:
             },
         }
 
-    def _get_language_default_config(self, language: str) -> Dict[str, Any]:
+    def _get_language_default_config(self, language: str) -> dict[str, Any]:
         """Get language-specific default configuration for testing."""
         base_config = self._default_config.copy()
 
         if language == "hr":
             # Croatian-specific test patterns
-            base_config["patterns"]["cultural"].extend(["hrvatska", "dubrovnik", "split", "zagreb"])
+            base_config["patterns"]["cultural"].extend(
+                ["hrvatska", "dubrovnik", "split", "zagreb"]
+            )
             base_config["cultural_keywords"]["croatian_test"] = [
                 "test_hr",
                 "test_croatia",
@@ -91,7 +97,9 @@ class MockConfigProvider:
             ]
         elif language == "en":
             # English-specific test patterns
-            base_config["patterns"]["cultural"].extend(["england", "london", "british", "american"])
+            base_config["patterns"]["cultural"].extend(
+                ["england", "london", "british", "american"]
+            )
             base_config["cultural_keywords"]["english_test"] = [
                 "test_en",
                 "test_uk",
@@ -141,7 +149,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> Dict[str, list] | list:
+    def get_messages(self, level: str = None) -> dict[str, list] | list:
         """Get captured messages by level or all messages."""
         if level:
             return self.messages.get(level, [])
@@ -170,7 +178,7 @@ def create_config_provider(use_mock: bool = False) -> ConfigProvider:
 
 
 def create_test_categorization_setup(
-    language: str = "hr", custom_config: Dict[str, Any] = None
+    language: str = "hr", custom_config: dict[str, Any] = None
 ) -> tuple[MockConfigProvider, MockLoggerProvider]:
     """
     Create complete test setup for categorization testing.
@@ -192,7 +200,7 @@ def create_test_categorization_setup(
     return mock_config, test_logger
 
 
-def create_minimal_test_config() -> Dict[str, Any]:
+def create_minimal_test_config() -> dict[str, Any]:
     """Create minimal test configuration for basic testing."""
     return {
         "categories": {"general": {"priority": 1}, "technical": {"priority": 2}},
@@ -208,7 +216,7 @@ def create_minimal_test_config() -> Dict[str, Any]:
     }
 
 
-def create_complex_test_config() -> Dict[str, Any]:
+def create_complex_test_config() -> dict[str, Any]:
     """Create complex test configuration for comprehensive testing."""
     return {
         "categories": {

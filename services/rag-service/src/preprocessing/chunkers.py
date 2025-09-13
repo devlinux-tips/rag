@@ -21,9 +21,9 @@ def sliding_window_chunk_positions(
     text_length: int,
     chunk_size: int,
     overlap: int,
-    sentence_boundaries: Optional[List[int]] = None,
+    sentence_boundaries: Optional[list[int]] = None,
     respect_sentences: bool = True,
-) -> List[tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """
     Calculate chunk positions for sliding window strategy (pure function).
 
@@ -47,7 +47,12 @@ def sliding_window_chunk_positions(
         end = min(start + chunk_size, text_length)
 
         # Adjust to sentence boundary if requested and boundaries available
-        if end < text_length and respect_sentences and sentence_boundaries and sentence_boundaries:
+        if (
+            end < text_length
+            and respect_sentences
+            and sentence_boundaries
+            and sentence_boundaries
+        ):
             # Find nearest sentence boundary within reasonable range
             search_range = min(200, text_length - end)  # Configurable range
             best_end = end
@@ -77,8 +82,8 @@ def sliding_window_chunk_positions(
 
 
 def sentence_chunk_positions(
-    sentences: List[str], chunk_size: int, overlap: int, min_chunk_size: int
-) -> List[tuple[int, int, List[str]]]:
+    sentences: list[str], chunk_size: int, overlap: int, min_chunk_size: int
+) -> list[tuple[int, int, list[str]]]:
     """
     Calculate chunk positions for sentence-based strategy (pure function).
 
@@ -143,8 +148,8 @@ def sentence_chunk_positions(
 
 
 def paragraph_chunk_positions(
-    paragraphs: List[str], chunk_size: int, overlap: int, min_chunk_size: int
-) -> List[tuple[int, int, List[str]]]:
+    paragraphs: list[str], chunk_size: int, overlap: int, min_chunk_size: int
+) -> list[tuple[int, int, list[str]]]:
     """
     Calculate chunk positions for paragraph-based strategy (pure function).
 
@@ -218,8 +223,8 @@ def paragraph_chunk_positions(
 
 
 def find_sentence_boundaries(
-    text: str, language_patterns: Optional[Dict[str, Any]] = None
-) -> List[int]:
+    text: str, language_patterns: Optional[dict[str, Any]] = None
+) -> list[int]:
     """
     Find sentence boundaries in text (pure function).
 
@@ -255,7 +260,7 @@ def find_sentence_boundaries(
     return boundaries
 
 
-def extract_paragraphs(text: str) -> List[str]:
+def extract_paragraphs(text: str) -> list[str]:
     """Extract paragraphs from text (pure function)."""
     if not text:
         return []
@@ -265,7 +270,7 @@ def extract_paragraphs(text: str) -> List[str]:
     return paragraphs
 
 
-def calculate_chunk_metadata(content: str) -> Dict[str, int]:
+def calculate_chunk_metadata(content: str) -> dict[str, int]:
     """Calculate chunk metadata (pure function)."""
     words = content.split()
     return {
@@ -300,7 +305,7 @@ class ChunkingConfig:
     @classmethod
     def from_config(
         cls,
-        config_dict: Optional[Dict[str, Any]] = None,
+        config_dict: Optional[dict[str, Any]] = None,
         config_provider: Optional["ConfigProvider"] = None,
     ) -> "ChunkingConfig":
         """Create config from dictionary or provider with DRY error handling."""
@@ -390,7 +395,7 @@ class TextChunk:
     chunk_index: int
     word_count: int
     char_count: int
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class TextCleaner(Protocol):
@@ -400,7 +405,7 @@ class TextCleaner(Protocol):
         """Clean text while optionally preserving structure."""
         ...
 
-    def extract_sentences(self, text: str) -> List[str]:
+    def extract_sentences(self, text: str) -> list[str]:
         """Extract sentences from text."""
         ...
 
@@ -408,7 +413,7 @@ class TextCleaner(Protocol):
 class SentenceExtractor(Protocol):
     """Protocol for sentence extraction dependencies."""
 
-    def extract_sentences(self, text: str) -> List[str]:
+    def extract_sentences(self, text: str) -> list[str]:
         """Extract sentences from text."""
         ...
 
@@ -424,7 +429,7 @@ class DocumentChunker:
         config: ChunkingConfig,
         text_cleaner: Optional[TextCleaner] = None,
         sentence_extractor: Optional[SentenceExtractor] = None,
-        language_patterns: Optional[Dict[str, Any]] = None,
+        language_patterns: Optional[dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -445,7 +450,7 @@ class DocumentChunker:
 
     def chunk_document(
         self, text: str, source_file: str, strategy: Optional[ChunkingStrategy] = None
-    ) -> List[TextChunk]:
+    ) -> list[TextChunk]:
         """
         Chunk document using specified strategy.
 
@@ -461,7 +466,9 @@ class DocumentChunker:
             return []
 
         strategy = strategy or self.config.strategy
-        self.logger.info(f"Chunking document {source_file} with strategy '{strategy.value}'")
+        self.logger.info(
+            f"Chunking document {source_file} with strategy '{strategy.value}'"
+        )
 
         # Clean text if cleaner available
         cleaned_text = text
@@ -486,7 +493,7 @@ class DocumentChunker:
         )
         return meaningful_chunks
 
-    def _sliding_window_chunking(self, text: str, source_file: str) -> List[TextChunk]:
+    def _sliding_window_chunking(self, text: str, source_file: str) -> list[TextChunk]:
         """Execute sliding window chunking using pure functions."""
         # Get sentence boundaries if needed
         sentence_boundaries = None
@@ -518,7 +525,7 @@ class DocumentChunker:
 
         return chunks
 
-    def _sentence_based_chunking(self, text: str, source_file: str) -> List[TextChunk]:
+    def _sentence_based_chunking(self, text: str, source_file: str) -> list[TextChunk]:
         """Execute sentence-based chunking using pure functions."""
         # Extract sentences
         if self.sentence_extractor:
@@ -541,7 +548,9 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(chunk_positions):
+        for chunk_idx, (start_idx, end_idx, sentence_group) in enumerate(
+            chunk_positions
+        ):
             chunk_text = " ".join(sentence_group).strip()
             start_char = char_offset
             end_char = char_offset + len(chunk_text)
@@ -560,7 +569,7 @@ class DocumentChunker:
 
         return chunks
 
-    def _paragraph_based_chunking(self, text: str, source_file: str) -> List[TextChunk]:
+    def _paragraph_based_chunking(self, text: str, source_file: str) -> list[TextChunk]:
         """Execute paragraph-based chunking using pure functions."""
         paragraphs = extract_paragraphs(text)
 
@@ -576,11 +585,18 @@ class DocumentChunker:
         chunks = []
         char_offset = 0
 
-        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(chunk_positions):
+        for chunk_idx, (start_idx, end_idx, paragraph_group) in enumerate(
+            chunk_positions
+        ):
             # Handle oversized paragraph (needs sliding window)
-            if len(paragraph_group) == 1 and len(paragraph_group[0]) > self.config.chunk_size * 1.5:
+            if (
+                len(paragraph_group) == 1
+                and len(paragraph_group[0]) > self.config.chunk_size * 1.5
+            ):
                 # Use sliding window for this paragraph
-                para_chunks = self._sliding_window_chunking(paragraph_group[0], source_file)
+                para_chunks = self._sliding_window_chunking(
+                    paragraph_group[0], source_file
+                )
                 for para_chunk in para_chunks:
                     para_chunk.chunk_index = len(chunks)
                     chunks.append(para_chunk)
@@ -604,7 +620,7 @@ class DocumentChunker:
 
         return chunks
 
-    def _filter_meaningful_chunks(self, chunks: List[TextChunk]) -> List[TextChunk]:
+    def _filter_meaningful_chunks(self, chunks: list[TextChunk]) -> list[TextChunk]:
         """Filter chunks to keep only meaningful ones."""
         meaningful_chunks = []
         for chunk in chunks:
@@ -641,7 +657,7 @@ class DocumentChunker:
 
 
 def create_document_chunker(
-    config_dict: Optional[Dict[str, Any]] = None,
+    config_dict: Optional[dict[str, Any]] = None,
     config_provider: Optional["ConfigProvider"] = None,
     language: str = "hr",
 ) -> DocumentChunker:

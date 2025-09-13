@@ -42,7 +42,9 @@ class DocumentExtractor:
 
         suffix = file_path.suffix.lower()
         if suffix not in self.supported_formats:
-            raise ValueError(f"Unsupported format: {suffix}. Supported: {self.supported_formats}")
+            raise ValueError(
+                f"Unsupported format: {suffix}. Supported: {self.supported_formats}"
+            )
 
         logger.info(f"Extracting text from {file_path}")
 
@@ -101,7 +103,7 @@ class DocumentExtractor:
 
             for encoding in encodings:
                 try:
-                    with open(file_path, "r", encoding=encoding) as f:
+                    with open(file_path, encoding=encoding) as f:
                         text = f.read().strip()
                     logger.info(f"Successfully read TXT file with {encoding} encoding")
                     logger.info(f"Extracted {len(text)} characters from TXT")
@@ -109,7 +111,9 @@ class DocumentExtractor:
                 except UnicodeDecodeError:
                     continue
 
-            raise ValueError(f"Could not decode file {file_path} with any supported encoding")
+            raise ValueError(
+                f"Could not decode file {file_path} with any supported encoding"
+            )
 
         except Exception as e:
             logger.error(f"Error extracting from TXT {file_path}: {e}")

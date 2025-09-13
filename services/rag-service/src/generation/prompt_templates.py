@@ -47,8 +47,8 @@ def validate_query_for_prompt(query: str) -> str:
 
 
 def truncate_context_chunks(
-    chunks: List[str], max_total_length: int, chunk_separator: str = "\n---\n"
-) -> List[str]:
+    chunks: list[str], max_total_length: int, chunk_separator: str = "\n---\n"
+) -> list[str]:
     """
     Truncate context chunks to fit within length limit.
     Pure function - no side effects, deterministic output.
@@ -103,7 +103,7 @@ def truncate_context_chunks(
 
 
 def format_context_with_headers(
-    chunks: List[str],
+    chunks: list[str],
     header_template: str = "Document {index}:",
     chunk_separator: str = "\n\n",
 ) -> str:
@@ -145,7 +145,7 @@ def format_context_with_headers(
     return chunk_separator.join(formatted_parts)
 
 
-def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> str:
+def classify_query_type(query: str, keyword_patterns: dict[str, list[str]]) -> str:
     """
     Classify query type based on keyword patterns.
     Pure function - no side effects, deterministic output.
@@ -182,7 +182,9 @@ def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> s
         if query_type in keyword_patterns:
             keywords = keyword_patterns[query_type]
             if isinstance(keywords, list) and any(
-                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
+                keyword.lower() in query_lower
+                for keyword in keywords
+                if isinstance(keyword, str)
             ):
                 return query_type
 
@@ -190,7 +192,9 @@ def classify_query_type(query: str, keyword_patterns: Dict[str, List[str]]) -> s
     for query_type, keywords in keyword_patterns.items():
         if query_type not in priority_order and isinstance(keywords, list):
             if any(
-                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
+                keyword.lower() in query_lower
+                for keyword in keywords
+                if isinstance(keyword, str)
             ):
                 return query_type
 
@@ -203,7 +207,7 @@ def build_complete_prompt(
     context_template: str,
     query: str,
     context_text: str = "",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Build complete prompt from components.
     Pure function - no side effects, deterministic output.
@@ -289,9 +293,9 @@ class PromptTemplate:
 class PromptConfig:
     """Configuration for prompt templates and formatting."""
 
-    templates: Dict[str, PromptTemplate]
-    keyword_patterns: Dict[str, List[str]]
-    formatting: Dict[str, str]
+    templates: dict[str, PromptTemplate]
+    keyword_patterns: dict[str, list[str]]
+    formatting: dict[str, str]
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -333,7 +337,7 @@ class PromptTemplateProvider(Protocol):
         """Get specific prompt template."""
         ...
 
-    def get_templates(self) -> Dict[str, PromptTemplate]:
+    def get_templates(self) -> dict[str, PromptTemplate]:
         """Get all available templates."""
         ...
 
@@ -364,7 +368,7 @@ class MultilingualRAGPrompts:
             raise
 
     @property
-    def templates(self) -> Dict[str, PromptTemplate]:
+    def templates(self) -> dict[str, PromptTemplate]:
         """Get all available templates."""
         return self._config.templates
 
@@ -383,7 +387,9 @@ class MultilingualRAGPrompts:
         """
         if template_name not in self._config.templates:
             available = list(self._config.templates.keys())
-            raise KeyError(f"Template '{template_name}' not found. Available: {available}")
+            raise KeyError(
+                f"Template '{template_name}' not found. Available: {available}"
+            )
 
         return self._config.templates[template_name]
 
@@ -454,9 +460,9 @@ class PromptBuilder:
     def build_prompt(
         self,
         query: str,
-        context: Optional[List[str]] = None,
+        context: Optional[list[str]] = None,
         max_context_length: int = 2000,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Build complete prompt from query and context.
 
@@ -491,7 +497,7 @@ class PromptBuilder:
         self.logger.debug(f"Built prompt for query length: {len(validated_query)}")
         return system_prompt, user_prompt
 
-    def _format_context(self, context: List[str], max_length: int) -> str:
+    def _format_context(self, context: list[str], max_length: int) -> str:
         """
         Format context chunks into single text with length limit.
 
@@ -567,9 +573,9 @@ def create_prompt_builder_for_query(
 
 
 def create_mock_config_provider(
-    templates: Optional[Dict[str, PromptTemplate]] = None,
-    keyword_patterns: Optional[Dict[str, List[str]]] = None,
-    formatting: Optional[Dict[str, str]] = None,
+    templates: Optional[dict[str, PromptTemplate]] = None,
+    keyword_patterns: Optional[dict[str, list[str]]] = None,
+    formatting: Optional[dict[str, str]] = None,
 ) -> ConfigProvider:
     """
     Factory function to create mock configuration provider.

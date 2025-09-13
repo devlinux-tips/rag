@@ -16,7 +16,7 @@ except ImportError:
     import tomli as tomllib
 
 
-def load_toml_file(file_path: Path) -> Dict[str, Any]:
+def load_toml_file(file_path: Path) -> dict[str, Any]:
     """Load TOML file and return parsed content."""
     try:
         with open(file_path, "rb") as f:
@@ -26,7 +26,7 @@ def load_toml_file(file_path: Path) -> Dict[str, Any]:
         return {}
 
 
-def get_nested_keys(data: Dict[str, Any], prefix: str = "") -> Set[str]:
+def get_nested_keys(data: dict[str, Any], prefix: str = "") -> set[str]:
     """Extract all nested keys from a dictionary with dot notation."""
     keys = set()
 
@@ -40,7 +40,9 @@ def get_nested_keys(data: Dict[str, Any], prefix: str = "") -> Set[str]:
     return keys
 
 
-def compare_config_structures(lang1_path: Path, lang2_path: Path) -> Tuple[bool, List[str]]:
+def compare_config_structures(
+    lang1_path: Path, lang2_path: Path
+) -> tuple[bool, list[str]]:
     """Compare two language config files and return differences."""
     lang1_name = lang1_path.stem
     lang2_name = lang2_path.stem
@@ -50,7 +52,7 @@ def compare_config_structures(lang1_path: Path, lang2_path: Path) -> Tuple[bool,
     config2 = load_toml_file(lang2_path)
 
     if not config1 or not config2:
-        return False, [f"Failed to load one or both config files"]
+        return False, ["Failed to load one or both config files"]
 
     # Extract all keys
     keys1 = get_nested_keys(config1)
@@ -87,7 +89,9 @@ def compare_config_structures(lang1_path: Path, lang2_path: Path) -> Tuple[bool,
                 value2 = value2[part]
 
             # Check if types match
-            if not isinstance(value1, type(value2)) and not isinstance(value2, type(value1)):
+            if not isinstance(value1, type(value2)) and not isinstance(
+                value2, type(value1)
+            ):
                 type_mismatches.append(
                     f"   - {key}: {lang1_name}={type(value1).__name__}, {lang2_name}={type(value2).__name__}"
                 )
@@ -97,13 +101,15 @@ def compare_config_structures(lang1_path: Path, lang2_path: Path) -> Tuple[bool,
             pass
 
     if type_mismatches:
-        issues.append(f"⚠️  Type mismatches for common keys:")
+        issues.append("⚠️  Type mismatches for common keys:")
         issues.extend(type_mismatches)
 
     # Summary
     all_good = len(issues) == 0
     if all_good:
-        issues.append(f"✅ {lang1_name}.toml and {lang2_name}.toml have identical structures!")
+        issues.append(
+            f"✅ {lang1_name}.toml and {lang2_name}.toml have identical structures!"
+        )
         issues.append(f"   📊 Total keys: {len(common_keys)}")
 
     return all_good, issues
@@ -151,11 +157,13 @@ def validate_all_language_configs() -> bool:
     # Final summary
     print("=" * 60)
     if all_valid:
-        print(f"🎉 SUCCESS: All {len(language_files)} language configs have identical structures!")
+        print(
+            f"🎉 SUCCESS: All {len(language_files)} language configs have identical structures!"
+        )
         print(f"📊 Completed {comparisons_made} pairwise comparisons")
     else:
-        print(f"💥 FAILURE: Language configs have structural differences!")
-        print(f"🔧 Fix the missing keys to maintain language equality")
+        print("💥 FAILURE: Language configs have structural differences!")
+        print("🔧 Fix the missing keys to maintain language equality")
 
     return all_valid
 

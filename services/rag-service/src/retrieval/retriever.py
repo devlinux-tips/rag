@@ -44,8 +44,8 @@ class RetrievalQuery:
     processed_text: str
     query_type: QueryType
     language: str
-    keywords: List[str]
-    filters: Optional[Dict[str, Any]] = None
+    keywords: list[str]
+    filters: Optional[dict[str, Any]] = None
     max_results: int = 10
     similarity_threshold: float = 0.1
     strategy_override: Optional[RetrievalStrategy] = None
@@ -65,12 +65,12 @@ class RetrievedDocument:
     id: str
     content: str
     score: float
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     retrieval_method: str
     rank: Optional[int] = None
-    query_match_info: Optional[Dict[str, Any]] = None
+    query_match_info: Optional[dict[str, Any]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "id": self.id,
@@ -88,13 +88,13 @@ class RetrievalResult:
     """Complete retrieval result with timing and strategy metadata."""
 
     query: str
-    documents: List[RetrievedDocument]
+    documents: list[RetrievedDocument]
     total_found: int
     retrieval_time: float
     strategy_used: RetrievalStrategy
     query_type: QueryType
     language: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
     def __post_init__(self):
         """Add ranking to documents if not present."""
@@ -120,9 +120,9 @@ class SearchEngine(Protocol):
         query: str,
         top_k: int,
         method: str = "semantic",
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         similarity_threshold: float = 0.0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Execute search and return results."""
         ...
 
@@ -131,8 +131,8 @@ class ResultRanker(Protocol):
     """Protocol for result ranking and reordering."""
 
     def rank_results(
-        self, query: RetrievalQuery, documents: List[RetrievedDocument]
-    ) -> List[RetrievedDocument]:
+        self, query: RetrievalQuery, documents: list[RetrievedDocument]
+    ) -> list[RetrievedDocument]:
         """Rank documents by relevance."""
         ...
 
@@ -140,11 +140,11 @@ class ResultRanker(Protocol):
 class RetrievalConfig(Protocol):
     """Protocol for retrieval configuration."""
 
-    def get_strategy_config(self, strategy: RetrievalStrategy) -> Dict[str, Any]:
+    def get_strategy_config(self, strategy: RetrievalStrategy) -> dict[str, Any]:
         """Get configuration for specific strategy."""
         ...
 
-    def get_adaptive_config(self, query_type: QueryType) -> Dict[str, Any]:
+    def get_adaptive_config(self, query_type: QueryType) -> dict[str, Any]:
         """Get adaptive configuration for query type."""
         ...
 
@@ -227,11 +227,11 @@ def calculate_adaptive_top_k(query: RetrievalQuery, base_top_k: int = 10) -> int
 
 
 def merge_retrieval_results(
-    semantic_docs: List[RetrievedDocument],
-    keyword_docs: List[RetrievedDocument],
+    semantic_docs: list[RetrievedDocument],
+    keyword_docs: list[RetrievedDocument],
     semantic_weight: float = 0.7,
     keyword_weight: float = 0.3,
-) -> List[RetrievedDocument]:
+) -> list[RetrievedDocument]:
     """
     Merge results from different retrieval methods.
 
@@ -301,8 +301,8 @@ def merge_retrieval_results(
 
 
 def filter_results_by_threshold(
-    documents: List[RetrievedDocument], threshold: float
-) -> List[RetrievedDocument]:
+    documents: list[RetrievedDocument], threshold: float
+) -> list[RetrievedDocument]:
     """
     Filter results by similarity threshold.
 
@@ -316,7 +316,9 @@ def filter_results_by_threshold(
     return [doc for doc in documents if doc.score >= threshold]
 
 
-def limit_results(documents: List[RetrievedDocument], max_results: int) -> List[RetrievedDocument]:
+def limit_results(
+    documents: list[RetrievedDocument], max_results: int
+) -> list[RetrievedDocument]:
     """
     Limit number of results.
 
@@ -331,8 +333,8 @@ def limit_results(documents: List[RetrievedDocument], max_results: int) -> List[
 
 
 def add_query_match_analysis(
-    query: RetrievalQuery, documents: List[RetrievedDocument]
-) -> List[RetrievedDocument]:
+    query: RetrievalQuery, documents: list[RetrievedDocument]
+) -> list[RetrievedDocument]:
     """
     Add query match analysis to document metadata.
 
@@ -368,7 +370,7 @@ def add_query_match_analysis(
     return documents
 
 
-def calculate_diversity_score(documents: List[RetrievedDocument]) -> float:
+def calculate_diversity_score(documents: list[RetrievedDocument]) -> float:
     """
     Calculate diversity score for result set.
 
@@ -434,7 +436,7 @@ class DocumentRetriever:
         language: str = "en",
         max_results: Optional[int] = None,
         strategy: Optional[RetrievalStrategy] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
     ) -> RetrievalResult:
         """
         Retrieve relevant documents for query.
@@ -473,7 +475,9 @@ class DocumentRetriever:
             selected_strategy = select_retrieval_strategy(processed_query)
 
             # Execute retrieval based on strategy
-            documents = await self._execute_retrieval_strategy(processed_query, selected_strategy)
+            documents = await self._execute_retrieval_strategy(
+                processed_query, selected_strategy
+            )
 
             # Apply post-processing
             documents = self._post_process_results(processed_query, documents)
@@ -502,7 +506,7 @@ class DocumentRetriever:
 
     async def _execute_retrieval_strategy(
         self, query: RetrievalQuery, strategy: RetrievalStrategy
-    ) -> List[RetrievedDocument]:
+    ) -> list[RetrievedDocument]:
         """Execute retrieval using specified strategy."""
         if strategy == RetrievalStrategy.SEMANTIC:
             return await self._semantic_retrieval(query)
@@ -515,10 +519,14 @@ class DocumentRetriever:
         elif strategy == RetrievalStrategy.MULTI_PASS:
             return await self._multi_pass_retrieval(query)
         else:
-            self.logger.warning(f"Unknown strategy {strategy}, falling back to semantic")
+            self.logger.warning(
+                f"Unknown strategy {strategy}, falling back to semantic"
+            )
             return await self._semantic_retrieval(query)
 
-    async def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+    async def _semantic_retrieval(
+        self, query: RetrievalQuery
+    ) -> list[RetrievedDocument]:
         """Execute semantic similarity retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
@@ -543,7 +551,9 @@ class DocumentRetriever:
 
         return documents
 
-    async def _keyword_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+    async def _keyword_retrieval(
+        self, query: RetrievalQuery
+    ) -> list[RetrievedDocument]:
         """Execute keyword-based retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
@@ -568,7 +578,7 @@ class DocumentRetriever:
 
         return documents
 
-    async def _hybrid_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+    async def _hybrid_retrieval(self, query: RetrievalQuery) -> list[RetrievedDocument]:
         """Execute hybrid retrieval combining semantic and keyword approaches."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
@@ -592,9 +602,13 @@ class DocumentRetriever:
         # Get weights from config - validate required keys
         strategy_config = self.config.get_strategy_config(RetrievalStrategy.HYBRID)
         if "semantic_weight" not in strategy_config:
-            raise ValueError("Missing 'semantic_weight' in hybrid strategy configuration")
+            raise ValueError(
+                "Missing 'semantic_weight' in hybrid strategy configuration"
+            )
         if "keyword_weight" not in strategy_config:
-            raise ValueError("Missing 'keyword_weight' in hybrid strategy configuration")
+            raise ValueError(
+                "Missing 'keyword_weight' in hybrid strategy configuration"
+            )
         semantic_weight = strategy_config["semantic_weight"]
         keyword_weight = strategy_config["keyword_weight"]
 
@@ -605,7 +619,9 @@ class DocumentRetriever:
 
         return merged_docs
 
-    async def _adaptive_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+    async def _adaptive_retrieval(
+        self, query: RetrievalQuery
+    ) -> list[RetrievedDocument]:
         """Execute adaptive retrieval based on query characteristics."""
         # Get adaptive configuration
         adaptive_config = self.config.get_adaptive_config(query.query_type)
@@ -618,7 +634,9 @@ class DocumentRetriever:
         else:
             return await self._hybrid_retrieval(query)
 
-    async def _multi_pass_retrieval(self, query: RetrievalQuery) -> List[RetrievedDocument]:
+    async def _multi_pass_retrieval(
+        self, query: RetrievalQuery
+    ) -> list[RetrievedDocument]:
         """Execute multi-pass retrieval with progressive refinement."""
         # First pass: broad semantic search
         broad_query = RetrievalQuery(
@@ -635,7 +653,9 @@ class DocumentRetriever:
         first_pass = await self._semantic_retrieval(broad_query)
 
         # If we have enough high-quality results, return them
-        high_quality = [doc for doc in first_pass if doc.score >= query.similarity_threshold]
+        high_quality = [
+            doc for doc in first_pass if doc.score >= query.similarity_threshold
+        ]
         if len(high_quality) >= query.max_results:
             return high_quality[: query.max_results]
 
@@ -650,8 +670,8 @@ class DocumentRetriever:
         return limit_results(filtered, query.max_results)
 
     def _post_process_results(
-        self, query: RetrievalQuery, documents: List[RetrievedDocument]
-    ) -> List[RetrievedDocument]:
+        self, query: RetrievalQuery, documents: list[RetrievedDocument]
+    ) -> list[RetrievedDocument]:
         """Apply post-processing to retrieval results."""
         if not documents:
             return documents
@@ -675,7 +695,7 @@ def create_retrieval_query(
     processed_text: str,
     query_type: QueryType,
     language: str,
-    keywords: List[str],
+    keywords: list[str],
     **kwargs,
 ) -> RetrievalQuery:
     """Factory function to create RetrievalQuery with validation."""

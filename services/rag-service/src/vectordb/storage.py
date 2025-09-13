@@ -27,7 +27,7 @@ class DocumentMetadata:
         if self.timestamp is None:
             self.timestamp = datetime.now()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
         return {
             "source_file": self.source_file,
@@ -44,7 +44,7 @@ class StorageResult:
     success: bool
     documents_stored: int = 0
     batches_processed: int = 0
-    document_ids: List[str] = field(default_factory=list)
+    document_ids: list[str] = field(default_factory=list)
     error_message: Optional[str] = None
 
 
@@ -54,7 +54,7 @@ class QueryResult:
 
     id: str
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     score: float
 
 
@@ -64,45 +64,45 @@ class VectorCollection(Protocol):
 
     def add(
         self,
-        ids: List[str],
-        documents: List[str],
-        metadatas: List[Dict[str, Any]],
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict[str, Any]],
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         ...
 
     def query(
         self,
-        query_texts: Optional[List[str]] = None,
-        query_embeddings: Optional[List[np.ndarray]] = None,
+        query_texts: Optional[list[str]] = None,
+        query_embeddings: Optional[list[np.ndarray]] = None,
         n_results: int = 10,
-        where: Optional[Dict[str, Any]] = None,
-        where_document: Optional[Dict[str, Any]] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        where: Optional[dict[str, Any]] = None,
+        where_document: Optional[dict[str, Any]] = None,
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         ...
 
     def get(
         self,
-        ids: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
+        ids: Optional[list[str]] = None,
+        where: Optional[dict[str, Any]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        include: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        include: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         ...
 
     def update(
         self,
-        ids: List[str],
-        documents: Optional[List[str]] = None,
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        embeddings: Optional[List[np.ndarray]] = None,
+        ids: list[str],
+        documents: Optional[list[str]] = None,
+        metadatas: Optional[list[dict[str, Any]]] = None,
+        embeddings: Optional[list[np.ndarray]] = None,
     ) -> None:
         ...
 
     def delete(
-        self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None
+        self, ids: Optional[list[str]] = None, where: Optional[dict[str, Any]] = None
     ) -> None:
         ...
 
@@ -114,14 +114,16 @@ class VectorCollection(Protocol):
         ...
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         ...
 
 
 class VectorDatabase(Protocol):
     """Vector database interface."""
 
-    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
+    def create_collection(
+        self, name: str, reset_if_exists: bool = False
+    ) -> VectorCollection:
         ...
 
     def get_collection(self, name: str) -> VectorCollection:
@@ -130,7 +132,7 @@ class VectorDatabase(Protocol):
     def delete_collection(self, name: str) -> None:
         ...
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         ...
 
     def reset(self) -> None:
@@ -138,7 +140,7 @@ class VectorDatabase(Protocol):
 
 
 # Pure functions for business logic
-def validate_documents_for_storage(documents: List[str]) -> List[str]:
+def validate_documents_for_storage(documents: list[str]) -> list[str]:
     """Validate documents for storage - pure function."""
     if not documents:
         raise ValueError("Documents list cannot be empty")
@@ -157,8 +159,8 @@ def validate_documents_for_storage(documents: List[str]) -> List[str]:
 
 
 def validate_embeddings_for_storage(
-    embeddings: List[np.ndarray], expected_dim: Optional[int] = None
-) -> List[np.ndarray]:
+    embeddings: list[np.ndarray], expected_dim: Optional[int] = None
+) -> list[np.ndarray]:
     """Validate embeddings for storage - pure function."""
     if not embeddings:
         raise ValueError("Embeddings list cannot be empty")
@@ -168,7 +170,9 @@ def validate_embeddings_for_storage(
         if emb is None:
             raise ValueError(f"Embedding at index {i} is None")
         if not isinstance(emb, np.ndarray):
-            raise ValueError(f"Embedding at index {i} must be numpy array, got {type(emb)}")
+            raise ValueError(
+                f"Embedding at index {i} must be numpy array, got {type(emb)}"
+            )
 
         if expected_dim is not None and emb.shape[0] != expected_dim:
             raise ValueError(
@@ -181,14 +185,16 @@ def validate_embeddings_for_storage(
 
 
 def prepare_storage_batch(
-    documents: List[str],
-    embeddings: List[np.ndarray],
-    metadata_list: List[DocumentMetadata],
+    documents: list[str],
+    embeddings: list[np.ndarray],
+    metadata_list: list[DocumentMetadata],
     batch_size: int = 100,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Prepare documents for batch storage - pure function."""
     if len(documents) != len(embeddings) != len(metadata_list):
-        raise ValueError("Documents, embeddings, and metadata lists must have same length")
+        raise ValueError(
+            "Documents, embeddings, and metadata lists must have same length"
+        )
 
     batches = []
     total_items = len(documents)
@@ -221,7 +227,7 @@ def prepare_storage_batch(
     return batches
 
 
-def parse_query_results(raw_results: Dict[str, Any]) -> List[QueryResult]:
+def parse_query_results(raw_results: dict[str, Any]) -> list[QueryResult]:
     """Parse raw ChromaDB query results - pure function."""
     if not raw_results or "ids" not in raw_results:
         return []
@@ -260,7 +266,7 @@ def calculate_batch_sizes(num_documents: int, max_batch_size: int = 100) -> int:
         return max_batch_size
 
 
-def extract_document_ids(documents: List[Dict[str, Any]]) -> List[str]:
+def extract_document_ids(documents: list[dict[str, Any]]) -> list[str]:
     """Extract document IDs - pure function."""
     ids = []
     for i, doc in enumerate(documents):
@@ -271,8 +277,8 @@ def extract_document_ids(documents: List[Dict[str, Any]]) -> List[str]:
 
 
 def merge_search_results(
-    results_list: List[List[QueryResult]], max_results: int = 10
-) -> List[QueryResult]:
+    results_list: list[list[QueryResult]], max_results: int = 10
+) -> list[QueryResult]:
     """Merge and sort search results from multiple sources - pure function."""
     all_results = []
     for results in results_list:
@@ -293,7 +299,9 @@ class VectorStorage:
         self.collection: Optional[VectorCollection] = None
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self, collection_name: str, reset_if_exists: bool = False) -> None:
+    async def initialize(
+        self, collection_name: str, reset_if_exists: bool = False
+    ) -> None:
         """Initialize storage with collection."""
         self.collection = self.database.create_collection(
             name=collection_name, reset_if_exists=reset_if_exists
@@ -302,9 +310,9 @@ class VectorStorage:
 
     async def store_documents(
         self,
-        documents: List[str],
-        embeddings: List[np.ndarray],
-        metadata_list: List[DocumentMetadata],
+        documents: list[str],
+        embeddings: list[np.ndarray],
+        metadata_list: list[DocumentMetadata],
         batch_size: int = 100,
     ) -> StorageResult:
         """Store documents in batches."""
@@ -329,7 +337,9 @@ class VectorStorage:
             self.collection.add(**batch)
             all_doc_ids.extend(batch["ids"])
 
-        self.logger.info(f"Stored {len(validated_docs)} documents in {len(batches)} batches")
+        self.logger.info(
+            f"Stored {len(validated_docs)} documents in {len(batches)} batches"
+        )
 
         return StorageResult(
             success=True,
@@ -343,8 +353,8 @@ class VectorStorage:
         query_text: Optional[str] = None,
         query_embedding: Optional[np.ndarray] = None,
         top_k: int = 10,
-        filter_metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[QueryResult]:
+        filter_metadata: Optional[dict[str, Any]] = None,
+    ) -> list[QueryResult]:
         """Search documents by text or embedding."""
         if not self.collection:
             raise RuntimeError("Storage not initialized - call initialize() first")
@@ -370,7 +380,7 @@ class VectorStorage:
         self.logger.debug(f"Search returned {len(results)} results")
         return results
 
-    async def get_collection_stats(self) -> Dict[str, Any]:
+    async def get_collection_stats(self) -> dict[str, Any]:
         """Get collection statistics."""
         if not self.collection:
             raise RuntimeError("Storage not initialized - call initialize() first")
@@ -384,8 +394,8 @@ class VectorStorage:
 
     async def delete_documents(
         self,
-        ids: Optional[List[str]] = None,
-        filter_metadata: Optional[Dict[str, Any]] = None,
+        ids: Optional[list[str]] = None,
+        filter_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         """Delete documents from collection."""
         if not self.collection:

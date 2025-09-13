@@ -16,27 +16,30 @@ from typing import Any, Dict, List
 class ProductionConfigProvider:
     """Production configuration provider using real TOML files."""
 
-    def get_language_config(self, language: str) -> Dict[str, Any]:
+    def get_language_config(self, language: str) -> dict[str, Any]:
         """Get language-specific text processing configuration."""
         from ..utils.config_loader import get_language_specific_config
 
         return get_language_specific_config("text_processing", language)
 
-    def get_cleaning_config(self) -> Dict[str, Any]:
+    def get_cleaning_config(self) -> dict[str, Any]:
         """Get general cleaning configuration."""
         from ..utils.config_loader import get_cleaning_config
 
         return get_cleaning_config()
 
-    def get_document_cleaning_config(self, language: str) -> Dict[str, Any]:
+    def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get document cleaning configuration."""
         from ..utils.config_loader import get_language_specific_config
 
         return get_language_specific_config("document_cleaning", language)
 
-    def get_chunking_config(self, language: str) -> Dict[str, Any]:
+    def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get chunking configuration (merged)."""
-        from ..utils.config_loader import get_chunking_config, get_language_specific_config
+        from ..utils.config_loader import (
+            get_chunking_config,
+            get_language_specific_config,
+        )
 
         # Load main chunking config
         main_chunking_config = get_chunking_config()
@@ -49,7 +52,7 @@ class ProductionConfigProvider:
 
         return merged_config
 
-    def get_shared_language_config(self, language: str) -> Dict[str, Any]:
+    def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get shared language configuration."""
         from ..utils.config_loader import get_language_shared
 
@@ -98,57 +101,59 @@ class MockConfigProvider:
 
     def __init__(self):
         """Initialize with mock configurations."""
-        self.language_configs: Dict[str, Dict[str, Any]] = {}
-        self.cleaning_config: Dict[str, Any] = {}
-        self.document_cleaning_configs: Dict[str, Dict[str, Any]] = {}
-        self.chunking_configs: Dict[str, Dict[str, Any]] = {}
-        self.shared_language_configs: Dict[str, Dict[str, Any]] = {}
+        self.language_configs: dict[str, dict[str, Any]] = {}
+        self.cleaning_config: dict[str, Any] = {}
+        self.document_cleaning_configs: dict[str, dict[str, Any]] = {}
+        self.chunking_configs: dict[str, dict[str, Any]] = {}
+        self.shared_language_configs: dict[str, dict[str, Any]] = {}
 
-    def set_language_config(self, language: str, config: Dict[str, Any]) -> None:
+    def set_language_config(self, language: str, config: dict[str, Any]) -> None:
         """Set mock language configuration."""
         self.language_configs[language] = config
 
-    def set_cleaning_config(self, config: Dict[str, Any]) -> None:
+    def set_cleaning_config(self, config: dict[str, Any]) -> None:
         """Set mock cleaning configuration."""
         self.cleaning_config = config
 
-    def set_document_cleaning_config(self, language: str, config: Dict[str, Any]) -> None:
+    def set_document_cleaning_config(
+        self, language: str, config: dict[str, Any]
+    ) -> None:
         """Set mock document cleaning configuration."""
         self.document_cleaning_configs[language] = config
 
-    def set_chunking_config(self, language: str, config: Dict[str, Any]) -> None:
+    def set_chunking_config(self, language: str, config: dict[str, Any]) -> None:
         """Set mock chunking configuration."""
         self.chunking_configs[language] = config
 
-    def set_shared_language_config(self, language: str, config: Dict[str, Any]) -> None:
+    def set_shared_language_config(self, language: str, config: dict[str, Any]) -> None:
         """Set mock shared language configuration."""
         self.shared_language_configs[language] = config
 
-    def get_language_config(self, language: str) -> Dict[str, Any]:
+    def get_language_config(self, language: str) -> dict[str, Any]:
         """Get mock language configuration."""
         if language not in self.language_configs:
             raise KeyError(f"Mock language config '{language}' not found")
         return self.language_configs[language]
 
-    def get_cleaning_config(self) -> Dict[str, Any]:
+    def get_cleaning_config(self) -> dict[str, Any]:
         """Get mock cleaning configuration."""
         if not self.cleaning_config:
             raise KeyError("Mock cleaning config not set")
         return self.cleaning_config
 
-    def get_document_cleaning_config(self, language: str) -> Dict[str, Any]:
+    def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get mock document cleaning configuration."""
         if language not in self.document_cleaning_configs:
             raise KeyError(f"Mock document cleaning config '{language}' not found")
         return self.document_cleaning_configs[language]
 
-    def get_chunking_config(self, language: str) -> Dict[str, Any]:
+    def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get mock chunking configuration."""
         if language not in self.chunking_configs:
             raise KeyError(f"Mock chunking config '{language}' not found")
         return self.chunking_configs[language]
 
-    def get_shared_language_config(self, language: str) -> Dict[str, Any]:
+    def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get mock shared language configuration."""
         if language not in self.shared_language_configs:
             raise KeyError(f"Mock shared language config '{language}' not found")
@@ -176,7 +181,7 @@ class MockLoggerProvider:
         """Record error message."""
         self.error_messages.append(message)
 
-    def get_all_messages(self) -> Dict[str, list]:
+    def get_all_messages(self) -> dict[str, list]:
         """Get all logged messages for testing."""
         return {
             "debug": self.debug_messages,
@@ -196,8 +201,8 @@ class MockEnvironmentProvider:
 
     def __init__(self):
         """Initialize mock environment."""
-        self.environment_variables: Dict[str, str] = {}
-        self.locale_calls: List[tuple] = []
+        self.environment_variables: dict[str, str] = {}
+        self.locale_calls: list[tuple] = []
 
     def set_environment_variable(self, key: str, value: str) -> None:
         """Record environment variable setting."""
@@ -207,11 +212,11 @@ class MockEnvironmentProvider:
         """Record locale setting."""
         self.locale_calls.append((category, locale_name))
 
-    def get_environment_variables(self) -> Dict[str, str]:
+    def get_environment_variables(self) -> dict[str, str]:
         """Get recorded environment variables."""
         return self.environment_variables.copy()
 
-    def get_locale_calls(self) -> List[tuple]:
+    def get_locale_calls(self) -> list[tuple]:
         """Get recorded locale calls."""
         return self.locale_calls.copy()
 
@@ -226,7 +231,7 @@ class MockEnvironmentProvider:
 # ================================
 
 
-def create_config_provider(mock_data: Dict[str, Any] = None):
+def create_config_provider(mock_data: dict[str, Any] = None):
     """Create configuration provider (production or mock)."""
     if mock_data is not None:
         provider = MockConfigProvider()
@@ -277,7 +282,7 @@ def create_environment_provider(mock: bool = False):
 
 def create_test_providers(
     language: str = "hr",
-    mock_configs: Dict[str, Any] = None,
+    mock_configs: dict[str, Any] = None,
     mock_logging: bool = True,
     mock_environment: bool = True,
 ):
@@ -328,7 +333,9 @@ def create_test_providers(
         },
         "shared_language_configs": {
             language: {
-                "stopwords": {"words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]},
+                "stopwords": {
+                    "words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]
+                },
                 "chars_pattern": r"[^\w\s.,!?:;()-]",
             }
         },
