@@ -6,7 +6,7 @@ Clean architecture with dependency injection and modular components.
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 # ===== PURE FUNCTIONS =====
 
 
-def normalize_text_for_bm25(
-    text: str, stop_words: set, min_token_length: int = 3
-) -> list[str]:
+def normalize_text_for_bm25(text: str, stop_words: set, min_token_length: int = 3) -> list[str]:
     """
     Preprocess text for BM25 scoring.
     Pure function - no side effects, deterministic output.
@@ -43,9 +41,7 @@ def normalize_text_for_bm25(
         raise ValueError(f"Stop words must be set, got {type(stop_words)}")
 
     if not isinstance(min_token_length, int) or min_token_length < 1:
-        raise ValueError(
-            f"Min token length must be positive integer, got {min_token_length}"
-        )
+        raise ValueError(f"Min token length must be positive integer, got {min_token_length}")
 
     # Convert to lowercase
     processed_text = text.lower()
@@ -58,11 +54,7 @@ def normalize_text_for_bm25(
 
     # Filter tokens
     filtered_tokens = [
-        token
-        for token in tokens
-        if len(token) >= min_token_length
-        and not token.isdigit()
-        and token not in stop_words
+        token for token in tokens if len(token) >= min_token_length and not token.isdigit() and token not in stop_words
     ]
 
     return filtered_tokens
@@ -100,10 +92,10 @@ def calculate_bm25_score(
     if not isinstance(doc_tokens, list):
         raise ValueError(f"Doc tokens must be list, got {type(doc_tokens)}")
 
-    if not isinstance(k1, (int, float)) or k1 < 0:
+    if not isinstance(k1, int | float) or k1 < 0:
         raise ValueError(f"k1 must be non-negative number, got {k1}")
 
-    if not isinstance(b, (int, float)) or not (0 <= b <= 1):
+    if not isinstance(b, int | float) or not (0 <= b <= 1):
         raise ValueError(f"b must be between 0 and 1, got {b}")
 
     if len(query_tokens) == 0:
@@ -158,7 +150,7 @@ def normalize_scores(scores: list[float]) -> list[float]:
     if not isinstance(scores, list):
         raise ValueError(f"Scores must be list, got {type(scores)}")
 
-    if not all(isinstance(s, (int, float)) for s in scores):
+    if not all(isinstance(s, int | float) for s in scores):
         raise ValueError("All scores must be numbers")
 
     if not scores:
@@ -175,10 +167,7 @@ def normalize_scores(scores: list[float]) -> list[float]:
 
 
 def combine_hybrid_scores(
-    dense_scores: list[float],
-    sparse_scores: list[float],
-    dense_weight: float,
-    sparse_weight: float,
+    dense_scores: list[float], sparse_scores: list[float], dense_weight: float, sparse_weight: float
 ) -> list[float]:
     """
     Combine dense and sparse scores with weights.
@@ -203,19 +192,13 @@ def combine_hybrid_scores(
         raise ValueError(f"Sparse scores must be list, got {type(sparse_scores)}")
 
     if len(dense_scores) != len(sparse_scores):
-        raise ValueError(
-            f"Score lists must have same length: {len(dense_scores)} vs {len(sparse_scores)}"
-        )
+        raise ValueError(f"Score lists must have same length: {len(dense_scores)} vs {len(sparse_scores)}")
 
-    if not isinstance(dense_weight, (int, float)) or dense_weight < 0:
-        raise ValueError(
-            f"Dense weight must be non-negative number, got {dense_weight}"
-        )
+    if not isinstance(dense_weight, int | float) or dense_weight < 0:
+        raise ValueError(f"Dense weight must be non-negative number, got {dense_weight}")
 
-    if not isinstance(sparse_weight, (int, float)) or sparse_weight < 0:
-        raise ValueError(
-            f"Sparse weight must be non-negative number, got {sparse_weight}"
-        )
+    if not isinstance(sparse_weight, int | float) or sparse_weight < 0:
+        raise ValueError(f"Sparse weight must be non-negative number, got {sparse_weight}")
 
     if dense_weight + sparse_weight == 0:
         raise ValueError("At least one weight must be positive")
@@ -263,10 +246,8 @@ def rank_results_by_score(
             raise ValueError(f"Result at index {i} must be dict, got {type(result)}")
         if score_key not in result:
             raise ValueError(f"Result at index {i} missing score key '{score_key}'")
-        if not isinstance(result[score_key], (int, float)):
-            raise ValueError(
-                f"Score at index {i} must be number, got {type(result[score_key])}"
-            )
+        if not isinstance(result[score_key], int | float):
+            raise ValueError(f"Score at index {i} must be number, got {type(result[score_key])}")
 
     # Sort results
     return sorted(results, key=lambda x: x[score_key], reverse=descending)
@@ -320,9 +301,7 @@ class HybridConfig:
     min_score_threshold: float = 0.0
 
     @classmethod
-    def from_validated_config(
-        cls, hybrid_config: HybridRetrievalConfig
-    ) -> "HybridConfig":
+    def from_validated_config(cls, hybrid_config: HybridRetrievalConfig) -> "HybridConfig":
         """Create HybridConfig from validated HybridRetrievalConfig."""
         return cls(
             dense_weight=hybrid_config.dense_weight,
@@ -337,19 +316,19 @@ class HybridConfig:
 
     def __post_init__(self):
         """Validate configuration after initialization."""
-        if not isinstance(self.dense_weight, (int, float)) or self.dense_weight < 0:
+        if not isinstance(self.dense_weight, int | float) or self.dense_weight < 0:
             raise ValueError("Dense weight must be non-negative number")
 
-        if not isinstance(self.sparse_weight, (int, float)) or self.sparse_weight < 0:
+        if not isinstance(self.sparse_weight, int | float) or self.sparse_weight < 0:
             raise ValueError("Sparse weight must be non-negative number")
 
         if self.dense_weight + self.sparse_weight == 0:
             raise ValueError("At least one weight must be positive")
 
-        if not isinstance(self.bm25_k1, (int, float)) or self.bm25_k1 < 0:
+        if not isinstance(self.bm25_k1, int | float) or self.bm25_k1 < 0:
             raise ValueError("BM25 k1 must be non-negative number")
 
-        if not isinstance(self.bm25_b, (int, float)) or not (0 <= self.bm25_b <= 1):
+        if not isinstance(self.bm25_b, int | float) or not (0 <= self.bm25_b <= 1):
             raise ValueError("BM25 b must be between 0 and 1")
 
         if not isinstance(self.min_token_length, int) or self.min_token_length < 1:
@@ -358,7 +337,7 @@ class HybridConfig:
         if not isinstance(self.normalize_scores, bool):
             raise ValueError("Normalize scores must be boolean")
 
-        if not isinstance(self.min_score_threshold, (int, float)):
+        if not isinstance(self.min_score_threshold, int | float):
             raise ValueError("Min score threshold must be number")
 
 
@@ -377,13 +356,13 @@ class HybridResult:
         if not isinstance(self.content, str):
             raise ValueError("Content must be string")
 
-        if not isinstance(self.score, (int, float)):
+        if not isinstance(self.score, int | float):
             raise ValueError("Score must be number")
 
-        if not isinstance(self.dense_score, (int, float)):
+        if not isinstance(self.dense_score, int | float):
             raise ValueError("Dense score must be number")
 
-        if not isinstance(self.sparse_score, (int, float)):
+        if not isinstance(self.sparse_score, int | float):
             raise ValueError("Sparse score must be number")
 
         if not isinstance(self.metadata, dict):
@@ -428,12 +407,7 @@ class CorpusIndexer(Protocol):
 class BM25Scorer:
     """BM25 scorer with multilingual preprocessing."""
 
-    def __init__(
-        self,
-        stop_words_provider: StopWordsProvider,
-        language: str,
-        config: HybridConfig,
-    ):
+    def __init__(self, stop_words_provider: StopWordsProvider, language: str, config: HybridConfig):
         """
         Initialize BM25 scorer with dependency injection.
 
@@ -452,9 +426,9 @@ class BM25Scorer:
         self.logger.debug(f"Loaded {len(self.stop_words)} stop words for {language}")
 
         # Initialize corpus data
-        self.documents = []
-        self.tokenized_docs = []
-        self.corpus_stats = {}
+        self.documents: list[str] = []
+        self.tokenized_docs: list[list[str]] = []
+        self.corpus_stats: dict[str, float] = {}
         self.is_indexed = False
 
     def index_documents(self, documents: list[str]) -> None:
@@ -478,10 +452,7 @@ class BM25Scorer:
 
             # Tokenize all documents
             self.tokenized_docs = [
-                normalize_text_for_bm25(
-                    doc, self.stop_words, self.config.min_token_length
-                )
-                for doc in documents
+                normalize_text_for_bm25(doc, self.stop_words, self.config.min_token_length) for doc in documents
             ]
 
             # Calculate corpus statistics
@@ -515,9 +486,7 @@ class BM25Scorer:
 
         try:
             # Tokenize query
-            query_tokens = normalize_text_for_bm25(
-                query, self.stop_words, self.config.min_token_length
-            )
+            query_tokens = normalize_text_for_bm25(query, self.stop_words, self.config.min_token_length)
 
             if not query_tokens:
                 return [0.0] * len(self.documents)
@@ -531,7 +500,7 @@ class BM25Scorer:
                     k1=self.config.bm25_k1,
                     b=self.config.bm25_b,
                     avgdl=self.corpus_stats["avgdl"],
-                    corpus_size=self.corpus_stats["total_docs"],
+                    corpus_size=int(self.corpus_stats["total_docs"]),
                 )
                 scores.append(score)
 
@@ -545,12 +514,7 @@ class BM25Scorer:
 class HybridRetriever:
     """Hybrid retriever combining dense and sparse search."""
 
-    def __init__(
-        self,
-        stop_words_provider: StopWordsProvider,
-        language: str,
-        config: HybridConfig,
-    ):
+    def __init__(self, stop_words_provider: StopWordsProvider, language: str, config: HybridConfig):
         """
         Initialize hybrid retriever with dependency injection.
 
@@ -567,7 +531,7 @@ class HybridRetriever:
         self.bm25_scorer = BM25Scorer(stop_words_provider, language, config)
 
         # Initialize state
-        self.documents = []
+        self.documents: list[str] = []
         self.is_ready = False
 
     def index_documents(self, documents: list[str]) -> None:
@@ -588,9 +552,7 @@ class HybridRetriever:
             self.logger.error(f"Failed to index documents: {e}")
             raise
 
-    def retrieve(
-        self, query: str, dense_results: list[DenseResult], top_k: int = 10
-    ) -> list[HybridResult]:
+    def retrieve(self, query: str, dense_results: list[DenseResult], top_k: int = 10) -> list[HybridResult]:
         """
         Perform hybrid retrieval combining dense and sparse results.
 
@@ -626,10 +588,7 @@ class HybridRetriever:
                 bm25_scores = normalize_scores(bm25_scores)
 
             # Create content to BM25 score mapping
-            content_to_bm25 = {
-                doc: score
-                for doc, score in zip(self.documents, bm25_scores, strict=False)
-            }
+            content_to_bm25 = {doc: score for doc, score in zip(self.documents, bm25_scores, strict=False)}
 
             # Process dense results and combine with BM25
             hybrid_results = []
@@ -640,9 +599,7 @@ class HybridRetriever:
 
                 # Get BM25 score for this content
                 if content not in content_to_bm25:
-                    raise ValueError(
-                        f"Content not indexed in BM25 scorer: {content[:100]}..."
-                    )
+                    raise ValueError(f"Content not indexed in BM25 scorer: {content[:100]}...")
                 bm25_score = content_to_bm25[content]
 
                 # Calculate hybrid score
@@ -667,9 +624,7 @@ class HybridRetriever:
 
             # Rank by hybrid score
             ranked_results = rank_results_by_score(
-                [{"result": r, "score": r.score} for r in hybrid_results],
-                score_key="score",
-                descending=True,
+                [{"result": r, "score": r.score} for r in hybrid_results], score_key="score", descending=True
             )
 
             # Extract results and apply top_k limit
@@ -740,20 +695,13 @@ def create_hybrid_retriever(
     Returns:
         Configured HybridRetriever instance
     """
-    config = HybridConfig(
-        dense_weight=dense_weight,
-        sparse_weight=sparse_weight,
-        bm25_k1=bm25_k1,
-        bm25_b=bm25_b,
-    )
+    config = HybridConfig(dense_weight=dense_weight, sparse_weight=sparse_weight, bm25_k1=bm25_k1, bm25_b=bm25_b)
 
     return HybridRetriever(stop_words_provider, language, config)
 
 
 def create_hybrid_retriever_from_config(
-    main_config: dict[str, Any],
-    stop_words_provider: StopWordsProvider,
-    language: str = "hr",
+    main_config: dict[str, Any], stop_words_provider: StopWordsProvider, language: str = "hr"
 ) -> HybridRetriever:
     """
     Factory function to create hybrid retriever from validated configuration.

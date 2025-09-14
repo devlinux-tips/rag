@@ -4,10 +4,9 @@ Provides document category-aware templates and intelligent prompt building
 for multilingual question-answering scenarios.
 """
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Protocol
 
 from src.retrieval.categorization import CategoryType
 
@@ -130,45 +129,47 @@ class LoggerProvider(Protocol):
 
 
 def parse_config_templates(
-    config_data: dict[str, dict[str, str]], language: str
+    config_data: dict[CategoryType, dict[PromptType, str]], language: str
 ) -> dict[CategoryType, dict[PromptType, PromptTemplate]]:
     """Pure function to parse configuration templates into PromptTemplate objects."""
-    templates = {}
+    templates: dict[CategoryType, dict[PromptType, PromptTemplate]] = {}
 
     for category_name, category_templates in config_data.items():
-        try:
-            category = CategoryType(category_name)
-        except ValueError:
-            # Skip unknown categories
-            continue
+        # Handle both string keys (from TOML) and enum keys (from dataclass)
+        if isinstance(category_name, CategoryType):
+            category = category_name
+        else:
+            try:
+                category = CategoryType(category_name)
+            except ValueError:
+                # Skip unknown categories
+                continue
 
         if category not in templates:
             templates[category] = {}
 
         for template_type, template_text in category_templates.items():
-            try:
-                prompt_type = PromptType(template_type)
+            # Handle both string keys (from TOML) and enum keys (from dataclass)
+            if isinstance(template_type, PromptType):
+                prompt_type = template_type
+            else:
+                try:
+                    prompt_type = PromptType(template_type)
+                except ValueError:
+                    # Skip unknown template types
+                    continue
 
-                template = PromptTemplate(
-                    template=template_text,
-                    category=category,
-                    prompt_type=prompt_type,
-                    language=language,
-                )
+            template = PromptTemplate(
+                template=template_text, category=category, prompt_type=prompt_type, language=language
+            )
 
-                templates[category][prompt_type] = template
-
-            except ValueError:
-                # Skip unknown prompt types
-                continue
+            templates[category][prompt_type] = template
 
     return templates
 
 
 def format_context_chunks(
-    chunks: list[str],
-    options: ContextFormattingOptions,
-    no_context_message: str = "No relevant context available.",
+    chunks: list[str], options: ContextFormattingOptions, no_context_message: str = "No relevant context available."
 ) -> tuple[str, bool]:
     """Pure function to format context chunks with length limitation."""
     if not chunks:
@@ -181,7 +182,7 @@ def format_context_chunks(
     for i, chunk in enumerate(chunks):
         # Add chunk numbering for clarity
         if options.include_attribution:
-            chunk_header = f"\n[{options.source_label} {i+1}]:\n"
+            chunk_header = f"\n[{options.source_label} {i + 1}]:\n"
             formatted_chunk = f"{chunk_header}{chunk.strip()}"
         else:
             formatted_chunk = chunk.strip()
@@ -189,15 +190,9 @@ def format_context_chunks(
         # Check if adding this chunk would exceed the limit
         if current_length + len(formatted_chunk) > options.max_length:
             # Truncate the last chunk to fit within the limit
-            remaining_space = (
-                options.max_length - current_length - 50
-            )  # Leave some buffer
-            if (
-                remaining_space > options.min_chunk_size
-            ):  # Only add if there's meaningful space
-                truncated_chunk = formatted_chunk[:remaining_space].rsplit(" ", 1)[
-                    0
-                ]  # Break at word boundary
+            remaining_space = options.max_length - current_length - 50  # Leave some buffer
+            if remaining_space > options.min_chunk_size:  # Only add if there's meaningful space
+                truncated_chunk = formatted_chunk[:remaining_space].rsplit(" ", 1)[0]  # Break at word boundary
                 formatted_chunks.append(truncated_chunk + options.truncation_indicator)
             truncated = True
             break
@@ -233,9 +228,7 @@ def build_category_prompt(
 
     # Build context from chunks
     formatted_context, truncated = format_context_chunks(
-        chunks=context_chunks,
-        options=formatting_options,
-        no_context_message=no_context_message,
+        chunks=context_chunks, options=formatting_options, no_context_message=no_context_message
     )
 
     # Get user prompt template
@@ -249,9 +242,7 @@ def build_category_prompt(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         context_used=formatted_context,
-        chunks_included=(
-            len(context_chunks) if not truncated else len(context_chunks) - 1
-        ),
+        chunks_included=(len(context_chunks) if not truncated else len(context_chunks) - 1),
         truncated=truncated,
     )
 
@@ -278,9 +269,7 @@ def build_followup_prompt(
     followup_template = category_templates[PromptType.FOLLOWUP]
 
     return followup_template.format(
-        original_query=original_query,
-        original_answer=original_answer,
-        followup_query=followup_query,
+        original_query=original_query, original_answer=original_answer, followup_query=followup_query
     )
 
 
@@ -295,21 +284,14 @@ def calculate_template_stats(
             "template_count": len(template_dict),
             "template_types": [t.value for t in template_dict.keys()],
             "avg_template_length": (
-                sum(len(t.template) for t in template_dict.values())
-                / len(template_dict)
-                if template_dict
-                else 0
+                sum(len(t.template) for t in template_dict.values()) / len(template_dict) if template_dict else 0
             ),
         }
 
-    return TemplateStats(
-        total_categories=len(templates), language=language, categories=categories
-    )
+    return TemplateStats(total_categories=len(templates), language=language, categories=categories)
 
 
-def validate_templates(
-    templates: dict[CategoryType, dict[PromptType, PromptTemplate]],
-) -> ValidationResult:
+def validate_templates(templates: dict[CategoryType, dict[PromptType, PromptTemplate]]) -> ValidationResult:
     """Pure function to validate all templates for common issues."""
     issues = []
     warnings = []
@@ -321,44 +303,28 @@ def validate_templates(
             # Check for required placeholders
             if prompt_type == PromptType.USER:
                 if "{query}" not in template_text:
-                    issues.append(
-                        f"{category.value}/{prompt_type.value}: Missing {{query}} placeholder"
-                    )
+                    issues.append(f"{category.value}/{prompt_type.value}: Missing {{query}} placeholder")
 
                 if "{context}" not in template_text:
-                    issues.append(
-                        f"{category.value}/{prompt_type.value}: Missing {{context}} placeholder"
-                    )
+                    issues.append(f"{category.value}/{prompt_type.value}: Missing {{context}} placeholder")
 
             if prompt_type == PromptType.FOLLOWUP:
-                required_placeholders = [
-                    "{original_query}",
-                    "{original_answer}",
-                    "{followup_query}",
-                ]
+                required_placeholders = ["{original_query}", "{original_answer}", "{followup_query}"]
                 for placeholder in required_placeholders:
                     if placeholder not in template_text:
-                        issues.append(
-                            f"{category.value}/{prompt_type.value}: Missing {placeholder} placeholder"
-                        )
+                        issues.append(f"{category.value}/{prompt_type.value}: Missing {placeholder} placeholder")
 
             # Check template length
             if len(template_text) < 20:
-                warnings.append(
-                    f"{category.value}/{prompt_type.value}: Very short template (might be insufficient)"
-                )
+                warnings.append(f"{category.value}/{prompt_type.value}: Very short template (might be insufficient)")
             elif len(template_text) > 500:
-                warnings.append(
-                    f"{category.value}/{prompt_type.value}: Very long template (might be verbose)"
-                )
+                warnings.append(f"{category.value}/{prompt_type.value}: Very long template (might be verbose)")
 
     return ValidationResult(valid=len(issues) == 0, issues=issues, warnings=warnings)
 
 
 def suggest_template_improvements(
-    templates: dict[CategoryType, dict[PromptType, PromptTemplate]],
-    category: CategoryType,
-    usage_stats: dict[str, Any],
+    templates: dict[CategoryType, dict[PromptType, PromptTemplate]], category: CategoryType, usage_stats: dict[str, Any]
 ) -> list[str]:
     """Pure function to suggest improvements for prompt templates based on usage statistics."""
     suggestions = []
@@ -380,18 +346,10 @@ def suggest_template_improvements(
         suggestions.append(f"Add missing template types: {', '.join(missing_types)}")
 
     # Performance-based suggestions
-    if (
-        "avg_confidence" in usage_stats and usage_stats["avg_confidence"] < 0.7
-    ) or "avg_confidence" not in usage_stats:
-        suggestions.append(
-            "Consider more specific system prompts to improve response quality"
-        )
+    if ("avg_confidence" in usage_stats and usage_stats["avg_confidence"] < 0.7) or "avg_confidence" not in usage_stats:
+        suggestions.append("Consider more specific system prompts to improve response quality")
 
-    avg_length = (
-        usage_stats["avg_response_length"]
-        if "avg_response_length" in usage_stats
-        else 200
-    )
+    avg_length = usage_stats["avg_response_length"] if "avg_response_length" in usage_stats else 200
     if avg_length < 100:
         suggestions.append("Templates might be generating too brief responses")
     elif avg_length > 500:
@@ -406,7 +364,7 @@ def get_missing_templates(
     required_types: list[PromptType],
 ) -> dict[str, list[str]]:
     """Pure function to identify missing templates for given categories and types."""
-    missing = {"categories": [], "templates": []}
+    missing: dict[str, list[str]] = {"categories": [], "templates": []}
 
     for category in required_categories:
         if category not in templates:
@@ -422,8 +380,7 @@ def get_missing_templates(
 
 
 def find_template_by_content(
-    templates: dict[CategoryType, dict[PromptType, PromptTemplate]],
-    search_text: str,
+    templates: dict[CategoryType, dict[PromptType, PromptTemplate]], search_text: str
 ) -> list[tuple[CategoryType, PromptType]]:
     """Pure function to find templates containing specific text."""
     matches = []
@@ -444,12 +401,7 @@ def find_template_by_content(
 class _EnhancedPromptBuilder:
     """Enhanced prompt builder with configurable templates and context awareness."""
 
-    def __init__(
-        self,
-        language: str,
-        config_provider: ConfigProvider,
-        logger_provider: LoggerProvider | None = None,
-    ):
+    def __init__(self, language: str, config_provider: ConfigProvider, logger_provider: LoggerProvider | None = None):
         """Initialize with injected dependencies."""
         self.language = language
         self._config_provider = config_provider
@@ -457,13 +409,9 @@ class _EnhancedPromptBuilder:
 
         # Load configuration
         self._prompt_config = self._config_provider.get_prompt_config(language)
-        self._templates = parse_config_templates(
-            self._prompt_config.category_templates, language
-        )
+        self._templates = parse_config_templates(self._prompt_config.category_templates, language)
 
-        self._log_info(
-            f"Loaded {len(self._templates)} template categories for {language}"
-        )
+        self._log_info(f"Loaded {len(self._templates)} template categories for {language}")
 
     def _log_info(self, message: str) -> None:
         """Log info message if logger available."""
@@ -510,7 +458,7 @@ class _EnhancedPromptBuilder:
                     else "..."
                 ),
                 min_chunk_size=(
-                    self._prompt_config.formatting["min_chunk_size"]
+                    int(self._prompt_config.formatting["min_chunk_size"])
                     if "min_chunk_size" in self._prompt_config.formatting
                     else 100
                 ),
@@ -563,56 +511,38 @@ class _EnhancedPromptBuilder:
             self._log_error(f"Followup template not found: {e}")
             raise
 
-    def suggest_template_improvements(
-        self, category: CategoryType, usage_stats: dict[str, Any]
-    ) -> list[str]:
+    def suggest_template_improvements(self, category: CategoryType, usage_stats: dict[str, Any]) -> list[str]:
         """Suggest improvements for prompt templates based on usage statistics."""
         suggestions = suggest_template_improvements(
             templates=self._templates, category=category, usage_stats=usage_stats
         )
 
         if suggestions:
-            self._log_info(
-                f"Generated {len(suggestions)} improvement suggestions for {category.value}"
-            )
+            self._log_info(f"Generated {len(suggestions)} improvement suggestions for {category.value}")
 
         return suggestions
 
     def get_template_stats(self) -> dict[str, Any]:
         """Get statistics about loaded templates."""
         stats = calculate_template_stats(self._templates, self.language)
-        return {
-            "total_categories": stats.total_categories,
-            "language": stats.language,
-            "categories": stats.categories,
-        }
+        return {"total_categories": stats.total_categories, "language": stats.language, "categories": stats.categories}
 
     def validate_templates(self) -> dict[str, Any]:
         """Validate all loaded templates for common issues."""
         result = validate_templates(self._templates)
 
-        validation_dict = {
-            "valid": result.valid,
-            "issues": result.issues,
-            "warnings": result.warnings,
-        }
+        validation_dict = {"valid": result.valid, "issues": result.issues, "warnings": result.warnings}
 
         if not result.valid:
-            self._log_warning(
-                f"Template validation failed with {len(result.issues)} issues"
-            )
+            self._log_warning(f"Template validation failed with {len(result.issues)} issues")
 
         if result.warnings:
-            self._log_debug(
-                f"Template validation found {len(result.warnings)} warnings"
-            )
+            self._log_debug(f"Template validation found {len(result.warnings)} warnings")
 
         return validation_dict
 
     def get_missing_templates(
-        self,
-        required_categories: list[CategoryType] = None,
-        required_types: list[PromptType] = None,
+        self, required_categories: list[CategoryType] | None = None, required_types: list[PromptType] | None = None
     ) -> dict[str, list[str]]:
         """Get missing templates for specified categories and types."""
         if required_categories is None:
@@ -621,16 +551,12 @@ class _EnhancedPromptBuilder:
         if required_types is None:
             required_types = [PromptType.SYSTEM, PromptType.USER]
 
-        return get_missing_templates(
-            self._templates, required_categories, required_types
-        )
+        return get_missing_templates(self._templates, required_categories, required_types)
 
     def find_templates_by_content(self, search_text: str) -> list[tuple[str, str]]:
         """Find templates containing specific text."""
         matches = find_template_by_content(self._templates, search_text)
-        return [
-            (category.value, prompt_type.value) for category, prompt_type in matches
-        ]
+        return [(category.value, prompt_type.value) for category, prompt_type in matches]
 
 
 # ================================
@@ -639,16 +565,10 @@ class _EnhancedPromptBuilder:
 
 
 def create_enhanced_prompt_builder(
-    language: str,
-    config_provider: ConfigProvider,
-    logger_provider: LoggerProvider | None = None,
+    language: str, config_provider: ConfigProvider, logger_provider: LoggerProvider | None = None
 ) -> _EnhancedPromptBuilder:
     """Factory function to create configured enhanced prompt builder."""
-    return _EnhancedPromptBuilder(
-        language=language,
-        config_provider=config_provider,
-        logger_provider=logger_provider,
-    )
+    return _EnhancedPromptBuilder(language=language, config_provider=config_provider, logger_provider=logger_provider)
 
 
 # ================================
@@ -657,9 +577,7 @@ def create_enhanced_prompt_builder(
 
 
 def EnhancedPromptBuilder(
-    language: str,
-    config_provider: ConfigProvider | None = None,
-    logger_provider: LoggerProvider | None = None,
+    language: str, config_provider: ConfigProvider | None = None, logger_provider: LoggerProvider | None = None
 ):
     """
     Create an enhanced prompt builder with dependency injection.
@@ -677,8 +595,8 @@ def EnhancedPromptBuilder(
 
         config_provider, logger_provider = create_production_setup()
 
-    return _EnhancedPromptBuilder(
-        language=language,
-        config_provider=config_provider,
-        logger_provider=logger_provider,
-    )
+    # Ensure providers are not None after potential defaults
+    assert config_provider is not None, "ConfigProvider must not be None"
+    assert logger_provider is not None, "LoggerProvider must not be None"
+
+    return _EnhancedPromptBuilder(language=language, config_provider=config_provider, logger_provider=logger_provider)

@@ -52,7 +52,7 @@ async def test_real_document_processing():
 
         # Show first few chunks
         for i, chunk in enumerate(chunks[:3]):
-            print(f"📦 Chunk {i+1}: {len(chunk.content)} chars")
+            print(f"📦 Chunk {i + 1}: {len(chunk.content)} chars")
             print(f"   Preview: {chunk.content[:100]}...")
 
         print("\n🎉 SUCCESS! Real document processed with actual components")

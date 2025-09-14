@@ -26,24 +26,12 @@ logger = logging.getLogger(__name__)
 
 # Test SurrealDB connection
 try:
-    import asyncio
-
     from src.models.multitenant_models import (
         DEFAULT_DEVELOPMENT_CONTEXT,
         DEFAULT_DEVELOPMENT_TENANT,
-        DEFAULT_DEVELOPMENT_USER,
-        Chunk,
         Document,
         DocumentScope,
-        DocumentStatus,
-        FileType,
         Language,
-        SearchQuery,
-        Tenant,
-        TenantStatus,
-        User,
-        UserRole,
-        UserStatus,
     )
     from surrealdb import Surreal
 
@@ -64,7 +52,7 @@ async def test_database_connection():
             await db.use("test", "multitenant")
 
             # Test basic query
-            result = await db.query("SELECT * FROM tenant")
+            await db.query("SELECT * FROM tenant")
             logger.info("✅ SurrealDB connection successful")
             return True
 
@@ -501,7 +489,7 @@ async def generate_schema_report():
             await db.use("test", "multitenant")
 
         # Get table information
-        tables = await db.query("SELECT * FROM information_schema.tables")
+        await db.query("SELECT * FROM information_schema.tables")
 
         report = {
             "timestamp": datetime.now().isoformat(),

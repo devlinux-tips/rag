@@ -3,11 +3,9 @@ Multi-tenant folder management utilities with dependency injection.
 Testable version with pure functions and dependency injection architecture.
 """
 
-import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Protocol
 
 from ..models.multitenant_models import DocumentScope, Tenant, TenantUserContext, User
 
@@ -150,16 +148,10 @@ def render_path_template(template: str, **kwargs) -> str:
 
 
 def build_template_params(
-    tenant: Tenant,
-    user: User | None = None,
-    language: str | None = None,
-    config: FolderConfig = None,
+    tenant: Tenant, user: User | None = None, language: str | None = None, config: FolderConfig | None = None
 ) -> dict[str, str]:
     """Pure function to build template parameters for path rendering."""
-    params = {
-        "tenant_slug": tenant.slug,
-        "language": language or "default",
-    }
+    params = {"tenant_slug": tenant.slug, "language": language or "default"}
 
     if user:
         params["user_id"] = user.username
@@ -200,14 +192,10 @@ def calculate_folder_structure(
 
     # Language-specific tenant folders
     if language:
-        tenant_shared_str = render_path_template(
-            config.tenant_shared_template, **params
-        )
+        tenant_shared_str = render_path_template(config.tenant_shared_template, **params)
         paths.tenant_shared_documents_lang = Path(tenant_shared_str)
 
-        tenant_processed_str = render_path_template(
-            config.tenant_processed_template, **params
-        )
+        tenant_processed_str = render_path_template(config.tenant_processed_template, **params)
         paths.tenant_shared_processed_lang = Path(tenant_processed_str)
 
     # User-specific folders
@@ -220,14 +208,10 @@ def calculate_folder_structure(
 
         # Language-specific user folders
         if language:
-            user_documents_str = render_path_template(
-                config.user_documents_template, **params
-            )
+            user_documents_str = render_path_template(config.user_documents_template, **params)
             paths.user_documents_lang = Path(user_documents_str)
 
-            user_processed_str = render_path_template(
-                config.user_processed_template, **params
-            )
+            user_processed_str = render_path_template(config.user_processed_template, **params)
             paths.user_processed_lang = Path(user_processed_str)
 
     # Model folders
@@ -247,32 +231,30 @@ def calculate_folder_structure(
 
 
 def calculate_document_path(
-    context: TenantUserContext,
-    language: str,
-    scope: DocumentScope,
-    config: FolderConfig,
+    context: TenantUserContext, language: str, scope: DocumentScope, config: FolderConfig
 ) -> Path:
     """Pure function to calculate document storage path."""
     paths = calculate_folder_structure(context.tenant, context.user, language, config)
 
     if scope == DocumentScope.USER:
+        assert paths.user_documents_lang is not None, "User documents path not configured"
         return paths.user_documents_lang
     else:  # DocumentScope.TENANT
+        assert paths.tenant_shared_documents_lang is not None, "Tenant documents path not configured"
         return paths.tenant_shared_documents_lang
 
 
 def calculate_processed_path(
-    context: TenantUserContext,
-    language: str,
-    scope: DocumentScope,
-    config: FolderConfig,
+    context: TenantUserContext, language: str, scope: DocumentScope, config: FolderConfig
 ) -> Path:
     """Pure function to calculate processed data storage path."""
     paths = calculate_folder_structure(context.tenant, context.user, language, config)
 
     if scope == DocumentScope.USER:
+        assert paths.user_processed_lang is not None, "User processed path not configured"
         return paths.user_processed_lang
     else:  # DocumentScope.TENANT
+        assert paths.tenant_shared_processed_lang is not None, "Tenant processed path not configured"
         return paths.tenant_shared_processed_lang
 
 
@@ -283,18 +265,14 @@ def calculate_chromadb_path(tenant: Tenant, config: FolderConfig) -> Path:
     return Path(chromadb_str)
 
 
-def calculate_models_path(
-    tenant: Tenant, language: str, model_type: str, config: FolderConfig
-) -> Path:
+def calculate_models_path(tenant: Tenant, language: str, model_type: str, config: FolderConfig) -> Path:
     """Pure function to calculate model storage path."""
     params = build_template_params(tenant, language=language, config=config)
     models_str = render_path_template(config.models_path_template, **params)
     return Path(models_str) / model_type
 
 
-def calculate_collection_paths(
-    context: TenantUserContext, language: str, config: FolderConfig
-) -> CollectionPaths:
+def calculate_collection_paths(context: TenantUserContext, language: str, config: FolderConfig) -> CollectionPaths:
     """Pure function to calculate ChromaDB collection paths and names."""
     chromadb_base = calculate_chromadb_path(context.tenant, config)
     params = build_template_params(context.tenant, config=config)
@@ -303,12 +281,8 @@ def calculate_collection_paths(
     user_params = {**params, "scope": "user", "language": language}
     tenant_params = {**params, "scope": "tenant", "language": language}
 
-    user_collection = render_path_template(
-        config.collection_name_template, **user_params
-    )
-    tenant_collection = render_path_template(
-        config.collection_name_template, **tenant_params
-    )
+    user_collection = render_path_template(config.collection_name_template, **user_params)
+    tenant_collection = render_path_template(config.collection_name_template, **tenant_params)
 
     return CollectionPaths(
         user_collection_name=user_collection,
@@ -344,9 +318,7 @@ def calculate_tenant_cleanup_paths(tenant: Tenant, config: FolderConfig) -> list
     return [tenant_root, models_root]
 
 
-def calculate_usage_stats_paths(
-    tenant: Tenant, config: FolderConfig
-) -> dict[str, Path]:
+def calculate_usage_stats_paths(tenant: Tenant, config: FolderConfig) -> dict[str, Path]:
     """Pure function to calculate paths for usage statistics."""
     params = build_template_params(tenant, config=config)
     tenant_root_str = render_path_template(config.tenant_root_template, **params)
@@ -380,7 +352,7 @@ class _TenantFolderManager:
         self._config_provider = config_provider
         self._filesystem_provider = filesystem_provider
         self._logger = logger_provider
-        self._config = None
+        self._config: FolderConfig | None = None
 
     def _get_config(self) -> FolderConfig:
         """Get configuration with caching."""
@@ -409,20 +381,14 @@ class _TenantFolderManager:
             self._logger.error(message)
 
     def get_tenant_folder_structure(
-        self,
-        tenant: Tenant,
-        user: User | None = None,
-        language: str | None = None,
+        self, tenant: Tenant, user: User | None = None, language: str | None = None
     ) -> FolderPaths:
         """Get complete folder structure for tenant/user/language combination."""
         config = self._get_config()
         return calculate_folder_structure(tenant, user, language, config)
 
     def create_tenant_folder_structure(
-        self,
-        tenant: Tenant,
-        user: User | None = None,
-        languages: list[str] | None = None,
+        self, tenant: Tenant, user: User | None = None, languages: list[str] | None = None
     ) -> tuple[bool, list[str]]:
         """Create complete folder structure for tenant/user/languages."""
         created_folders = []
@@ -454,9 +420,7 @@ class _TenantFolderManager:
                 if self._filesystem_provider.create_folder(system_path):
                     created_folders.append(str(system_path))
 
-            self._log_info(
-                f"Successfully created {len(created_folders)} folders for tenant structure"
-            )
+            self._log_info(f"Successfully created {len(created_folders)} folders for tenant structure")
             return True, created_folders
 
         except Exception as e:
@@ -464,11 +428,7 @@ class _TenantFolderManager:
             raise
 
     def get_tenant_document_path(
-        self,
-        context: TenantUserContext,
-        language: str,
-        scope: DocumentScope,
-        create_if_missing: bool = True,
+        self, context: TenantUserContext, language: str, scope: DocumentScope, create_if_missing: bool = True
     ) -> Path:
         """Get document storage path for specific tenant/user/language/scope."""
         config = self._get_config()
@@ -480,11 +440,7 @@ class _TenantFolderManager:
         return doc_path
 
     def get_tenant_processed_path(
-        self,
-        context: TenantUserContext,
-        language: str,
-        scope: DocumentScope,
-        create_if_missing: bool = True,
+        self, context: TenantUserContext, language: str, scope: DocumentScope, create_if_missing: bool = True
     ) -> Path:
         """Get processed data storage path for specific tenant/user/language/scope."""
         config = self._get_config()
@@ -495,9 +451,7 @@ class _TenantFolderManager:
 
         return processed_path
 
-    def get_tenant_chromadb_path(
-        self, tenant: Tenant, create_if_missing: bool = True
-    ) -> Path:
+    def get_tenant_chromadb_path(self, tenant: Tenant, create_if_missing: bool = True) -> Path:
         """Get ChromaDB storage path for tenant."""
         config = self._get_config()
         chromadb_path = calculate_chromadb_path(tenant, config)
@@ -508,11 +462,7 @@ class _TenantFolderManager:
         return chromadb_path
 
     def get_tenant_models_path(
-        self,
-        tenant: Tenant,
-        language: str,
-        model_type: str = "embeddings",
-        create_if_missing: bool = True,
+        self, tenant: Tenant, language: str, model_type: str = "embeddings", create_if_missing: bool = True
     ) -> Path:
         """Get model storage path for tenant/language."""
         config = self._get_config()
@@ -523,9 +473,7 @@ class _TenantFolderManager:
 
         return models_path
 
-    def get_collection_storage_paths(
-        self, context: TenantUserContext, language: str
-    ) -> CollectionPaths:
+    def get_collection_storage_paths(self, context: TenantUserContext, language: str) -> CollectionPaths:
         """Get all ChromaDB collection storage paths for a tenant/user/language."""
         config = self._get_config()
         return calculate_collection_paths(context, language, config)
@@ -534,14 +482,10 @@ class _TenantFolderManager:
         """Ensure all necessary folders exist for a tenant/user/language context."""
         try:
             # Create tenant and user folder structure
-            success, folders = self.create_tenant_folder_structure(
-                context.tenant, context.user, [language]
-            )
+            success, folders = self.create_tenant_folder_structure(context.tenant, context.user, [language])
 
             if success:
-                self._log_info(
-                    f"Ensured folder structure for {context.tenant.slug}/{context.user.username}/{language}"
-                )
+                self._log_info(f"Ensured folder structure for {context.tenant.slug}/{context.user.username}/{language}")
                 return True
             else:
                 self._log_error("Failed to ensure folder structure for context")
@@ -554,9 +498,7 @@ class _TenantFolderManager:
     def cleanup_tenant_folders(self, tenant: Tenant, confirm: bool = False) -> bool:
         """Clean up all folders for a tenant. USE WITH CAUTION."""
         if not confirm:
-            self._log_warning(
-                "Cleanup requires explicit confirmation. Set confirm=True"
-            )
+            self._log_warning("Cleanup requires explicit confirmation. Set confirm=True")
             return False
 
         try:
@@ -584,10 +526,7 @@ class _TenantFolderManager:
             stats_paths = calculate_usage_stats_paths(tenant, config)
 
             stats = TenantStats(
-                documents=FolderStats(),
-                processed=FolderStats(),
-                models=FolderStats(),
-                chromadb=FolderStats(),
+                documents=FolderStats(), processed=FolderStats(), models=FolderStats(), chromadb=FolderStats()
             )
 
             # Get stats for each path type
@@ -615,9 +554,7 @@ def create_tenant_folder_manager(
 ) -> _TenantFolderManager:
     """Factory function to create configured TenantFolderManager."""
     return _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, filesystem_provider=filesystem_provider, logger_provider=logger_provider
     )
 
 
@@ -647,14 +584,12 @@ def TenantFolderManager(
     if not config_provider or not filesystem_provider:
         from .folder_manager_providers import create_production_setup
 
-        (
-            config_provider,
-            filesystem_provider,
-            logger_provider,
-        ) = create_production_setup()
+        (config_provider, filesystem_provider, logger_provider) = create_production_setup()
+
+    # Ensure providers are not None after potential defaults
+    assert config_provider is not None, "ConfigProvider must not be None"
+    assert filesystem_provider is not None, "FileSystemProvider must not be None"
 
     return _TenantFolderManager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, filesystem_provider=filesystem_provider, logger_provider=logger_provider
     )

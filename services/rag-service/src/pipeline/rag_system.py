@@ -4,24 +4,17 @@ Coordinates preprocessing, vector storage, semantic search, and LLM generation
 for multilingual document question-answering workflows.
 """
 
-import asyncio
-import json
 import logging
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
+from typing import Any, Protocol
+
+from ..utils.config_models import EmbeddingConfig, OllamaConfig, ProcessingConfig, RetrievalConfig
+from ..utils.config_validator import ConfigurationError
 
 # Module logger
 logger = logging.getLogger(__name__)
-
-from ..utils.config_models import (
-    EmbeddingConfig,
-    OllamaConfig,
-    ProcessingConfig,
-    RetrievalConfig,
-)
-from ..utils.config_validator import ConfigurationError
 
 
 # Pure data structures
@@ -97,60 +90,48 @@ class DocumentProcessingResult:
     total_chunks: int
     processing_time: float
     documents_per_second: float
-    errors: list[str] = None
+    errors: list[str] | None = None
 
 
 # Protocol definitions for dependency injection
 class DocumentExtractorProtocol(Protocol):
     """Protocol for document text extraction."""
 
-    def extract_text(self, file_path: Path) -> str:
-        ...
+    def extract_text(self, file_path: Path) -> str: ...
 
 
 class TextCleanerProtocol(Protocol):
     """Protocol for multilingual text cleaning."""
 
-    def clean_text(self, text: str) -> str:
-        ...
+    def clean_text(self, text: str) -> str: ...
 
-    def setup_language_environment(self) -> None:
-        ...
+    def setup_language_environment(self) -> None: ...
 
 
 class DocumentChunkerProtocol(Protocol):
     """Protocol for document chunking."""
 
-    def chunk_document(self, content: str, source_file: str) -> list[Any]:
-        ...
+    def chunk_document(self, content: str, source_file: str) -> list[Any]: ...
 
 
 class EmbeddingModelProtocol(Protocol):
     """Protocol for text embedding generation."""
 
-    def encode_text(self, text: str) -> Any:
-        ...
+    def encode_text(self, text: str) -> Any: ...
 
-    def load_model(self) -> None:
-        ...
+    def load_model(self) -> None: ...
 
 
 class VectorStorageProtocol(Protocol):
     """Protocol for vector storage operations."""
 
-    def add_documents(
-        self, documents: list[str], metadatas: list[dict], embeddings: list
-    ) -> None:
-        ...
+    def add_documents(self, documents: list[str], metadatas: list[dict], embeddings: list) -> None: ...
 
-    def create_collection(self) -> None:
-        ...
+    def create_collection(self) -> None: ...
 
-    def get_document_count(self) -> int:
-        ...
+    def get_document_count(self) -> int: ...
 
-    async def close(self) -> None:
-        ...
+    async def close(self) -> None: ...
 
 
 class SearchEngineProtocol(Protocol):
@@ -168,10 +149,7 @@ class QueryProcessorProtocol(Protocol):
 class RetrieverProtocol(Protocol):
     """Protocol for document retrieval."""
 
-    async def retrieve(
-        self, query: str, max_results: int = 5, context: dict | None = None
-    ) -> Any:
-        ...
+    async def retrieve(self, query: str, max_results: int = 5, context: dict | None = None) -> Any: ...
 
 
 class RankerProtocol(Protocol):
@@ -183,33 +161,25 @@ class RankerProtocol(Protocol):
 class GenerationClientProtocol(Protocol):
     """Protocol for LLM generation."""
 
-    async def generate_text_async(self, request: Any) -> Any:
-        ...
+    async def generate_text_async(self, request: Any) -> Any: ...
 
-    def health_check(self) -> bool:
-        ...
+    def health_check(self) -> bool: ...
 
-    def get_available_models(self) -> list[str]:
-        ...
+    def get_available_models(self) -> list[str]: ...
 
-    async def close(self) -> None:
-        ...
+    async def close(self) -> None: ...
 
 
 class ResponseParserProtocol(Protocol):
     """Protocol for response parsing."""
 
-    def parse_response(self, text: str, query: str, context: list[str]) -> Any:
-        ...
+    def parse_response(self, text: str, query: str, context: list[str]) -> Any: ...
 
 
 class PromptBuilderProtocol(Protocol):
     """Protocol for prompt building."""
 
-    def build_prompt(
-        self, query: str, context_chunks: list[str], **kwargs
-    ) -> tuple[str, str]:
-        ...
+    def build_prompt(self, query: str, context_chunks: list[str], **kwargs) -> tuple[str, str]: ...
 
 
 # Pure functions for business logic
@@ -222,9 +192,7 @@ def validate_language_code(language: str) -> str:
     valid_languages = {"hr", "en", "multilingual"}
 
     if language not in valid_languages:
-        raise ValueError(
-            f"Unsupported language: {language}. Supported: {valid_languages}"
-        )
+        raise ValueError(f"Unsupported language: {language}. Supported: {valid_languages}")
 
     return language
 
@@ -286,16 +254,10 @@ def validate_query(query: RAGQuery) -> RAGQuery:
     return query
 
 
-def calculate_processing_metrics(
-    processed_count: int, total_time: float, total_chunks: int
-) -> dict[str, float]:
+def calculate_processing_metrics(processed_count: int, total_time: float, total_chunks: int) -> dict[str, float]:
     """Calculate document processing metrics."""
     if total_time <= 0:
-        return {
-            "documents_per_second": 0.0,
-            "chunks_per_second": 0.0,
-            "average_chunks_per_document": 0.0,
-        }
+        return {"documents_per_second": 0.0, "chunks_per_second": 0.0, "average_chunks_per_document": 0.0}
 
     docs_per_sec = processed_count / total_time
     chunks_per_sec = total_chunks / total_time
@@ -309,11 +271,7 @@ def calculate_processing_metrics(
 
 
 def create_chunk_metadata(
-    doc_path: str,
-    chunk_idx: int,
-    chunk: Any,
-    language: str,
-    processing_timestamp: float,
+    doc_path: str, chunk_idx: int, chunk: Any, language: str, processing_timestamp: float
 ) -> dict[str, Any]:
     """Create metadata for a document chunk."""
     return {
@@ -339,9 +297,7 @@ def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[
         metadata = chunk["metadata"]
 
         if "source" not in metadata:
-            raise ValueError(
-                f"Chunk metadata missing required 'source' field: {metadata}"
-            )
+            raise ValueError(f"Chunk metadata missing required 'source' field: {metadata}")
         source = metadata["source"]
         if source and source != "Unknown":
             sources.add(source)
@@ -349,24 +305,14 @@ def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[
     return list(sources)
 
 
-def prepare_chunk_info(
-    chunk_result: dict[str, Any], return_debug_info: bool = False
-) -> dict[str, Any]:
+def prepare_chunk_info(chunk_result: dict[str, Any], return_debug_info: bool = False) -> dict[str, Any]:
     """Prepare chunk information for response."""
     chunk_info = {
         "content": chunk_result["content"],
         "similarity_score": chunk_result["similarity_score"],
         "final_score": chunk_result["final_score"],
-        "source": (
-            chunk_result["metadata"]["source"]
-            if "source" in chunk_result["metadata"]
-            else "Unknown"
-        ),
-        "chunk_index": (
-            chunk_result["metadata"]["chunk_index"]
-            if "chunk_index" in chunk_result["metadata"]
-            else 0
-        ),
+        "source": (chunk_result["metadata"]["source"] if "source" in chunk_result["metadata"] else "Unknown"),
+        "chunk_index": (chunk_result["metadata"]["chunk_index"] if "chunk_index" in chunk_result["metadata"] else 0),
     }
 
     if return_debug_info:
@@ -374,11 +320,7 @@ def prepare_chunk_info(
         chunk_info.update(
             {
                 "metadata": result_metadata,
-                "signals": (
-                    result_metadata["ranking_signals"]
-                    if "ranking_signals" in result_metadata
-                    else {}
-                ),
+                "signals": (result_metadata["ranking_signals"] if "ranking_signals" in result_metadata else {}),
             }
         )
 
@@ -394,32 +336,24 @@ def build_response_metadata(
     generation_time: float,
     total_time: float,
     return_debug_info: bool = False,
-    system_prompt: str = None,
-    user_prompt: str = None,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Build comprehensive response metadata."""
     metadata = {
         "query_id": query.query_id,
         "user_id": query.user_id,
         "categorization": {
-            "detected_category": getattr(
-                hierarchical_results.category, "value", "unknown"
-            ),
-            "strategy_used": getattr(
-                hierarchical_results.strategy_used, "value", "unknown"
-            ),
+            "detected_category": getattr(hierarchical_results.category, "value", "unknown"),
+            "strategy_used": getattr(hierarchical_results.strategy_used, "value", "unknown"),
             "confidence": getattr(hierarchical_results, "confidence", 0.0),
             "routing_metadata": getattr(hierarchical_results, "routing_metadata", {}),
         },
         "retrieval": {
             "total_results": len(hierarchical_results.documents),
-            "strategy_used": getattr(
-                hierarchical_results.strategy_used, "value", "unknown"
-            ),
+            "strategy_used": getattr(hierarchical_results.strategy_used, "value", "unknown"),
             "filters_applied": query.context_filters or {},
-            "retrieval_time": getattr(
-                hierarchical_results, "retrieval_time", retrieval_time
-            ),
+            "retrieval_time": getattr(hierarchical_results, "retrieval_time", retrieval_time),
         },
         "generation": {
             "model": getattr(generation_response, "model", "unknown"),
@@ -430,11 +364,7 @@ def build_response_metadata(
             "language_detected": getattr(parsed_response, "language", query.language),
             "sources_mentioned": getattr(parsed_response, "sources_mentioned", []),
         },
-        "performance": {
-            "retrieval_time": retrieval_time,
-            "generation_time": generation_time,
-            "total_time": total_time,
-        },
+        "performance": {"retrieval_time": retrieval_time, "generation_time": generation_time, "total_time": total_time},
     }
 
     if return_debug_info and system_prompt and user_prompt:
@@ -448,9 +378,7 @@ def build_response_metadata(
     return metadata
 
 
-def create_error_response(
-    query: RAGQuery, error: Exception, start_time: float
-) -> RAGResponse:
+def create_error_response(query: RAGQuery, error: Exception, start_time: float) -> RAGResponse:
     """Create error response in the appropriate language."""
     error_msg = (
         "I apologize, an error occurred while processing your question"
@@ -467,45 +395,31 @@ def create_error_response(
         retrieval_time=0.0,
         total_time=time.time() - start_time,
         sources=[],
-        metadata={
-            "error": str(error),
-            "query_id": query.query_id,
-            "user_id": query.user_id,
-        },
+        metadata={"error": str(error), "query_id": query.query_id, "user_id": query.user_id},
     )
 
 
-def evaluate_component_health(
-    component_name: str, components: list[Any], details: str = ""
-) -> ComponentHealth:
+def evaluate_component_health(component_name: str, components: list[Any], details: str = "") -> ComponentHealth:
     """Evaluate health of system components."""
     all_healthy = all(comp is not None for comp in components)
     status = "healthy" if all_healthy else "unhealthy"
 
     if not details:
         details = (
-            f"All {component_name} components loaded"
-            if all_healthy
-            else f"Some {component_name} components missing"
+            f"All {component_name} components loaded" if all_healthy else f"Some {component_name} components missing"
         )
 
     return ComponentHealth(status=status, details=details)
 
 
-def evaluate_ollama_health(
-    client: GenerationClientProtocol | None, model_name: str
-) -> ComponentHealth:
+def evaluate_ollama_health(client: GenerationClientProtocol | None, model_name: str) -> ComponentHealth:
     """Evaluate Ollama service health."""
     if not client:
-        return ComponentHealth(
-            status="unhealthy", details="Ollama client not initialized"
-        )
+        return ComponentHealth(status="unhealthy", details="Ollama client not initialized")
 
     ollama_healthy = client.health_check()
     if not ollama_healthy:
-        return ComponentHealth(
-            status="unhealthy", details="Ollama service not available"
-        )
+        return ComponentHealth(status="unhealthy", details="Ollama service not available")
 
     available_models = client.get_available_models()
     model_available = model_name in available_models
@@ -513,9 +427,7 @@ def evaluate_ollama_health(
     status = "healthy" if model_available else "degraded"
     details = f"Ollama: {'✅' if ollama_healthy else '❌'}, Model {model_name}: {'✅' if model_available else '❌'}"
 
-    return ComponentHealth(
-        status=status, details=details, metadata={"available_models": available_models}
-    )
+    return ComponentHealth(status=status, details=details, metadata={"available_models": available_models})
 
 
 def calculate_overall_health(component_healths: dict[str, ComponentHealth]) -> str:
@@ -551,11 +463,11 @@ class RAGSystem:
         generation_client: GenerationClientProtocol,
         response_parser: ResponseParserProtocol,
         prompt_builder: PromptBuilderProtocol,
-        # Configuration - validated config objects instead of raw dict
-        embedding_config: EmbeddingConfig | None = None,
-        ollama_config: OllamaConfig | None = None,
-        processing_config: ProcessingConfig | None = None,
-        retrieval_config: RetrievalConfig | None = None,
+        # Configuration - validated config objects (guaranteed by ConfigValidator)
+        embedding_config: EmbeddingConfig,
+        ollama_config: OllamaConfig,
+        processing_config: ProcessingConfig,
+        retrieval_config: RetrievalConfig,
     ):
         """Initialize with all dependencies injected."""
         self.language = validate_language_code(language)
@@ -616,25 +528,17 @@ class RAGSystem:
             language_config = get_language_config(self.language)
 
             # Try ConfigValidator - log result but don't break system
-            ConfigValidator.validate_startup_config(
-                main_config, {self.language: language_config}
-            )
-            logger.info(
-                "✅ ConfigValidator: All configuration keys validated successfully"
-            )
+            ConfigValidator.validate_startup_config(main_config, {self.language: language_config})
+            logger.info("✅ ConfigValidator: All configuration keys validated successfully")
         except ConfigurationError as e:
             # Log warning but continue - development system
-            logger.warning(
-                f"⚠️  ConfigValidator found missing keys (development mode): {e}"
-            )
+            logger.warning(f"⚠️  ConfigValidator found missing keys (development mode): {e}")
             logger.info("🔧 System will continue with current configuration")
         except Exception as e:
             # Any other error - log but don't break startup
             logger.warning(f"Configuration validation failed: {e}")
 
-    async def add_documents(
-        self, document_paths: list[str], batch_size: int = 10
-    ) -> DocumentProcessingResult:
+    async def add_documents(self, document_paths: list[str], batch_size: int = 10) -> DocumentProcessingResult:
         """Add documents to the RAG system using pure functions."""
         if not self._initialized:
             await self.initialize()
@@ -683,19 +587,13 @@ class RAGSystem:
                             embedding = embedding[0]
 
                         # Create metadata using pure function
-                        metadata = create_chunk_metadata(
-                            str(doc_path), chunk_idx, chunk, self.language, time.time()
-                        )
+                        metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
 
                         # Store in vector database
                         self._vector_storage.add_documents(
                             documents=[chunk.content],
                             metadatas=[metadata],
-                            embeddings=[
-                                embedding.tolist()
-                                if hasattr(embedding, "tolist")
-                                else embedding
-                            ],
+                            embeddings=[embedding.tolist() if hasattr(embedding, "tolist") else embedding],
                         )
 
                     processed_docs += 1
@@ -710,9 +608,7 @@ class RAGSystem:
         self._document_count += processed_docs
 
         # Calculate metrics using pure function
-        metrics = calculate_processing_metrics(
-            processed_docs, processing_time, total_chunks
-        )
+        metrics = calculate_processing_metrics(processed_docs, processing_time, total_chunks)
 
         return DocumentProcessingResult(
             processed_documents=processed_docs,
@@ -723,12 +619,7 @@ class RAGSystem:
             errors=errors if errors else None,
         )
 
-    async def query(
-        self,
-        query: RAGQuery,
-        return_sources: bool = True,
-        return_debug_info: bool = False,
-    ) -> RAGResponse:
+    async def query(self, query: RAGQuery, return_sources: bool = True, return_debug_info: bool = False) -> RAGResponse:
         """Execute complete RAG query pipeline using pure functions."""
         if not self._initialized:
             await self.initialize()
@@ -743,7 +634,7 @@ class RAGSystem:
             query_start = time.time()
             hierarchical_results = await self._hierarchical_retriever.retrieve(
                 query=validated_query.text,
-                max_results=validated_query.max_results,
+                max_results=validated_query.max_results or 10,
                 context=validated_query.context_filters,
             )
             retrieval_time = time.time() - query_start
@@ -752,9 +643,7 @@ class RAGSystem:
             generation_start = time.time()
 
             # Build prompts
-            context_chunks = [
-                result["content"] for result in hierarchical_results.documents
-            ]
+            context_chunks = [result["content"] for result in hierarchical_results.documents]
             system_prompt, user_prompt = self._prompt_builder.build_prompt(
                 query=validated_query.text,
                 context_chunks=context_chunks,
@@ -768,17 +657,13 @@ class RAGSystem:
                 "prompt": user_prompt,
                 "context": context_chunks,
                 "query": validated_query.text,
-                "query_type": getattr(
-                    hierarchical_results.category, "value", "general"
-                ),
+                "query_type": getattr(hierarchical_results.category, "value", "general"),
                 "language": validated_query.language,
                 "metadata": validated_query.metadata,
             }
 
             # Generate response
-            generation_response = await self._generation_client.generate_text_async(
-                generation_request
-            )
+            generation_response = await self._generation_client.generate_text_async(generation_request)
             generation_time = time.time() - generation_start
 
             # Step 3: Parse response
@@ -790,16 +675,11 @@ class RAGSystem:
             total_time = time.time() - start_time
 
             # Extract sources
-            sources = (
-                extract_sources_from_chunks(hierarchical_results.documents)
-                if return_sources
-                else []
-            )
+            sources = extract_sources_from_chunks(hierarchical_results.documents) if return_sources else []
 
             # Prepare chunk info
             retrieved_chunks = [
-                prepare_chunk_info(result, return_debug_info)
-                for result in hierarchical_results.documents
+                prepare_chunk_info(result, return_debug_info) for result in hierarchical_results.documents
             ]
 
             # Build metadata
@@ -839,8 +719,7 @@ class RAGSystem:
         try:
             # Check preprocessing components
             preprocessing_health = evaluate_component_health(
-                "preprocessing",
-                [self._document_extractor, self._text_cleaner, self._chunker],
+                "preprocessing", [self._document_extractor, self._text_cleaner, self._chunker]
             )
 
             # Check vector database components
@@ -853,21 +732,13 @@ class RAGSystem:
             # Check retrieval components
             retrieval_health = evaluate_component_health(
                 "retrieval",
-                [
-                    self._query_processor,
-                    self._retriever,
-                    self._ranker,
-                    self._hierarchical_retriever,
-                ],
+                [self._query_processor, self._retriever, self._ranker, self._hierarchical_retriever],
                 "All retrieval components loaded (including hierarchical routing)",
             )
 
             # Check generation components
             model_name = self.ollama_config.model if self.ollama_config else "unknown"
-            generation_health = evaluate_ollama_health(
-                self._generation_client,
-                model_name,
-            )
+            generation_health = evaluate_ollama_health(self._generation_client, model_name)
 
             components = {
                 "preprocessing": preprocessing_health,
@@ -886,30 +757,16 @@ class RAGSystem:
             }
 
             return SystemHealth(
-                system_status=overall_status,
-                components=components,
-                metrics=metrics,
-                timestamp=time.time(),
+                system_status=overall_status, components=components, metrics=metrics, timestamp=time.time()
             )
 
         except Exception as e:
-            return SystemHealth(
-                system_status="error",
-                components={},
-                metrics={},
-                timestamp=time.time(),
-                error=str(e),
-            )
+            return SystemHealth(system_status="error", components={}, metrics={}, timestamp=time.time(), error=str(e))
 
     async def get_system_stats(self) -> SystemStats:
         """Get comprehensive system statistics."""
         if not self._initialized:
-            return SystemStats(
-                system={"error": "System not initialized"},
-                collections={},
-                models={},
-                performance={},
-            )
+            return SystemStats(system={"error": "System not initialized"}, collections={}, models={}, performance={})
 
         return SystemStats(
             system={
@@ -924,31 +781,14 @@ class RAGSystem:
                 "collection_type": f"{self.language}_documents",
             },
             models={
-                "embedding_model": (
-                    self.embedding_config.model_name
-                    if self.embedding_config
-                    else "unknown"
-                ),
-                "llm_model": (
-                    self.ollama_config.model if self.ollama_config else "unknown"
-                ),
+                "embedding_model": self.embedding_config.model_name,
+                "llm_model": self.ollama_config.model,
                 "device": "auto",
             },
             performance={
-                "chunk_size": (
-                    self.processing_config.chunk_size
-                    if self.processing_config
-                    else 1000
-                ),
-                "max_retrieval": (
-                    self.retrieval_config.max_k if self.retrieval_config else 10
-                ),
-                "similarity_threshold": (
-                    self.retrieval_config.similarity_threshold
-                    if self.retrieval_config
-                    else 0.0
-                ),
-                "timeout": self.ollama_config.timeout if self.ollama_config else 60,
+                "max_retrieval": self.retrieval_config.max_k,
+                "similarity_threshold": self.retrieval_config.similarity_threshold,
+                "timeout": self.ollama_config.timeout,
             },
         )
 
@@ -977,10 +817,10 @@ def create_rag_system(
     generation_client: GenerationClientProtocol,
     response_parser: ResponseParserProtocol,
     prompt_builder: PromptBuilderProtocol,
-    embedding_config: EmbeddingConfig | None = None,
-    ollama_config: OllamaConfig | None = None,
-    processing_config: ProcessingConfig | None = None,
-    retrieval_config: RetrievalConfig | None = None,
+    embedding_config: EmbeddingConfig,
+    ollama_config: OllamaConfig,
+    processing_config: ProcessingConfig,
+    retrieval_config: RetrievalConfig,
 ) -> RAGSystem:
     """Factory function to create RAG system with validated config dependency injection."""
     return RAGSystem(

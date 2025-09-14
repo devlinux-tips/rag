@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """
-Script to format all Python files in the project using modern tooling.
-Uses ruff (fast linter/formatter) + black + mypy for comprehensive code quality.
-Run this to ensure consistent formatting across the codebase.
-Works from any directory by finding repository root and using root configurations.
+AI-Friendly Python Code Formatter
+
+Uses Ruff for both linting and formatting to preserve AI-friendly patterns.
+Configured to maintain readable one-liners and clean coding patterns.
+
+Workflow:
+1. Ruff check --fix: Import sorting, unused code removal, linting fixes
+2. Ruff format: Code formatting that preserves clean one-liners
+3. MyPy: Type checking focused on core system (excludes CLI)
+
+This tool MAKES CHANGES to your code.
+Pre-commit hooks only CHECK - they won't modify files during commit.
+
+Use this tool before committing to ensure code passes pre-commit checks.
 """
 
 import os
@@ -34,8 +44,9 @@ def run_command(cmd, description, allow_failure=False):
 
 
 def check_tool_availability():
-    """Check if required tools are available."""
-    tools = {"ruff": "ruff", "black": "black", "mypy": "mypy"}
+    """Check if required tools are available, prioritizing Ruff."""
+    # Prioritize Ruff as primary formatter
+    tools = {"ruff": "ruff", "mypy": "mypy", "black": "black"}
     available_tools = {}
 
     for name, command in tools.items():
@@ -44,6 +55,11 @@ def check_tool_availability():
             print(f"✅ {name} found: {command}")
         else:
             print(f"❌ {name} not found in PATH")
+
+    # Ruff is essential for AI-friendly formatting
+    if "ruff" not in available_tools:
+        print("⚠️  Ruff not found - this is the preferred AI-friendly formatter")
+        print("   Install with: pip install ruff")
 
     return available_tools
 
@@ -67,7 +83,7 @@ def get_python_targets(repo_root, current_path):
     """Determine which Python files/directories to format."""
     python_targets = []
 
-    # If we're in rag-service directory or subdirectory, format local files
+    # If we're in rag-service directory or subdirectory, format ONLY core src subdirectories
     if "rag-service" in str(current_path):
         # Find the rag-service directory relative to repo root
         rag_service_path = None
@@ -77,36 +93,46 @@ def get_python_targets(repo_root, current_path):
                 break
 
         if rag_service_path:
-            # Format rag-service specific paths
-            for target in ["src/", "tests/", "*.py"]:
-                target_path = rag_service_path / target
-                if target.endswith(".py"):
-                    # Check for individual Python files
-                    if (repo_root / target_path).exists():
-                        python_targets.append(str(target_path))
-                else:
-                    # Check for directories
-                    if (repo_root / target_path).exists():
-                        python_targets.append(str(target_path))
+            # WHITELIST: Only include core src subdirectories (exclude CLI and everything else)
+            core_dirs = [
+                "utils",
+                "generation",
+                "preprocessing",
+                "retrieval",
+                "models",
+                "pipeline",
+                "vectordb",
+            ]
 
-        # Also include Python files in rag-service root
-        rag_service_root = (
-            repo_root / rag_service_path.parts[0] / rag_service_path.parts[1]
-            if len(rag_service_path.parts) >= 2
-            else repo_root
-        )
-        for py_file in rag_service_root.glob("*.py"):
-            rel_path = py_file.relative_to(repo_root)
-            python_targets.append(str(rel_path))
+            src_path = rag_service_path / "src"
+            if (repo_root / src_path).exists():
+                src_full_path = repo_root / src_path
+                for core_dir in core_dirs:
+                    core_dir_path = src_full_path / core_dir
+                    if core_dir_path.exists() and core_dir_path.is_dir():
+                        rel_path = core_dir_path.relative_to(repo_root)
+                        python_targets.append(str(rel_path))
     else:
-        # If we're in repository root, format the entire services directory
-        services_path = repo_root / "services"
-        if services_path.exists():
-            python_targets.append("services/")
+        # If we're in repository root, format ONLY core src subdirectories in rag-service
+        rag_service_path = repo_root / "services" / "rag-service"
+        if rag_service_path.exists():
+            core_dirs = [
+                "utils",
+                "generation",
+                "preprocessing",
+                "retrieval",
+                "models",
+                "pipeline",
+                "vectordb",
+            ]
 
-        # Also include root-level Python files
-        for py_file in repo_root.glob("*.py"):
-            python_targets.append(str(py_file.relative_to(repo_root)))
+            src_path = rag_service_path / "src"
+            if src_path.exists():
+                for core_dir in core_dirs:
+                    core_dir_path = src_path / core_dir
+                    if core_dir_path.exists() and core_dir_path.is_dir():
+                        rel_path = core_dir_path.relative_to(repo_root)
+                        python_targets.append(str(rel_path))
 
     return python_targets
 
@@ -118,8 +144,14 @@ def main():
 
     if not available_tools:
         print("❌ No formatting tools available. Please install them:")
-        print("pip install ruff black mypy")
+        print("   pip install ruff mypy      # Recommended for AI-friendly formatting")
+        print("   pip install black          # Optional fallback formatter")
         sys.exit(1)
+
+    # Warn if Ruff is not available (preferred tool)
+    if "ruff" not in available_tools:
+        print("⚠️  Ruff not available - this is the preferred AI-friendly formatter")
+        print("   Consider installing: pip install ruff")
 
     # Find repository root and determine working context
     repo_root = find_repo_root()
@@ -138,7 +170,16 @@ def main():
     print(f"🎯 Targets: {python_targets}")
     targets_str = " ".join(python_targets)
 
-    print("\n🚀 Formatting Python files in the project...")
+    print("\n🚀 AI-Friendly Python Code Formatting")
+    print("    Focus: Core system (src/** except CLI) with consistent best practices")
+    print(
+        "    Strategy: Preserve readable one-liners, fix imports, maintain clean code"
+    )
+    print(
+        "    Tools: Ruff (linting & imports) → Ruff format → MyPy (type checking)"
+    )
+    print("    Exclusions: CLI directory, cache directories, hidden directories")
+    print("")
 
     success_count = 0
     total_operations = 0
@@ -150,31 +191,39 @@ def main():
         os.chdir(repo_root)
 
     try:
-        # Ruff: fix issues and format code (if available)
+        # Ruff-only approach: Both linting and formatting for consistency
         if "ruff" in available_tools:
             total_operations += 1
-            # Ruff fix: auto-fix import sorting and style issues
-            if run_command(f"ruff check --fix {targets_str}", "Ruff auto-fix"):
+            # Ruff check: Fix import sorting, unused imports, and other issues
+            # Uses pyproject.toml configuration for AI-friendly rules
+            if run_command(
+                f"ruff check --fix --unsafe-fixes {targets_str}",
+                "Ruff auto-fix (imports, unused code, style)",
+            ):
                 success_count += 1
 
+        # Use Ruff format - better at preserving AI-friendly one-liners than Black
+        if "ruff" in available_tools:
+            print(
+                "🎯 Using Ruff format - Superior at preserving AI-friendly one-liners"
+            )
             total_operations += 1
-            # Ruff format: code formatting
-            if run_command(f"ruff format {targets_str}", "Ruff formatting"):
+            # Ruff format: Code formatting that preserves readable one-liners better than Black
+            # Respects pyproject.toml settings to preserve readable patterns
+            if run_command(
+                f"ruff format {targets_str}",
+                "Ruff formatting (preserves clean one-liners)",
+            ):
                 success_count += 1
 
-        # Format with black (if available and ruff not available)
-        elif "black" in available_tools:
-            total_operations += 1
-            # Black will use root pyproject.toml or default settings
-            if run_command(f"black {targets_str}", "Black formatting"):
-                success_count += 1
-
-        # Type checking with mypy (if available)
+        # Type checking with MyPy (focuses on core system, excludes CLI)
         if "mypy" in available_tools:
             total_operations += 1
-            # mypy will use root configuration
+            # MyPy uses pyproject.toml exclusion rules to focus on core system
             if run_command(
-                f"mypy {targets_str}", "MyPy type checking", allow_failure=True
+                f"mypy {targets_str}",
+                "MyPy type checking (core system focus)",
+                allow_failure=True,
             ):
                 success_count += 1
     finally:
@@ -182,19 +231,25 @@ def main():
         if repo_root != original_cwd:
             os.chdir(original_cwd)
 
-    # Report results
+    # Report results with AI-friendly focus
     print(
         f"\n📊 Results: {success_count}/{total_operations} operations completed successfully"
     )
 
     if success_count == total_operations:
-        print("🎉 All formatting and type checking completed successfully!")
+        print("🎉 All AI-friendly formatting and type checking completed successfully!")
+        print("    - Core system (src/** except CLI) follows Python best practices")
+        print("    - Clean one-liners preserved with Ruff formatting")
+        print("    - Import sorting and unused code removal completed with Ruff")
     elif success_count >= total_operations - 1:  # Allow mypy to fail
-        print("✅ Formatting completed successfully!")
+        print("✅ AI-friendly formatting completed successfully!")
+        print("    - Ruff formatting preserves clean one-liner patterns")
+        print("    - Ruff linting and import optimization completed")
         if "mypy" in available_tools and success_count < total_operations:
-            print("⚠️  Some type checking issues remain - check output above")
+            print("⚠️  Some type checking issues remain (focused on core system)")
     else:
-        print("❌ Some critical formatting operations failed")
+        print("❌ Critical formatting operations failed")
+        print("    Check output above for specific issues")
         sys.exit(1)
 
 

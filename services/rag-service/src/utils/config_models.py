@@ -13,9 +13,7 @@ Status: Production Implementation
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
-
-from .config_validator import ensure_config_key_exists
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +62,12 @@ class QueryProcessingConfig:
     enable_spell_check: bool
 
     @classmethod
-    def from_validated_config(
-        cls, main_config: dict, language: str
-    ) -> "QueryProcessingConfig":
+    def from_validated_config(cls, main_config: dict, language: str) -> "QueryProcessingConfig":
         """
         Create config from validated configuration.
         Uses direct dictionary access - ConfigValidator guarantees existence.
         """
-        query_config = main_config[
-            "query_processing"
-        ]  # Direct access - guaranteed to exist
+        query_config = main_config["query_processing"]  # Direct access - guaranteed to exist
 
         return cls(
             language=language,
@@ -106,7 +100,7 @@ class EmbeddingConfig:
 
     @classmethod
     def from_validated_config(
-        cls, main_config: dict, language_config: dict = None
+        cls, main_config: dict, language_config: dict[Any, Any] | None = None
     ) -> "EmbeddingConfig":
         """Create config from validated main configuration with optional language-specific overrides."""
         embed_config = main_config["embeddings"]  # Direct access
@@ -139,6 +133,7 @@ class RetrievalConfig:
 
     default_k: int
     max_k: int
+    similarity_threshold: float
     adaptive_retrieval: bool
     enable_reranking: bool
     diversity_lambda: float
@@ -153,6 +148,7 @@ class RetrievalConfig:
         return cls(
             default_k=retrieval_config["default_k"],
             max_k=retrieval_config["max_k"],
+            similarity_threshold=float(main_config["similarity_threshold"]),  # Root level
             adaptive_retrieval=retrieval_config["adaptive_retrieval"],
             enable_reranking=retrieval_config["enable_reranking"],
             diversity_lambda=float(retrieval_config["diversity_lambda"]),
@@ -185,8 +181,8 @@ class RankingConfig:
         method_str = ranking_config["method"]
         try:
             method = RankingMethod(method_str)
-        except ValueError:
-            raise ValueError(f"Invalid ranking method: {method_str}")
+        except ValueError as e:
+            raise ValueError(f"Invalid ranking method: {method_str}") from e
 
         return cls(
             method=method,
@@ -264,6 +260,7 @@ class OllamaConfig:
 
     base_url: str
     model: str
+    timeout: float
     temperature: float
     max_tokens: int
     top_p: float
@@ -282,6 +279,7 @@ class OllamaConfig:
         return cls(
             base_url=ollama_config["base_url"],
             model=ollama_config["model"],
+            timeout=float(ollama_config["timeout"]),
             temperature=float(ollama_config["temperature"]),
             max_tokens=ollama_config["max_tokens"],
             top_p=float(ollama_config["top_p"]),
@@ -342,15 +340,13 @@ class ChunkingConfig:
         strategy_str = chunking_config["strategy"]
         try:
             strategy = ChunkingStrategy(strategy_str)
-        except ValueError:
-            raise ValueError(f"Invalid chunking strategy: {strategy_str}")
+        except ValueError as e:
+            raise ValueError(f"Invalid chunking strategy: {strategy_str}") from e
 
         return cls(
             strategy=strategy,
             max_chunk_size=chunking_config["max_chunk_size"],
-            preserve_sentence_boundaries=chunking_config[
-                "preserve_sentence_boundaries"
-            ],
+            preserve_sentence_boundaries=chunking_config["preserve_sentence_boundaries"],
             respect_paragraph_breaks=chunking_config["respect_paragraph_breaks"],
             enable_smart_splitting=chunking_config["enable_smart_splitting"],
             sentence_search_range=chunking_config["sentence_search_range"],
@@ -483,12 +479,8 @@ class LanguageSpecificConfig:
             response_language=language_config["shared"]["response_language"],
             stopwords=language_config["shared"]["stopwords"]["words"],
             question_patterns=language_config["shared"]["question_patterns"],
-            cultural_indicators=language_config["categorization"][
-                "cultural_indicators"
-            ],
-            system_prompt_language=language_config["generation"][
-                "system_prompt_language"
-            ],
+            cultural_indicators=language_config["categorization"]["cultural_indicators"],
+            system_prompt_language=language_config["generation"]["system_prompt_language"],
             formality_level=language_config["generation"]["formality_level"],
         )
 
@@ -515,9 +507,7 @@ class SystemConfig:
     language_specific: LanguageSpecificConfig
 
     @classmethod
-    def from_validated_configs(
-        cls, main_config: dict, language_config: dict, language_code: str
-    ) -> "SystemConfig":
+    def from_validated_configs(cls, main_config: dict, language_config: dict, language_code: str) -> "SystemConfig":
         """
         Create complete system configuration from validated configs.
 
@@ -527,9 +517,7 @@ class SystemConfig:
         logger.info(f"Creating system configuration for language: {language_code}")
 
         return cls(
-            query_processing=QueryProcessingConfig.from_validated_config(
-                main_config, language_code
-            ),
+            query_processing=QueryProcessingConfig.from_validated_config(main_config, language_code),
             embedding=EmbeddingConfig.from_validated_config(main_config),
             retrieval=RetrievalConfig.from_validated_config(main_config),
             ranking=RankingConfig.from_validated_config(main_config),
@@ -541,9 +529,7 @@ class SystemConfig:
             storage=StorageConfig.from_validated_config(main_config),
             search=SearchConfig.from_validated_config(main_config),
             response_parsing=ResponseParsingConfig.from_validated_config(main_config),
-            language_specific=LanguageSpecificConfig.from_validated_config(
-                language_config
-            ),
+            language_specific=LanguageSpecificConfig.from_validated_config(language_config),
         )
 
 
@@ -554,6 +540,7 @@ class ChromaConfig:
     db_path: str
     collection_name: str
     distance_metric: str
+    chunk_size: int
     ef_construction: int
     m: int
     persist: bool
@@ -562,13 +549,12 @@ class ChromaConfig:
     @classmethod
     def from_validated_config(cls, main_config: dict) -> "ChromaConfig":
         """Create config from validated configuration."""
-        chroma_config = main_config[
-            "chroma"
-        ]  # Direct access - guaranteed by validation
+        chroma_config = main_config["chroma"]  # Direct access - guaranteed by validation
         return cls(
             db_path=chroma_config["db_path"],
             collection_name=chroma_config["collection_name"],
             distance_metric=chroma_config["distance_metric"],
+            chunk_size=chroma_config["chunk_size"],
             ef_construction=chroma_config["ef_construction"],
             m=chroma_config["m"],
             persist=chroma_config["persist"],
@@ -589,27 +575,19 @@ class LanguageConfig:
     morphology_patterns_file: str
 
     @classmethod
-    def from_validated_config(
-        cls, main_config: dict, language: str
-    ) -> "LanguageConfig":
+    def from_validated_config(cls, main_config: dict, language: str) -> "LanguageConfig":
         """Create config from validated configuration."""
         from ..utils.config_protocol import get_config_provider
 
         # Get language-specific config from provider
         config_provider = get_config_provider()
-        language_config = config_provider.get_language_specific_config(
-            "pipeline", language
-        )
+        language_config = config_provider.get_language_specific_config("pipeline", language)
 
         return cls(
             language_code=language,
-            enable_morphological_expansion=language_config[
-                "enable_morphological_expansion"
-            ],
+            enable_morphological_expansion=language_config["enable_morphological_expansion"],
             enable_synonym_expansion=language_config["enable_synonym_expansion"],
-            use_language_query_processing=language_config[
-                "use_language_query_processing"
-            ],
+            use_language_query_processing=language_config["use_language_query_processing"],
             language_priority=language_config["language_priority"],
             stop_words_file=language_config["stop_words_file"],
             morphology_patterns_file=language_config["morphology_patterns_file"],

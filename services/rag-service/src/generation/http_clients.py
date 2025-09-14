@@ -4,12 +4,11 @@ Provides testable HTTP abstraction layer.
 """
 
 import asyncio
-import json
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
-from .ollama_client import ConnectionError, HttpClient, HttpError, HttpResponse
+from .ollama_client import ConnectionError, HttpError, HttpResponse
 
 
 class AsyncHttpxClient:
@@ -34,16 +33,10 @@ class AsyncHttpxClient:
             response = await client.get(url, timeout=timeout)
 
             json_data = None
-            if "content-type" in response.headers and response.headers[
-                "content-type"
-            ].startswith("application/json"):
+            if "content-type" in response.headers and response.headers["content-type"].startswith("application/json"):
                 json_data = response.json()
 
-            return HttpResponse(
-                status_code=response.status_code,
-                content=response.content,
-                json_data=json_data,
-            )
+            return HttpResponse(status_code=response.status_code, content=response.content, json_data=json_data)
         except httpx.ConnectError as e:
             raise ConnectionError(f"Connection failed: {e}") from e
         except httpx.HTTPStatusError as e:
@@ -51,9 +44,7 @@ class AsyncHttpxClient:
         except httpx.TimeoutException as e:
             raise TimeoutError(f"Request timeout: {e}") from e
 
-    async def post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> HttpResponse:
+    async def post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> HttpResponse:
         """Make POST request."""
         client = self._ensure_client()
 
@@ -61,15 +52,11 @@ class AsyncHttpxClient:
             response = await client.post(url, json=json_data, timeout=timeout)
 
             json_data_response = None
-            if "content-type" in response.headers and response.headers[
-                "content-type"
-            ].startswith("application/json"):
+            if "content-type" in response.headers and response.headers["content-type"].startswith("application/json"):
                 json_data_response = response.json()
 
             return HttpResponse(
-                status_code=response.status_code,
-                content=response.content,
-                json_data=json_data_response,
+                status_code=response.status_code, content=response.content, json_data=json_data_response
             )
         except httpx.ConnectError as e:
             raise ConnectionError(f"Connection failed: {e}") from e
@@ -78,17 +65,13 @@ class AsyncHttpxClient:
         except httpx.TimeoutException as e:
             raise TimeoutError(f"Request timeout: {e}") from e
 
-    async def stream_post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> list[str]:
+    async def stream_post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> list[str]:
         """Make streaming POST request, return lines."""
         client = self._ensure_client()
         lines = []
 
         try:
-            async with client.stream(
-                "POST", url, json=json_data, timeout=timeout
-            ) as response:
+            async with client.stream("POST", url, json=json_data, timeout=timeout) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if line.strip():
@@ -99,7 +82,7 @@ class AsyncHttpxClient:
         except httpx.HTTPStatusError as e:
             raise HttpError(f"HTTP error: {e}", e.response.status_code) from e
         except httpx.TimeoutException as e:
-            raise TimeoutError(f"Streaming request timeout: {e}")
+            raise TimeoutError(f"Streaming request timeout: {e}") from e
 
     async def close(self) -> None:
         """Close HTTP client."""
@@ -155,17 +138,11 @@ class MockHttpClient:
             return self.responses[key]
 
         # Default response
-        return HttpResponse(
-            status_code=200, content=b'{"models": []}', json_data={"models": []}
-        )
+        return HttpResponse(status_code=200, content=b'{"models": []}', json_data={"models": []})
 
-    async def post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> HttpResponse:
+    async def post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> HttpResponse:
         """Mock POST request."""
-        self.call_log.append(
-            {"method": "POST", "url": url, "json_data": json_data, "timeout": timeout}
-        )
+        self.call_log.append({"method": "POST", "url": url, "json_data": json_data, "timeout": timeout})
 
         if self.should_raise:
             exception = self.should_raise
@@ -178,23 +155,12 @@ class MockHttpClient:
 
         # Default response
         return HttpResponse(
-            status_code=200,
-            content=b'{"response": "Mock response"}',
-            json_data={"response": "Mock response"},
+            status_code=200, content=b'{"response": "Mock response"}', json_data={"response": "Mock response"}
         )
 
-    async def stream_post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> list[str]:
+    async def stream_post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> list[str]:
         """Mock streaming POST request."""
-        self.call_log.append(
-            {
-                "method": "STREAM_POST",
-                "url": url,
-                "json_data": json_data,
-                "timeout": timeout,
-            }
-        )
+        self.call_log.append({"method": "STREAM_POST", "url": url, "json_data": json_data, "timeout": timeout})
 
         if self.should_raise:
             exception = self.should_raise
@@ -231,35 +197,25 @@ class FallbackAsyncClient:
         import requests
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, lambda: requests.get(url, timeout=timeout)
-        )
+        response = await loop.run_in_executor(None, lambda: requests.get(url, timeout=timeout))
 
         return HttpResponse(status_code=response.status_code, content=response.content)
 
-    async def post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> HttpResponse:
+    async def post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> HttpResponse:
         """Fallback POST using requests in executor."""
         import requests
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, lambda: requests.post(url, json=json_data, timeout=timeout)
-        )
+        response = await loop.run_in_executor(None, lambda: requests.post(url, json=json_data, timeout=timeout))
 
         return HttpResponse(status_code=response.status_code, content=response.content)
 
-    async def stream_post(
-        self, url: str, json_data: dict[str, Any], timeout: float = 30.0
-    ) -> list[str]:
+    async def stream_post(self, url: str, json_data: dict[str, Any], timeout: float = 30.0) -> list[str]:
         """Fallback streaming (simulated) using requests in executor."""
         import requests
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, lambda: requests.post(url, json=json_data, timeout=timeout)
-        )
+        response = await loop.run_in_executor(None, lambda: requests.post(url, json=json_data, timeout=timeout))
 
         # Simulate streaming by wrapping response
         response_json = response.json()

@@ -4,9 +4,8 @@ Testable version with pure functions and dependency injection architecture.
 """
 
 import re
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Protocol, Set, Tuple
+from typing import Protocol
 
 # ================================
 # DATA CLASSES & CONFIGURATION
@@ -112,13 +111,7 @@ class LoggerProvider(Protocol):
 
 
 def create_language_config(
-    code: str,
-    name: str,
-    native_name: str,
-    enabled: bool,
-    embedding_model: str,
-    chunk_size: int,
-    chunk_overlap: int,
+    code: str, name: str, native_name: str, enabled: bool, embedding_model: str, chunk_size: int, chunk_overlap: int
 ) -> LanguageConfig:
     """Pure function to create validated language configuration."""
     return LanguageConfig(
@@ -166,9 +159,7 @@ def normalize_text_for_detection(text: str) -> list[str]:
     return words
 
 
-def calculate_pattern_scores(
-    words: list[str], detection_patterns: dict[str, list[str]]
-) -> dict[str, float]:
+def calculate_pattern_scores(words: list[str], detection_patterns: dict[str, list[str]]) -> dict[str, float]:
     """Pure function to calculate pattern match scores for languages."""
     if not words:
         return {}
@@ -197,22 +188,12 @@ def detect_language_from_text(
 ) -> DetectionResult:
     """Pure function to detect language from text using pattern matching."""
     if not auto_detect or not text:
-        return DetectionResult(
-            detected_language=default_language,
-            confidence=0.0,
-            scores={},
-            fallback_used=True,
-        )
+        return DetectionResult(detected_language=default_language, confidence=0.0, scores={}, fallback_used=True)
 
     words = normalize_text_for_detection(text)
 
     if len(words) < min_words:  # Too short for reliable detection
-        return DetectionResult(
-            detected_language=default_language,
-            confidence=0.0,
-            scores={},
-            fallback_used=True,
-        )
+        return DetectionResult(detected_language=default_language, confidence=0.0, scores={}, fallback_used=True)
 
     # Score languages based on pattern matches
     language_scores = calculate_pattern_scores(words, detection_patterns)
@@ -221,17 +202,11 @@ def detect_language_from_text(
         # Return language with highest match score
         detected_lang, confidence = max(language_scores.items(), key=lambda x: x[1])
         return DetectionResult(
-            detected_language=detected_lang,
-            confidence=confidence,
-            scores=language_scores,
-            fallback_used=False,
+            detected_language=detected_lang, confidence=confidence, scores=language_scores, fallback_used=False
         )
 
     return DetectionResult(
-        detected_language=default_language,
-        confidence=0.0,
-        scores=language_scores,
-        fallback_used=True,
+        detected_language=default_language, confidence=0.0, scores=language_scores, fallback_used=True
     )
 
 
@@ -245,9 +220,7 @@ def remove_stopwords_from_text(text: str, stopwords: set[str]) -> str:
     return " ".join(filtered_words)
 
 
-def calculate_collection_suffix(
-    language_code: str, supported_languages: list[str], fallback_language: str
-) -> str:
+def calculate_collection_suffix(language_code: str, supported_languages: list[str], fallback_language: str) -> str:
     """Pure function to calculate collection suffix for language."""
     if language_code == "auto":
         return fallback_language
@@ -283,9 +256,7 @@ def validate_languages_list(
     validated = []
 
     for code in language_codes:
-        normalized, is_valid = normalize_language_code_pure(
-            code, supported_languages, default_language
-        )
+        normalized, is_valid = normalize_language_code_pure(code, supported_languages, default_language)
         if normalized not in validated:
             validated.append(normalized)
 
@@ -296,10 +267,7 @@ def validate_languages_list(
 
 
 def get_chunk_config_for_language(
-    languages: dict[str, LanguageConfig],
-    language_code: str,
-    default_chunk_size: int = 512,
-    default_overlap: int = 50,
+    languages: dict[str, LanguageConfig], language_code: str, default_chunk_size: int = 512, default_overlap: int = 50
 ) -> tuple[int, int]:
     """Pure function to get chunk configuration for language."""
     if language_code not in languages:
@@ -309,9 +277,7 @@ def get_chunk_config_for_language(
 
 
 def get_embedding_model_for_language(
-    languages: dict[str, LanguageConfig],
-    language_code: str,
-    default_model: str = "BAAI/bge-m3",
+    languages: dict[str, LanguageConfig], language_code: str, default_model: str = "BAAI/bge-m3"
 ) -> str:
     """Pure function to get embedding model for language."""
     if language_code not in languages:
@@ -320,9 +286,7 @@ def get_embedding_model_for_language(
     return config.embedding_model
 
 
-def get_display_name_for_language(
-    languages: dict[str, LanguageConfig], language_code: str
-) -> str:
+def get_display_name_for_language(languages: dict[str, LanguageConfig], language_code: str) -> str:
     """Pure function to get human-readable language name."""
     if language_code not in languages:
         raise ValueError(f"Language {language_code} not supported")
@@ -354,9 +318,7 @@ class _LanguageManager:
         self._patterns = self._pattern_provider.get_language_patterns()
         self._languages = build_languages_dict(self._settings)
 
-        self._log_info(
-            f"Loaded {len(self._languages)} supported languages: {list(self._languages.keys())}"
-        )
+        self._log_info(f"Loaded {len(self._languages)} supported languages: {list(self._languages.keys())}")
 
     def _log_info(self, message: str) -> None:
         """Log info message if logger available."""
@@ -410,13 +372,9 @@ class _LanguageManager:
         )
 
         if result.scores:
-            self._log_debug(
-                f"Detected language: {result.detected_language} (scores: {result.scores})"
-            )
+            self._log_debug(f"Detected language: {result.detected_language} (scores: {result.scores})")
         elif result.fallback_used:
-            self._log_debug(
-                f"No language detected, using default: {result.detected_language}"
-            )
+            self._log_debug(f"No language detected, using default: {result.detected_language}")
 
         return result.detected_language
 
@@ -449,9 +407,7 @@ class _LanguageManager:
         )
 
         if suffix != language_code and language_code not in ["auto", "multilingual"]:
-            self._log_warning(
-                f"Unsupported language {language_code}, using fallback {suffix}"
-            )
+            self._log_warning(f"Unsupported language {language_code}, using fallback {suffix}")
 
         return suffix
 
@@ -464,9 +420,7 @@ class _LanguageManager:
         )
 
         if not is_valid and language_code != "auto":
-            self._log_warning(
-                f"Language {language_code} not supported, using default {normalized}"
-            )
+            self._log_warning(f"Language {language_code} not supported, using default {normalized}")
 
         return normalized
 
@@ -485,9 +439,7 @@ class _LanguageManager:
     def get_embedding_model(self, language_code: str) -> str:
         """Get embedding model for specific language."""
         return get_embedding_model_for_language(
-            languages=self._languages,
-            language_code=language_code,
-            default_model=self._settings.embedding_model,
+            languages=self._languages, language_code=language_code, default_model=self._settings.embedding_model
         )
 
     def get_chunk_config(self, language_code: str) -> tuple[int, int]:
@@ -538,15 +490,11 @@ class _LanguageManager:
 
 
 def create_language_manager(
-    config_provider: ConfigProvider,
-    pattern_provider: PatternProvider,
-    logger_provider: LoggerProvider | None = None,
+    config_provider: ConfigProvider, pattern_provider: PatternProvider, logger_provider: LoggerProvider | None = None
 ) -> _LanguageManager:
     """Factory function to create configured language manager."""
     return _LanguageManager(
-        config_provider=config_provider,
-        pattern_provider=pattern_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, pattern_provider=pattern_provider, logger_provider=logger_provider
     )
 
 
@@ -576,8 +524,10 @@ def LanguageManager(
 
         config_provider, pattern_provider, logger_provider = create_production_setup()
 
+    # Ensure providers are not None after potential defaults
+    assert config_provider is not None, "ConfigProvider must not be None"
+    assert pattern_provider is not None, "PatternProvider must not be None"
+
     return _LanguageManager(
-        config_provider=config_provider,
-        pattern_provider=pattern_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, pattern_provider=pattern_provider, logger_provider=logger_provider
     )

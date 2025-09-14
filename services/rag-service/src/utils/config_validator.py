@@ -12,7 +12,7 @@ Status: Production Implementation
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class ConfigValidator:
     """
 
     # Main config.toml required keys (shared across system)
-    MAIN_CONFIG_SCHEMA = {
+    MAIN_CONFIG_SCHEMA: dict[str, type | tuple[Any, ...]] = {
         # Shared settings
         "shared.cache_dir": str,
         "shared.default_timeout": (int, float),
@@ -178,7 +178,7 @@ class ConfigValidator:
     }
 
     # Ranking features schema for language-specific configuration files
-    RANKING_FEATURES_SCHEMA = {
+    RANKING_FEATURES_SCHEMA: dict[str, type | tuple[Any, ...]] = {
         # Special characters configuration (Croatian diacritics, etc.)
         "ranking.language_features.special_characters.enabled": bool,
         "ranking.language_features.special_characters.characters": list,
@@ -212,7 +212,7 @@ class ConfigValidator:
     }
 
     # Language config schema - includes main config + ranking features for language-specific files
-    LANGUAGE_CONFIG_SCHEMA = {
+    LANGUAGE_CONFIG_SCHEMA: dict[str, type | tuple[Any, ...]] = {
         **MAIN_CONFIG_SCHEMA,  # All main config keys
         **RANKING_FEATURES_SCHEMA,  # Plus language-specific ranking features
         # Language-specific metadata
@@ -221,9 +221,7 @@ class ConfigValidator:
     }
 
     @classmethod
-    def validate_startup_config(
-        cls, main_config: dict, language_configs: dict[str, dict]
-    ) -> None:
+    def validate_startup_config(cls, main_config: dict, language_configs: dict[str, dict]) -> None:
         """
         PHASE 1: Validate ALL configuration at system startup.
 
@@ -242,9 +240,7 @@ class ConfigValidator:
 
         # Validate main configuration
         main_result = cls._validate_config_section(
-            config=main_config,
-            schema=cls.MAIN_CONFIG_SCHEMA,
-            config_file="config/config.toml",
+            config=main_config, schema=cls.MAIN_CONFIG_SCHEMA, config_file="config/config.toml"
         )
 
         if not main_result.is_valid:
@@ -261,15 +257,11 @@ class ConfigValidator:
         # Validate each language configuration
         for lang_code, lang_config in language_configs.items():
             lang_result = cls._validate_config_section(
-                config=lang_config,
-                schema=cls.LANGUAGE_CONFIG_SCHEMA,
-                config_file=f"config/{lang_code}.toml",
+                config=lang_config, schema=cls.LANGUAGE_CONFIG_SCHEMA, config_file=f"config/{lang_code}.toml"
             )
 
             if not lang_result.is_valid:
-                logger.error(
-                    f"❌ Language configuration validation failed: {lang_result}"
-                )
+                logger.error(f"❌ Language configuration validation failed: {lang_result}")
                 raise ConfigurationError(
                     f"Invalid language configuration in {lang_result.config_file}:\n"
                     f"Missing keys: {lang_result.missing_keys}\n"
@@ -277,9 +269,7 @@ class ConfigValidator:
                     f"Please ensure all required keys exist in config/{lang_code}.toml"
                 )
 
-        logger.info(
-            f"✅ All language configurations validated: {list(language_configs.keys())}"
-        )
+        logger.info(f"✅ All language configurations validated: {list(language_configs.keys())}")
 
         # Cross-config consistency validation
         cls._validate_cross_config_consistency(main_config, language_configs)
@@ -287,9 +277,7 @@ class ConfigValidator:
         # Validate ranking features consistency between languages
         cls._validate_ranking_features_consistency(language_configs)
 
-        logger.info(
-            "🎯 Configuration validation completed successfully - all keys exist and are valid"
-        )
+        logger.info("🎯 Configuration validation completed successfully - all keys exist and are valid")
 
     @classmethod
     def _validate_config_section(
@@ -317,24 +305,20 @@ class ConfigValidator:
 
                 for key in keys:
                     if not isinstance(current, dict):
-                        raise KeyError(
-                            f"Expected dict at {key} but got {type(current)}"
-                        )
+                        raise KeyError(f"Expected dict at {key} but got {type(current)}")
                     current = current[key]  # Direct access - no .get() fallbacks
 
                 # Type validation - handle union types (e.g., (int, float))
                 if isinstance(expected_type, tuple):
                     if not isinstance(current, expected_type):
-                        invalid_types.append(
-                            f"{key_path}: expected {expected_type}, got {type(current).__name__}"
-                        )
+                        invalid_types.append(f"{key_path}: expected {expected_type}, got {type(current).__name__}")
                 else:
                     if not isinstance(current, expected_type):
                         invalid_types.append(
                             f"{key_path}: expected {expected_type.__name__}, got {type(current).__name__}"
                         )
 
-            except (KeyError, TypeError) as e:
+            except (KeyError, TypeError):
                 missing_keys.append(key_path)
 
         return ConfigValidationResult(
@@ -345,9 +329,7 @@ class ConfigValidator:
         )
 
     @classmethod
-    def _validate_cross_config_consistency(
-        cls, main_config: dict, language_configs: dict[str, dict]
-    ) -> None:
+    def _validate_cross_config_consistency(cls, main_config: dict, language_configs: dict[str, dict]) -> None:
         """
         Validate consistency across configuration files.
 
@@ -372,13 +354,9 @@ class ConfigValidator:
 
             error_parts = []
             if missing_configs:
-                error_parts.append(
-                    f"Missing language config files: {list(missing_configs)}"
-                )
+                error_parts.append(f"Missing language config files: {list(missing_configs)}")
             if extra_configs:
-                error_parts.append(
-                    f"Extra language config files: {list(extra_configs)}"
-                )
+                error_parts.append(f"Extra language config files: {list(extra_configs)}")
 
             raise ConfigurationError(
                 f"Language configuration mismatch:\n"
@@ -405,9 +383,7 @@ class ConfigValidator:
                 )
 
     @classmethod
-    def _validate_ranking_features_consistency(
-        cls, language_configs: dict[str, dict]
-    ) -> None:
+    def _validate_ranking_features_consistency(cls, language_configs: dict[str, dict]) -> None:
         """
         Validate that ranking features have consistent structure across all languages.
 
@@ -430,10 +406,8 @@ class ConfigValidator:
         try:
             reference_features = reference_config["ranking"]["language_features"]
             reference_feature_keys = cls._get_nested_keys(reference_features)
-        except KeyError:
-            raise ConfigurationError(
-                f"Missing ranking.language_features section in {reference_lang}.toml"
-            )
+        except KeyError as e:
+            raise ConfigurationError(f"Missing ranking.language_features section in {reference_lang}.toml") from e
 
         # Validate all other language configs have same structure
         for lang_code, lang_config in language_configs.items():
@@ -443,10 +417,8 @@ class ConfigValidator:
             try:
                 lang_features = lang_config["ranking"]["language_features"]
                 lang_feature_keys = cls._get_nested_keys(lang_features)
-            except KeyError:
-                raise ConfigurationError(
-                    f"Missing ranking.language_features section in {lang_code}.toml"
-                )
+            except KeyError as e:
+                raise ConfigurationError(f"Missing ranking.language_features section in {lang_code}.toml") from e
 
             # Check for missing or extra keys
             missing_keys = reference_feature_keys - lang_feature_keys
@@ -488,27 +460,23 @@ class ConfigValidator:
         return keys
 
     @classmethod
-    def get_main_config_schema(cls) -> dict[str, type | tuple]:
+    def get_main_config_schema(cls) -> dict[str, type | tuple[Any, ...]]:
         """Get the main config schema for external validation."""
         return cls.MAIN_CONFIG_SCHEMA.copy()
 
     @classmethod
-    def get_language_config_schema(cls) -> dict[str, type | tuple]:
+    def get_language_config_schema(cls) -> dict[str, type | tuple[Any, ...]]:
         """Get the language config schema for external validation."""
         return cls.LANGUAGE_CONFIG_SCHEMA.copy()
 
     @classmethod
-    def get_ranking_features_schema(cls) -> dict[str, type | tuple]:
+    def get_ranking_features_schema(cls) -> dict[str, type | tuple[Any, ...]]:
         """Get the ranking features schema for external validation."""
         return cls.RANKING_FEATURES_SCHEMA.copy()
 
     @classmethod
     def validate_single_config_key(
-        cls,
-        config: dict,
-        key_path: str,
-        expected_type: type | tuple,
-        config_file: str = "unknown",
+        cls, config: dict, key_path: str, expected_type: type | tuple, config_file: str = "unknown"
     ) -> bool:
         """
         Utility method to validate a single configuration key.
@@ -538,22 +506,18 @@ class ConfigValidator:
             if isinstance(expected_type, tuple):
                 if not isinstance(current, expected_type):
                     raise ConfigurationError(
-                        f"Invalid type for {key_path} in {config_file}: "
-                        f"expected {expected_type}, got {type(current)}"
+                        f"Invalid type for {key_path} in {config_file}: expected {expected_type}, got {type(current)}"
                     )
             else:
                 if not isinstance(current, expected_type):
                     raise ConfigurationError(
-                        f"Invalid type for {key_path} in {config_file}: "
-                        f"expected {expected_type}, got {type(current)}"
+                        f"Invalid type for {key_path} in {config_file}: expected {expected_type}, got {type(current)}"
                     )
 
             return True
 
-        except KeyError:
-            raise ConfigurationError(
-                f"Missing required configuration key: {key_path} in {config_file}"
-            )
+        except KeyError as e:
+            raise ConfigurationError(f"Missing required configuration key: {key_path} in {config_file}") from e
 
 
 # Convenience functions for common validation scenarios
@@ -568,10 +532,7 @@ def validate_language_config(config: dict, language_code: str) -> None:
 
 
 def ensure_config_key_exists(
-    config: dict,
-    key_path: str,
-    expected_type: type | tuple = str,
-    config_file: str = "config",
+    config: dict, key_path: str, expected_type: type | tuple = str, config_file: str = "config"
 ) -> Any:
     """
     Ensure a configuration key exists and return its value.
@@ -590,9 +551,7 @@ def ensure_config_key_exists(
     Raises:
         ConfigurationError: If key missing or wrong type
     """
-    ConfigValidator.validate_single_config_key(
-        config, key_path, expected_type, config_file
-    )
+    ConfigValidator.validate_single_config_key(config, key_path, expected_type, config_file)
 
     # Navigate to the key and return value
     current = config

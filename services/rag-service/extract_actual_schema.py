@@ -5,12 +5,11 @@ Generate ConfigValidator schema that matches reality.
 """
 
 import sys
-
-sys.path.insert(0, "src")
-
-from typing import Any, Dict, Type, Union
+from typing import Any
 
 import toml
+
+sys.path.insert(0, "src")
 
 
 def extract_keys_from_config(
@@ -27,8 +26,8 @@ def extract_keys_from_config(
             schema.update(extract_keys_from_config(value, full_key))
         else:
             # Leaf value - determine type
-            if isinstance(value, (int, float)):
-                schema[full_key] = (int, float)  # Allow both
+            if isinstance(value, int | float):
+                schema[full_key] = type(value)  # Use actual type
             elif isinstance(value, bool):
                 schema[full_key] = bool
             elif isinstance(value, str):

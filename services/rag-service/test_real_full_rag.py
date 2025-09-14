@@ -11,8 +11,6 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-import json
-import time
 
 import chromadb
 import numpy as np
@@ -65,7 +63,7 @@ async def test_complete_real_rag():
 
         print(f"✅ Created {len(chunks)} chunks")
         for i, chunk in enumerate(chunks[:3]):
-            print(f"📦 Chunk {i+1}: {len(chunk['content'])} chars")
+            print(f"📦 Chunk {i + 1}: {len(chunk['content'])} chars")
             print(f"   Preview: {chunk['content'][:100]}...")
 
         # ===== STEP 3: REAL EMBEDDING GENERATION =====
@@ -83,7 +81,7 @@ async def test_complete_real_rag():
         for i, chunk in enumerate(chunks):
             embedding = model.encode(chunk["content"])
             embeddings.append(embedding.tolist())
-            print(f"   Chunk {i+1}: {len(embedding)}-dim embedding generated")
+            print(f"   Chunk {i + 1}: {len(embedding)}-dim embedding generated")
 
         print(f"✅ Generated {len(embeddings)} embeddings")
 
@@ -156,7 +154,7 @@ async def test_complete_real_rag():
             ):
                 distance = results["distances"][0][i] if "distances" in results else 0
                 print(
-                    f"   {i+1}. Score: {1-distance:.3f} | Source: {metadata['source']}"
+                    f"   {i + 1}. Score: {1 - distance:.3f} | Source: {metadata['source']}"
                 )
                 print(f"      Preview: {doc[:150]}...")
 

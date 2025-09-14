@@ -4,6 +4,7 @@ Test script for fail-fast configuration system.
 Validates that system fails immediately when essential config is missing.
 """
 
+import logging
 import sys
 import tempfile
 from pathlib import Path
@@ -12,8 +13,6 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 services_path = project_root / "services" / "rag-service"
 sys.path.insert(0, str(services_path))
-
-import logging
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -129,7 +128,7 @@ default_chunk_overlap = 50
             from src.utils.language_manager import LanguageManager
 
             try:
-                manager = LanguageManager()  # Should fail
+                LanguageManager()  # Should fail
                 logger.error("❌ Expected LanguageManager to fail but it succeeded")
                 return False
             except Exception as e:

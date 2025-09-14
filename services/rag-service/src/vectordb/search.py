@@ -8,7 +8,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -102,11 +102,7 @@ class VectorSearchProvider(Protocol):
         ...
 
     async def search_by_text(
-        self,
-        query_text: str,
-        top_k: int,
-        filters: dict[str, Any] | None = None,
-        include_metadata: bool = True,
+        self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
     ) -> dict[str, Any]:
         """Search by text (if supported by provider)."""
         ...
@@ -160,9 +156,7 @@ def validate_search_query(query: SearchQuery) -> list[str]:
     return errors
 
 
-def parse_vector_search_results(
-    raw_results: dict[str, Any], method_used: str = "semantic"
-) -> list[SearchResult]:
+def parse_vector_search_results(raw_results: dict[str, Any], method_used: str = "semantic") -> list[SearchResult]:
     """
     Parse raw vector database results into SearchResult objects.
 
@@ -173,7 +167,7 @@ def parse_vector_search_results(
     Returns:
         List of parsed search results
     """
-    results = []
+    results: list[SearchResult] = []
 
     if not raw_results or not raw_results.get("ids"):
         return results
@@ -212,13 +206,7 @@ def parse_vector_search_results(
         # Convert distance to similarity score
         score = distance_to_similarity(distance)
 
-        result = SearchResult(
-            id=str(doc_id),
-            content=content,
-            score=score,
-            metadata=metadata,
-            method_used=method_used,
-        )
+        result = SearchResult(id=str(doc_id), content=content, score=score, metadata=metadata, method_used=method_used)
         results.append(result)
 
     return results
@@ -276,10 +264,7 @@ def calculate_keyword_score(query_terms: list[str], document_text: str) -> float
 
 
 def combine_scores(
-    semantic_score: float,
-    keyword_score: float,
-    semantic_weight: float = 0.7,
-    keyword_weight: float = 0.3,
+    semantic_score: float, keyword_score: float, semantic_weight: float = 0.7, keyword_weight: float = 0.3
 ) -> float:
     """
     Combine semantic and keyword scores for hybrid search.
@@ -306,9 +291,7 @@ def combine_scores(
 
 
 def rerank_results_by_relevance(
-    query_text: str,
-    results: list[SearchResult],
-    boost_factors: dict[str, float] | None = None,
+    query_text: str, results: list[SearchResult], boost_factors: dict[str, float] | None = None
 ) -> list[SearchResult]:
     """
     Rerank search results based on additional relevance factors.
@@ -342,13 +325,9 @@ def rerank_results_by_relevance(
 
         # Term overlap boost
         if query_terms:
-            term_overlap = len(query_terms.intersection(content_terms)) / len(
-                query_terms
-            )
+            term_overlap = len(query_terms.intersection(content_terms)) / len(query_terms)
             if "term_overlap" not in boost_factors:
-                raise ValueError(
-                    "Missing 'term_overlap' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'term_overlap' in boost_factors configuration")
             overlap_boost = 1 + (term_overlap * boost_factors["term_overlap"])
         else:
             overlap_boost = 1.0
@@ -357,9 +336,7 @@ def rerank_results_by_relevance(
         content_length = len(result.content)
         if content_length < 100:
             if "length_short" not in boost_factors:
-                raise ValueError(
-                    "Missing 'length_short' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'length_short' in boost_factors configuration")
             length_boost = boost_factors["length_short"]
         elif content_length > 1000:
             if "length_long" not in boost_factors:
@@ -367,9 +344,7 @@ def rerank_results_by_relevance(
             length_boost = boost_factors["length_long"]
         else:
             if "length_optimal" not in boost_factors:
-                raise ValueError(
-                    "Missing 'length_optimal' in boost_factors configuration"
-                )
+                raise ValueError("Missing 'length_optimal' in boost_factors configuration")
             length_boost = boost_factors["length_optimal"]
 
         # Title/metadata boost
@@ -377,9 +352,7 @@ def rerank_results_by_relevance(
             raise ValueError("Missing 'title_boost' in boost_factors configuration")
         title_boost = (
             boost_factors["title_boost"]
-            if result.metadata.get(
-                "title"
-            )  # Keep .get() - metadata from external sources
+            if result.metadata.get("title")  # Keep .get() - metadata from external sources
             else 1.0
         )
 
@@ -391,9 +364,7 @@ def rerank_results_by_relevance(
     return results
 
 
-def filter_results_by_threshold(
-    results: list[SearchResult], threshold: float
-) -> list[SearchResult]:
+def filter_results_by_threshold(results: list[SearchResult], threshold: float) -> list[SearchResult]:
     """
     Filter search results by similarity threshold.
 
@@ -421,9 +392,7 @@ def limit_results(results: list[SearchResult], max_results: int) -> list[SearchR
     return results[:max_results] if max_results > 0 else results
 
 
-def extract_context_from_results(
-    results: list[SearchResult], max_context_length: int, separator: str = "\n\n"
-) -> str:
+def extract_context_from_results(results: list[SearchResult], max_context_length: int, separator: str = "\n\n") -> str:
     """
     Extract context text from search results for RAG generation.
 
@@ -438,7 +407,7 @@ def extract_context_from_results(
     if not results:
         return ""
 
-    context_parts = []
+    context_parts: list[str] = []
     current_length = 0
 
     for result in results:
@@ -524,9 +493,7 @@ class SemanticSearchEngine:
 
             # Filter by threshold
             if query.similarity_threshold > 0:
-                results = filter_results_by_threshold(
-                    results, query.similarity_threshold
-                )
+                results = filter_results_by_threshold(results, query.similarity_threshold)
 
             # Limit results
             results = limit_results(results, query.top_k)
@@ -578,10 +545,7 @@ class SemanticSearchEngine:
             # Use text search if provider supports it, otherwise fall back to semantic
             if hasattr(self.search_provider, "search_by_text"):
                 raw_results = await self.search_provider.search_by_text(
-                    query_text=query.text,
-                    top_k=query.top_k * 2,
-                    filters=query.filters,
-                    include_metadata=True,
+                    query_text=query.text, top_k=query.top_k * 2, filters=query.filters, include_metadata=True
                 )
                 results = parse_vector_search_results(raw_results, "keyword")
             else:
@@ -591,9 +555,7 @@ class SemanticSearchEngine:
 
                 # Re-score using keyword matching
                 for result in results:
-                    keyword_score = calculate_keyword_score(
-                        query_terms, result.content.lower()
-                    )
+                    keyword_score = calculate_keyword_score(query_terms, result.content.lower())
                     result.score = keyword_score
                     result.method_used = "keyword"
 
@@ -611,13 +573,9 @@ class SemanticSearchEngine:
             # Get weights from config - validate required keys
             weights = self.config_provider.get_scoring_weights()
             if "semantic" not in weights:
-                raise ValueError(
-                    "Missing 'semantic' weight in scoring weights configuration"
-                )
+                raise ValueError("Missing 'semantic' weight in scoring weights configuration")
             if "keyword" not in weights:
-                raise ValueError(
-                    "Missing 'keyword' weight in scoring weights configuration"
-                )
+                raise ValueError("Missing 'keyword' weight in scoring weights configuration")
             semantic_weight = weights["semantic"]
             keyword_weight = weights["keyword"]
 
@@ -642,26 +600,24 @@ class SemanticSearchEngine:
 
             # Run searches concurrently
             semantic_results, keyword_results = await asyncio.gather(
-                self._semantic_search(semantic_query),
-                self._keyword_search(keyword_query),
-                return_exceptions=True,
+                self._semantic_search(semantic_query), self._keyword_search(keyword_query), return_exceptions=True
             )
 
             # Handle exceptions
             if isinstance(semantic_results, Exception):
-                self.logger.warning(
-                    f"Semantic search failed in hybrid mode: {semantic_results}"
-                )
+                self.logger.warning(f"Semantic search failed in hybrid mode: {semantic_results}")
                 semantic_results = []
 
             if isinstance(keyword_results, Exception):
-                self.logger.warning(
-                    f"Keyword search failed in hybrid mode: {keyword_results}"
-                )
+                self.logger.warning(f"Keyword search failed in hybrid mode: {keyword_results}")
                 keyword_results = []
 
             # Combine results with weighted scoring
             combined_results = {}
+
+            # At this point, both are guaranteed to be lists after exception handling
+            assert isinstance(semantic_results, list), "semantic_results should be list after exception handling"
+            assert isinstance(keyword_results, list), "keyword_results should be list after exception handling"
 
             # Add semantic results
             for result in semantic_results:
@@ -670,21 +626,17 @@ class SemanticSearchEngine:
                 result.method_used = "hybrid"
 
             # Add/combine keyword results
-            query_terms = query.text.lower().split()
+            query.text.lower().split()
             for result in keyword_results:
                 if result.id in combined_results:
                     # Combine scores for documents found by both methods
                     semantic_score = combined_results[result.id].score / semantic_weight
                     keyword_score = result.score
-                    combined_score = combine_scores(
-                        semantic_score, keyword_score, semantic_weight, keyword_weight
-                    )
+                    combined_score = combine_scores(semantic_score, keyword_score, semantic_weight, keyword_weight)
                     combined_results[result.id].score = combined_score
                 else:
                     # New document from keyword search
-                    result.score = combine_scores(
-                        0.0, result.score, 0.0, keyword_weight
-                    )
+                    result.score = combine_scores(0.0, result.score, 0.0, keyword_weight)
                     result.method_used = "hybrid"
                     combined_results[result.id] = result
 
@@ -733,9 +685,7 @@ class SemanticSearchEngine:
             response = await self.search(similarity_query)
 
             # Filter out the reference document itself
-            similar_results = [
-                result for result in response.results if result.id != document_id
-            ][:top_k]
+            similar_results = [result for result in response.results if result.id != document_id][:top_k]
 
             return SearchResponse(
                 query=f"Similar to document {document_id}",
@@ -752,21 +702,15 @@ class SemanticSearchEngine:
 
 
 # Factory Functions
-def create_search_query(
-    text: str, top_k: int = 5, method: str = "semantic", **kwargs
-) -> SearchQuery:
+def create_search_query(text: str, top_k: int = 5, method: str = "semantic", **kwargs) -> SearchQuery:
     """Factory function to create SearchQuery with validation."""
     return SearchQuery(text=text, top_k=top_k, method=method, **kwargs)
 
 
 def create_search_engine(
-    embedding_provider: EmbeddingProvider,
-    search_provider: VectorSearchProvider,
-    config_provider: ConfigProvider,
+    embedding_provider: EmbeddingProvider, search_provider: VectorSearchProvider, config_provider: ConfigProvider
 ) -> SemanticSearchEngine:
     """Factory function to create SemanticSearchEngine."""
     return SemanticSearchEngine(
-        embedding_provider=embedding_provider,
-        search_provider=search_provider,
-        config_provider=config_provider,
+        embedding_provider=embedding_provider, search_provider=search_provider, config_provider=config_provider
     )

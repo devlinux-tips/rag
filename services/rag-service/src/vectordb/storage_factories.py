@@ -5,14 +5,15 @@ Provides production ChromaDB implementations of storage protocols.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, cast
 
 import chromadb
 import numpy as np
 from chromadb.api.models.Collection import Collection
+from chromadb.api.types import Metadata, WhereDocument
 from chromadb.config import Settings
 
-from .storage import DocumentMetadata, VectorCollection, VectorDatabase
+from .storage import VectorCollection, VectorDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +34,15 @@ class ChromaDBCollection(VectorCollection):
     ) -> None:
         """Add documents to collection."""
         try:
-            add_kwargs = {"ids": ids, "documents": documents, "metadatas": metadatas}
-
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
-                embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in embeddings
-                ]
-                add_kwargs["embeddings"] = embedding_lists
+                embedding_lists = [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings]
 
-            self._collection.add(**add_kwargs)
+                self._collection.add(
+                    ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas), embeddings=embedding_lists
+                )
+            else:
+                self._collection.add(ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas))
             self.logger.debug(f"Added {len(documents)} documents to collection")
 
         except Exception as e:
@@ -61,34 +60,31 @@ class ChromaDBCollection(VectorCollection):
     ) -> dict[str, Any]:
         """Query collection for similar documents."""
         try:
-            query_kwargs = {"n_results": n_results}
-
-            if query_texts is not None:
-                query_kwargs["query_texts"] = query_texts
+            final_include = include if include is not None else ["documents", "metadatas", "distances"]
 
             if query_embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
-                embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in query_embeddings
-                ]
-                query_kwargs["query_embeddings"] = embedding_lists
+                embedding_lists = [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in query_embeddings]
 
-            if where is not None:
-                query_kwargs["where"] = where
-
-            if where_document is not None:
-                query_kwargs["where_document"] = where_document
-
-            if include is not None:
-                query_kwargs["include"] = include
+                results = self._collection.query(
+                    query_embeddings=embedding_lists,
+                    n_results=n_results,
+                    where=where,
+                    where_document=cast(WhereDocument, where_document),
+                    include=final_include,  # type: ignore[arg-type]
+                )
             else:
-                query_kwargs["include"] = ["documents", "metadatas", "distances"]
-
-            results = self._collection.query(**query_kwargs)
+                results = self._collection.query(
+                    query_texts=query_texts,
+                    n_results=n_results,
+                    where=where,
+                    where_document=cast(WhereDocument, where_document),
+                    include=final_include,  # type: ignore[arg-type]
+                )
             self.logger.debug("Query returned results for collection")
 
-            return results
+            # Convert ChromaDB QueryResult to dict for compatibility
+            return dict(results)
 
         except Exception as e:
             self.logger.error(f"Failed to query collection: {e}")
@@ -104,26 +100,17 @@ class ChromaDBCollection(VectorCollection):
     ) -> dict[str, Any]:
         """Get documents from collection."""
         try:
-            get_kwargs = {}
+            final_include = include if include is not None else ["documents", "metadatas"]
 
-            if ids is not None:
-                get_kwargs["ids"] = ids
-
-            if where is not None:
-                get_kwargs["where"] = where
-
-            if limit is not None:
-                get_kwargs["limit"] = limit
-
-            if offset is not None:
-                get_kwargs["offset"] = offset
-
-            if include is not None:
-                get_kwargs["include"] = include
-            else:
-                get_kwargs["include"] = ["documents", "metadatas"]
-
-            return self._collection.get(**get_kwargs)
+            # Convert ChromaDB GetResult to dict for compatibility
+            results = self._collection.get(
+                ids=ids,
+                where=where,
+                limit=limit,
+                offset=offset,
+                include=final_include,  # type: ignore[arg-type]
+            )
+            return dict(results)
 
         except Exception as e:
             self.logger.error(f"Failed to get documents from collection: {e}")
@@ -138,46 +125,27 @@ class ChromaDBCollection(VectorCollection):
     ) -> None:
         """Update documents in collection."""
         try:
-            update_kwargs = {"ids": ids}
-
-            if documents is not None:
-                update_kwargs["documents"] = documents
-
-            if metadatas is not None:
-                update_kwargs["metadatas"] = metadatas
-
             if embeddings is not None:
                 # Convert numpy arrays to lists for ChromaDB
-                embedding_lists = [
-                    emb.tolist() if isinstance(emb, np.ndarray) else emb
-                    for emb in embeddings
-                ]
-                update_kwargs["embeddings"] = embedding_lists
-
-            self._collection.update(**update_kwargs)
+                embedding_lists = [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings]
+                self._collection.update(
+                    ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas), embeddings=embedding_lists
+                )
+            else:
+                self._collection.update(ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas))
             self.logger.debug(f"Updated {len(ids)} documents in collection")
 
         except Exception as e:
             self.logger.error(f"Failed to update documents in collection: {e}")
             raise
 
-    def delete(
-        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
-    ) -> None:
+    def delete(self, ids: list[str] | None = None, where: dict[str, Any] | None = None) -> None:
         """Delete documents from collection."""
         try:
-            delete_kwargs = {}
-
-            if ids is not None:
-                delete_kwargs["ids"] = ids
-
-            if where is not None:
-                delete_kwargs["where"] = where
-
-            if not delete_kwargs:
+            if ids is None and where is None:
                 raise ValueError("Either ids or where filter must be provided")
 
-            self._collection.delete(**delete_kwargs)
+            self._collection.delete(ids=ids, where=where)
             self.logger.debug("Deleted documents from collection")
 
         except Exception as e:
@@ -206,13 +174,7 @@ class ChromaDBCollection(VectorCollection):
 class ChromaDBDatabase(VectorDatabase):
     """ChromaDB implementation of VectorDatabase protocol."""
 
-    def __init__(
-        self,
-        db_path: str,
-        distance_metric: str = "cosine",
-        persist: bool = True,
-        allow_reset: bool = False,
-    ):
+    def __init__(self, db_path: str, distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = False):
         self.db_path = db_path
         self.distance_metric = distance_metric
         self.persist = persist
@@ -225,7 +187,7 @@ class ChromaDBDatabase(VectorDatabase):
         # Initialize ChromaDB client
         self._client = self._create_client()
 
-    def _create_client(self) -> chromadb.Client:
+    def _create_client(self) -> Any:
         """Create ChromaDB client with appropriate settings."""
         try:
             settings = Settings(
@@ -236,9 +198,7 @@ class ChromaDBDatabase(VectorDatabase):
 
             if self.persist:
                 client = chromadb.PersistentClient(path=self.db_path, settings=settings)
-                self.logger.info(
-                    f"Created persistent ChromaDB client at {self.db_path}"
-                )
+                self.logger.info(f"Created persistent ChromaDB client at {self.db_path}")
             else:
                 client = chromadb.EphemeralClient(settings=settings)
                 self.logger.info("Created ephemeral ChromaDB client")
@@ -249,9 +209,7 @@ class ChromaDBDatabase(VectorDatabase):
             self.logger.error(f"Failed to create ChromaDB client: {e}")
             raise
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
         """Create or get collection."""
         try:
             if reset_if_exists:
@@ -259,18 +217,12 @@ class ChromaDBDatabase(VectorDatabase):
                     self._client.delete_collection(name)
                     self.logger.info(f"Deleted existing collection: {name}")
                 except Exception as e:
-                    self.logger.debug(
-                        f"Collection {name} did not exist for deletion: {e}"
-                    )
+                    self.logger.debug(f"Collection {name} did not exist for deletion: {e}")
 
             # Create or get collection
-            collection = self._client.get_or_create_collection(
-                name=name, metadata={"hnsw:space": self.distance_metric}
-            )
+            collection = self._client.get_or_create_collection(name=name, metadata={"hnsw:space": self.distance_metric})
 
-            self.logger.info(
-                f"Collection '{name}' ready with {self.distance_metric} metric"
-            )
+            self.logger.info(f"Collection '{name}' ready with {self.distance_metric} metric")
             return ChromaDBCollection(collection)
 
         except Exception as e:
@@ -314,9 +266,7 @@ class ChromaDBDatabase(VectorDatabase):
         """Reset entire database."""
         try:
             if not self.allow_reset:
-                raise ValueError(
-                    "Database reset not allowed - check allow_reset setting"
-                )
+                raise ValueError("Database reset not allowed - check allow_reset setting")
 
             self._client.reset()
             self.logger.warning("Database reset - all collections deleted")
@@ -366,7 +316,7 @@ class MockCollection(VectorCollection):
         # Simple mock: return first n_results documents
         doc_items = list(self._documents.items())[:n_results]
 
-        results = {"ids": [[]]}
+        results: dict[str, Any] = {"ids": [[]]}
         if "documents" in include:
             results["documents"] = [[]]
         if "metadatas" in include:
@@ -397,15 +347,11 @@ class MockCollection(VectorCollection):
         include = include or ["documents", "metadatas"]
 
         if ids:
-            doc_items = [
-                (doc_id, self._documents[doc_id])
-                for doc_id in ids
-                if doc_id in self._documents
-            ]
+            doc_items = [(doc_id, self._documents[doc_id]) for doc_id in ids if doc_id in self._documents]
         else:
             doc_items = list(self._documents.items())
 
-        results = {"ids": []}
+        results: dict[str, Any] = {"ids": []}
         if "documents" in include:
             results["documents"] = []
         if "metadatas" in include:
@@ -437,9 +383,7 @@ class MockCollection(VectorCollection):
                 if embeddings:
                     self._documents[doc_id]["embedding"] = embeddings[i]
 
-    def delete(
-        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
-    ) -> None:
+    def delete(self, ids: list[str] | None = None, where: dict[str, Any] | None = None) -> None:
         """Delete documents from mock collection."""
         if ids:
             for doc_id in ids:
@@ -480,9 +424,7 @@ class MockDatabase(VectorDatabase):
         self._collections: dict[str, MockCollection] = {}
         self.logger = logging.getLogger(__name__)
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection:
         """Create or get mock collection."""
         if reset_if_exists and name in self._collections:
             del self._collections[name]
@@ -513,30 +455,14 @@ class MockDatabase(VectorDatabase):
 
 
 def create_chromadb_database(
-    db_path: str,
-    distance_metric: str = "cosine",
-    persist: bool = True,
-    allow_reset: bool = False,
+    db_path: str, distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = False
 ) -> VectorDatabase:
     """Factory function to create ChromaDB database."""
-    return ChromaDBDatabase(
-        db_path=db_path,
-        distance_metric=distance_metric,
-        persist=persist,
-        allow_reset=allow_reset,
-    )
+    return ChromaDBDatabase(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)
 
 
 def create_mock_database(
-    db_path: str = "/tmp/mock_db",
-    distance_metric: str = "cosine",
-    persist: bool = True,
-    allow_reset: bool = True,
+    db_path: str = "/tmp/mock_db", distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = True
 ) -> VectorDatabase:
     """Factory function to create mock database."""
-    return MockDatabase(
-        db_path=db_path,
-        distance_metric=distance_metric,
-        persist=persist,
-        allow_reset=allow_reset,
-    )
+    return MockDatabase(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)

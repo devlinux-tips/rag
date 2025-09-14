@@ -3,12 +3,10 @@ Pure function categorization system with dependency injection.
 Clean architecture with no side effects and deterministic output.
 """
 
-import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Set, Tuple, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class CategoryType(Enum):
@@ -115,9 +113,7 @@ def normalize_query_text(query: str) -> str:
     return normalized
 
 
-def extract_cultural_indicators(
-    query: str, cultural_keywords: dict[str, list[str]]
-) -> list[str]:
+def extract_cultural_indicators(query: str, cultural_keywords: dict[str, list[str]]) -> list[str]:
     """
     Extract cultural indicators from query text.
     Pure function with no side effects.
@@ -140,9 +136,7 @@ def extract_cultural_indicators(
     return indicators
 
 
-def calculate_query_complexity(
-    query: str, complexity_thresholds: dict[str, float]
-) -> QueryComplexity:
+def calculate_query_complexity(query: str, complexity_thresholds: dict[str, float]) -> QueryComplexity:
     """
     Calculate query complexity based on various linguistic features.
     Pure function with no side effects.
@@ -164,17 +158,10 @@ def calculate_query_complexity(
 
     # Check for complex linguistic patterns
     question_words = len(
-        re.findall(
-            r"\b(što|kako|kada|gdje|zašto|tko|koji|what|how|when|where|why|who|which)\b",
-            query.lower(),
-        )
+        re.findall(r"\b(što|kako|kada|gdje|zašto|tko|koji|what|how|when|where|why|who|which)\b", query.lower())
     )
-    conditional_words = len(
-        re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower())
-    )
-    comparative_words = len(
-        re.findall(r"\b(više|manje|bolji|gori|better|worse|more|less)\b", query.lower())
-    )
+    conditional_words = len(re.findall(r"\b(ako|ukoliko|provided|assuming|given)\b", query.lower()))
+    comparative_words = len(re.findall(r"\b(više|manje|bolji|gori|better|worse|more|less)\b", query.lower()))
 
     # Calculate complexity score
     complexity_score = (
@@ -251,10 +238,7 @@ def match_category_patterns(
 
 
 def determine_retrieval_strategy(
-    category: CategoryType,
-    complexity: QueryComplexity,
-    cultural_indicators: list[str],
-    strategy_config: dict[str, str],
+    category: CategoryType, complexity: QueryComplexity, cultural_indicators: list[str], strategy_config: dict[str, str]
 ) -> str:
     """
     Determine optimal retrieval strategy based on categorization results.
@@ -287,9 +271,7 @@ def determine_retrieval_strategy(
 
     # Default strategy - validate required key
     if "default" not in strategy_config:
-        raise ValueError(
-            "Missing 'default' strategy in retrieval_strategies configuration"
-        )
+        raise ValueError("Missing 'default' strategy in retrieval_strategies configuration")
     return strategy_config["default"]
 
 
@@ -339,9 +321,7 @@ def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryM
                     category_priority = category_settings["priority"]
 
             # Choose this match if it has higher priority, or same priority but higher confidence
-            if category_priority > best_priority or (
-                category_priority == best_priority and best_match is None
-            ):
+            if category_priority > best_priority or (category_priority == best_priority and best_match is None):
                 best_match = (category, confidence, patterns)
                 best_priority = category_priority
 
@@ -377,12 +357,7 @@ def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryM
 class QueryCategorizer:
     """Query categorizer with dependency injection for testability."""
 
-    def __init__(
-        self,
-        language: str,
-        config_provider: ConfigProvider,
-        logger_provider: LoggerProvider | None = None,
-    ):
+    def __init__(self, language: str, config_provider: ConfigProvider, logger_provider: LoggerProvider | None = None):
         """Initialize categorizer with injected dependencies."""
         self.language = language
         self._config_provider = config_provider
@@ -396,17 +371,11 @@ class QueryCategorizer:
         if "patterns" not in config_data:
             raise ValueError("Missing 'patterns' in categorization configuration")
         if "cultural_keywords" not in config_data:
-            raise ValueError(
-                "Missing 'cultural_keywords' in categorization configuration"
-            )
+            raise ValueError("Missing 'cultural_keywords' in categorization configuration")
         if "complexity_thresholds" not in config_data:
-            raise ValueError(
-                "Missing 'complexity_thresholds' in categorization configuration"
-            )
+            raise ValueError("Missing 'complexity_thresholds' in categorization configuration")
         if "retrieval_strategies" not in config_data:
-            raise ValueError(
-                "Missing 'retrieval_strategies' in categorization configuration"
-            )
+            raise ValueError("Missing 'retrieval_strategies' in categorization configuration")
 
         self._config = CategorizationConfig(
             categories=config_data["categories"],
@@ -458,9 +427,7 @@ class QueryCategorizer:
 # ================================
 
 
-def create_query_categorizer(
-    language: str, config_provider: ConfigProvider | None = None
-) -> QueryCategorizer:
+def create_query_categorizer(language: str, config_provider: ConfigProvider | None = None) -> QueryCategorizer:
     """
     Create a QueryCategorizer instance with proper dependency injection.
 

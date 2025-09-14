@@ -3,10 +3,9 @@ Provider implementations for query processor dependency injection.
 Production and mock providers for testable query processing system.
 """
 
-import logging
-from typing import Any, Dict, List, Optional, Protocol, Set
+from typing import Any, Protocol
 
-from .query_processor import LanguageDataProvider, QueryProcessingConfig
+from .query_processor import QueryProcessingConfig
 
 # ================================
 # PROTOCOLS
@@ -20,9 +19,7 @@ class ConfigProvider(Protocol):
         """Load configuration by name."""
         ...
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get language-specific configuration."""
         ...
 
@@ -38,19 +35,15 @@ class ProductionLanguageDataProvider:
     def __init__(self, config_provider: ConfigProvider):
         """Initialize with configuration provider."""
         self.config_provider = config_provider
-        self._cache = {}
+        self._cache: dict[str, Any] = {}
 
     def get_stop_words(self, language: str) -> set[str]:
         """Get stop words for language."""
         cache_key = f"stop_words_{language}"
         if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config(
-                "language_data", language
-            )
+            lang_config = self.config_provider.get_language_specific_config("language_data", language)
             if "stop_words" not in lang_config:
-                raise ValueError(
-                    f"Missing 'stop_words' in language configuration for {language}"
-                )
+                raise ValueError(f"Missing 'stop_words' in language configuration for {language}")
             stop_words = lang_config["stop_words"]
             self._cache[cache_key] = set(stop_words)
 
@@ -60,13 +53,9 @@ class ProductionLanguageDataProvider:
         """Get question patterns for language."""
         cache_key = f"question_patterns_{language}"
         if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config(
-                "language_data", language
-            )
+            lang_config = self.config_provider.get_language_specific_config("language_data", language)
             if "question_patterns" not in lang_config:
-                raise ValueError(
-                    f"Missing 'question_patterns' in language configuration for {language}"
-                )
+                raise ValueError(f"Missing 'question_patterns' in language configuration for {language}")
             patterns = lang_config["question_patterns"]
             self._cache[cache_key] = patterns
 
@@ -76,13 +65,9 @@ class ProductionLanguageDataProvider:
         """Get synonym groups for language."""
         cache_key = f"synonym_groups_{language}"
         if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config(
-                "language_data", language
-            )
+            lang_config = self.config_provider.get_language_specific_config("language_data", language)
             if "synonym_groups" not in lang_config:
-                raise ValueError(
-                    f"Missing 'synonym_groups' in language configuration for {language}"
-                )
+                raise ValueError(f"Missing 'synonym_groups' in language configuration for {language}")
             synonyms = lang_config["synonym_groups"]
             self._cache[cache_key] = synonyms
 
@@ -92,13 +77,9 @@ class ProductionLanguageDataProvider:
         """Get morphological patterns for language."""
         cache_key = f"morphological_patterns_{language}"
         if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config(
-                "language_data", language
-            )
+            lang_config = self.config_provider.get_language_specific_config("language_data", language)
             if "morphological_patterns" not in lang_config:
-                raise ValueError(
-                    f"Missing 'morphological_patterns' in language configuration for {language}"
-                )
+                raise ValueError(f"Missing 'morphological_patterns' in language configuration for {language}")
             patterns = lang_config["morphological_patterns"]
             self._cache[cache_key] = patterns
 
@@ -132,42 +113,32 @@ class MockLanguageDataProvider:
         """Set mock synonym groups for language."""
         self.synonym_groups[language] = synonyms
 
-    def set_morphological_patterns(
-        self, language: str, patterns: dict[str, list[str]]
-    ) -> None:
+    def set_morphological_patterns(self, language: str, patterns: dict[str, list[str]]) -> None:
         """Set mock morphological patterns for language."""
         self.morphological_patterns[language] = patterns
 
     def get_stop_words(self, language: str) -> set[str]:
         """Get mock stop words for language."""
         if language not in self.stop_words:
-            raise ValueError(
-                f"Mock language data not configured for language: {language}"
-            )
+            raise ValueError(f"Mock language data not configured for language: {language}")
         return self.stop_words[language]
 
     def get_question_patterns(self, language: str) -> list[str]:
         """Get mock question patterns for language."""
         if language not in self.question_patterns:
-            raise ValueError(
-                f"Mock question patterns not configured for language: {language}"
-            )
+            raise ValueError(f"Mock question patterns not configured for language: {language}")
         return self.question_patterns[language]
 
     def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get mock synonym groups for language."""
         if language not in self.synonym_groups:
-            raise ValueError(
-                f"Mock synonym groups not configured for language: {language}"
-            )
+            raise ValueError(f"Mock synonym groups not configured for language: {language}")
         return self.synonym_groups[language]
 
     def get_morphological_patterns(self, language: str) -> dict[str, list[str]]:
         """Get mock morphological patterns for language."""
         if language not in self.morphological_patterns:
-            raise ValueError(
-                f"Mock morphological patterns not configured for language: {language}"
-            )
+            raise ValueError(f"Mock morphological patterns not configured for language: {language}")
         return self.morphological_patterns[language]
 
 
@@ -183,9 +154,7 @@ class MockConfigProvider:
         """Set mock configuration."""
         self.configs[config_name] = config
 
-    def set_language_config(
-        self, section: str, language: str, config: dict[str, Any]
-    ) -> None:
+    def set_language_config(self, section: str, language: str, config: dict[str, Any]) -> None:
         """Set mock language-specific configuration."""
         key = f"{section}_{language}"
         self.language_configs[key] = config
@@ -196,15 +165,11 @@ class MockConfigProvider:
             raise ValueError(f"Mock configuration not found: {config_name}")
         return self.configs[config_name]
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get mock language-specific configuration."""
         key = f"{section}_{language}"
         if key not in self.language_configs:
-            raise ValueError(
-                f"Mock language-specific configuration not found: {section} for language {language}"
-            )
+            raise ValueError(f"Mock language-specific configuration not found: {section} for language {language}")
         return self.language_configs[key]
 
 
@@ -213,9 +178,7 @@ class MockConfigProvider:
 # ================================
 
 
-def create_default_config(
-    language: str = "hr", config_provider: ConfigProvider | None = None
-) -> QueryProcessingConfig:
+def create_default_config(language: str = "hr", config_provider: ConfigProvider | None = None) -> QueryProcessingConfig:
     """
     Create default query processing configuration.
 
@@ -247,14 +210,10 @@ def create_default_config(
     else:
         config_dict = default_config
 
-    return QueryProcessingConfig.from_config(
-        config_dict=config_dict, config_provider=config_provider, language=language
-    )
+    return QueryProcessingConfig.from_validated_config(main_config=config_dict, language=language)
 
 
-def create_production_language_provider(
-    config_provider: ConfigProvider,
-) -> ProductionLanguageDataProvider:
+def create_production_language_provider(config_provider: ConfigProvider) -> ProductionLanguageDataProvider:
     """Create production language data provider."""
     return ProductionLanguageDataProvider(config_provider)
 
@@ -276,32 +235,14 @@ def create_mock_language_provider(
 
     # Set default data for language
     if language == "hr":
-        provider.set_stop_words(
-            "hr", {"i", "a", "u", "na", "za", "od", "do", "iz", "s", "sa", "se"}
-        )
-        provider.set_question_patterns(
-            "hr", [r"^što\s", r"^kako\s", r"^kada\s", r"^gdje\s", r"^zašto\s"]
-        )
-        provider.set_synonym_groups(
-            "hr",
-            {
-                "brz": ["brži", "brzo", "hitno"],
-                "dobro": ["odlično", "izvrsno", "super"],
-            },
-        )
+        provider.set_stop_words("hr", {"i", "a", "u", "na", "za", "od", "do", "iz", "s", "sa", "se"})
+        provider.set_question_patterns("hr", [r"^što\s", r"^kako\s", r"^kada\s", r"^gdje\s", r"^zašto\s"])
+        provider.set_synonym_groups("hr", {"brz": ["brži", "brzo", "hitno"], "dobro": ["odlično", "izvrsno", "super"]})
     else:  # English
-        provider.set_stop_words(
-            "en", {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"}
-        )
-        provider.set_question_patterns(
-            "en", [r"^what\s", r"^how\s", r"^when\s", r"^where\s", r"^why\s"]
-        )
+        provider.set_stop_words("en", {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"})
+        provider.set_question_patterns("en", [r"^what\s", r"^how\s", r"^when\s", r"^where\s", r"^why\s"])
         provider.set_synonym_groups(
-            "en",
-            {
-                "fast": ["quick", "rapid", "swift"],
-                "good": ["great", "excellent", "awesome"],
-            },
+            "en", {"fast": ["quick", "rapid", "swift"], "good": ["great", "excellent", "awesome"]}
         )
 
     # Apply custom data if provided

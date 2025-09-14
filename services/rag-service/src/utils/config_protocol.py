@@ -5,7 +5,7 @@ This module defines the ConfigProvider protocol to enable dependency injection
 for configuration loading, making the system testable while maintaining clean APIs.
 """
 
-from typing import Any, Dict, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 
 @runtime_checkable
@@ -28,9 +28,7 @@ class ConfigProvider(Protocol):
         """Get configuration for specified language."""
         ...
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get specific configuration section for specified language."""
         ...
 
@@ -60,9 +58,7 @@ class ProductionConfigProvider:
         """Get configuration for specified language."""
         return self._config_loader.get_language_config(language)
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get specific configuration section for specified language."""
         return self._config_loader.get_language_specific_config(section, language)
 
@@ -70,11 +66,11 @@ class ProductionConfigProvider:
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, mock_configs: dict[str, dict[str, Any]] = None):
+    def __init__(self, mock_configs: dict[str, dict[str, Any]] | None = None):
         """Initialize with mock configuration data."""
         self.mock_configs = mock_configs or {}
-        self.mock_language_configs = {}
-        self.mock_shared_config = {}
+        self.mock_language_configs: dict[str, dict[str, Any]] = {}
+        self.mock_shared_config: dict[str, Any] = {}
 
     def set_config(self, config_name: str, config_data: dict[str, Any]) -> None:
         """Set mock configuration data."""
@@ -99,7 +95,7 @@ class MockConfigProvider:
         config = self.load_config(config_name)
         if section not in config:
             raise KeyError(f"Mock section '{section}' not found in '{config_name}'")
-        return config[section]
+        return cast(dict[str, Any], config[section])
 
     def get_shared_config(self) -> dict[str, Any]:
         """Get mock shared configuration."""
@@ -109,18 +105,14 @@ class MockConfigProvider:
         """Get mock language configuration."""
         if language not in self.mock_language_configs:
             raise KeyError(f"Mock language config '{language}' not found")
-        return self.mock_language_configs[language]
+        return cast(dict[str, Any], self.mock_language_configs[language])
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get mock language-specific configuration section."""
         language_config = self.get_language_config(language)
         if section not in language_config:
-            raise KeyError(
-                f"Mock section '{section}' not found in language '{language}'"
-            )
-        return language_config[section]
+            raise KeyError(f"Mock section '{section}' not found in language '{language}'")
+        return cast(dict[str, Any], language_config[section])
 
 
 # Global default provider - can be overridden for testing

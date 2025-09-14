@@ -8,7 +8,7 @@ Corresponds to the SurrealDB schema in schema/multitenant_schema.surql
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from src.retrieval.categorization import CategoryType
 
@@ -103,11 +103,11 @@ class Tenant:
 
     def get_max_documents(self) -> int:
         """Get maximum documents allowed for this tenant."""
-        return self.settings["max_total_documents"]
+        return cast(int, self.settings["max_total_documents"])
 
     def get_max_documents_per_user(self) -> int:
         """Get maximum documents per user for this tenant."""
-        return self.settings["max_documents_per_user"]
+        return cast(int, self.settings["max_documents_per_user"])
 
 
 @dataclass
@@ -131,7 +131,7 @@ class User:
         """Get user's preferred languages, fallback to system supported."""
         user_prefs = self.settings["preferred_languages"]
         if user_prefs:
-            return user_prefs
+            return cast(list[str], user_prefs)
 
         # Fallback to system default
         from src.utils.config_loader import get_shared_config
@@ -152,14 +152,11 @@ class User:
 
     def can_promote_documents_to_tenant(self) -> bool:
         """Check if user can promote documents to tenant scope."""
-        return self.status == UserStatus.ACTIVE and self.role in [
-            UserRole.ADMIN,
-            UserRole.MEMBER,
-        ]
+        return self.status == UserStatus.ACTIVE and self.role in [UserRole.ADMIN, UserRole.MEMBER]
 
     def get_preferred_categories(self) -> list[str]:
         """Get user's preferred document categories."""
-        return self.settings["preferred_categories"]
+        return cast(list[str], self.settings["preferred_categories"])
 
 
 @dataclass
@@ -197,9 +194,7 @@ class Document:
 
     def can_be_promoted_to_tenant(self) -> bool:
         """Check if document can be promoted to tenant scope."""
-        return (
-            self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
-        )
+        return self.scope == DocumentScope.USER and self.status == DocumentStatus.PROCESSED
 
     def get_display_name(self) -> str:
         """Get human-readable display name."""
@@ -245,9 +240,7 @@ class SearchQuery:
     primary_category: CategoryType | None = None
     secondary_categories: list[CategoryType] = field(default_factory=list)
     retrieval_strategy: str | None = None  # String strategy name
-    scope_searched: list[DocumentScope] = field(
-        default_factory=lambda: [DocumentScope.USER, DocumentScope.TENANT]
-    )
+    scope_searched: list[DocumentScope] = field(default_factory=lambda: [DocumentScope.USER, DocumentScope.TENANT])
     results_count: int = 0
     response_time_ms: int = 0
     satisfaction_rating: int | None = None
@@ -256,9 +249,7 @@ class SearchQuery:
 
     def add_timing(self, start_time: datetime):
         """Add response timing to query."""
-        self.response_time_ms = int(
-            (datetime.now() - start_time).total_seconds() * 1000
-        )
+        self.response_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
 
 @dataclass
@@ -288,9 +279,7 @@ class CategorizationTemplate:
         score = 0.0
 
         # Check keyword matches
-        keyword_matches = sum(
-            1 for keyword in self.keywords if keyword.lower() in query_lower
-        )
+        keyword_matches = sum(1 for keyword in self.keywords if keyword.lower() in query_lower)
         if self.keywords:
             score += (keyword_matches / len(self.keywords)) * 0.6
 
@@ -436,13 +425,7 @@ DEFAULT_DEVELOPMENT_USER = User(
     password_hash="$2b$12$dummy_hash_for_development",
     role=UserRole.ADMIN,
     status=UserStatus.ACTIVE,
-    settings={
-        "preferred_categories": ["technical", "business"],
-        "auto_categorize": True,
-        "search_both_scopes": True,
-    },
+    settings={"preferred_categories": ["technical", "business"], "auto_categorize": True, "search_both_scopes": True},
 )
 
-DEFAULT_DEVELOPMENT_CONTEXT = TenantUserContext(
-    tenant=DEFAULT_DEVELOPMENT_TENANT, user=DEFAULT_DEVELOPMENT_USER
-)
+DEFAULT_DEVELOPMENT_CONTEXT = TenantUserContext(tenant=DEFAULT_DEVELOPMENT_TENANT, user=DEFAULT_DEVELOPMENT_USER)

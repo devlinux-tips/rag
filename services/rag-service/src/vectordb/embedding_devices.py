@@ -4,9 +4,8 @@ Provides testable device detection abstraction layer.
 """
 
 import logging
-from typing import Any, Dict, Optional
 
-from .embeddings import DeviceDetector, DeviceInfo
+from .embeddings import DeviceInfo
 
 
 class TorchDeviceDetector:
@@ -24,9 +23,7 @@ class TorchDeviceDetector:
             if self.is_device_available(preferred_device):
                 return self._get_device_info(preferred_device)
             else:
-                self.logger.warning(
-                    f"Preferred device {preferred_device} not available, auto-detecting"
-                )
+                self.logger.warning(f"Preferred device {preferred_device} not available, auto-detecting")
 
         # Auto-detection logic
         # Priority: MPS (Apple Silicon) > CUDA (NVIDIA) > CPU
@@ -55,9 +52,7 @@ class TorchDeviceDetector:
             import torch
 
             return (
-                hasattr(torch.backends, "mps")
-                and torch.backends.mps.is_available()
-                and torch.backends.mps.is_built()
+                hasattr(torch.backends, "mps") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
             )
         except Exception:
             return False
@@ -167,10 +162,7 @@ class TorchDeviceDetector:
         except Exception as e:
             self.logger.error(f"Failed to get CUDA device info: {e}")
             return DeviceInfo(
-                device_type="cuda",
-                device_name="CUDA Device",
-                available_memory=None,
-                device_properties={},
+                device_type="cuda", device_name="CUDA Device", available_memory=None, device_properties={}
             )
 
     def _get_cpu_info(self) -> DeviceInfo:
@@ -220,10 +212,7 @@ class MockDeviceDetector:
         self.available_devices = {"cpu"}
         self.device_infos = {
             "cpu": DeviceInfo(
-                device_type="cpu",
-                device_name="Mock CPU",
-                available_memory=8192,
-                device_properties={"cores": 4},
+                device_type="cpu", device_name="Mock CPU", available_memory=8192, device_properties={"cores": 4}
             )
         }
         self.best_device = "cpu"
@@ -256,9 +245,7 @@ class MockDeviceDetector:
 
     def detect_best_device(self, preferred_device: str = "auto") -> DeviceInfo:
         """Mock device detection."""
-        self.call_log.append(
-            {"method": "detect_best_device", "preferred_device": preferred_device}
-        )
+        self.call_log.append({"method": "detect_best_device", "preferred_device": preferred_device})
 
         if self.should_raise:
             exception = self.should_raise

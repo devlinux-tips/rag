@@ -11,12 +11,11 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.pipeline.rag_system import RAGSystem, create_rag_system
+from src.pipeline.rag_system import RAGSystem
 
 
 async def process_language_documents(
@@ -47,12 +46,12 @@ async def process_language_documents(
     supported_extensions = [".pdf", ".docx", ".txt", ".html", ".md"]
     if file_patterns:
         # Use custom patterns
-        files = []
+        files: list[Path] = []
         for pattern in file_patterns:
             files.extend(source_path.glob(pattern))
     else:
         # Use default extensions
-        files = []
+        files: list[Path] = []
         for ext in supported_extensions:
             files.extend(source_path.glob(f"*{ext}"))
 
@@ -64,7 +63,8 @@ async def process_language_documents(
     print(f"🗣️  Processing with language: {language}")
 
     # Create RAG system for this language
-    system = await create_rag_system(language=language)
+    system = RAGSystem(language=language)
+    await system.initialize()
 
     try:
         # Convert file paths to strings

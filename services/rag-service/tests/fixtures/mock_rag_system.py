@@ -5,7 +5,7 @@ Moved from src/pipeline/rag_system.py to proper testing location.
 
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 class MockDocumentExtractor:

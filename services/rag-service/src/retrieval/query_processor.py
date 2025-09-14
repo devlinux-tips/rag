@@ -7,7 +7,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Set
+from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
 
 from ..utils.config_models import QueryProcessingConfig
 
@@ -18,10 +18,7 @@ if TYPE_CHECKING:
 
 
 def normalize_text(
-    text: str,
-    normalize_case: bool = True,
-    normalize_quotes: bool = True,
-    normalize_punctuation: bool = True,
+    text: str, normalize_case: bool = True, normalize_quotes: bool = True, normalize_punctuation: bool = True
 ) -> str:
     """
     Normalize text using pure transformations (pure function).
@@ -88,10 +85,7 @@ def classify_query_by_patterns(query: str, pattern_config: dict[str, list[str]])
 
 
 def extract_keywords_from_text(
-    text: str,
-    stop_words: set[str] = None,
-    min_word_length: int = 2,
-    remove_stopwords: bool = True,
+    text: str, stop_words: set[str] | None = None, min_word_length: int = 2, remove_stopwords: bool = True
 ) -> list[str]:
     """
     Extract keywords from text (pure function).
@@ -132,9 +126,7 @@ def extract_keywords_from_text(
 
 
 def expand_terms_with_synonyms(
-    keywords: list[str],
-    synonym_groups: dict[str, list[str]],
-    max_expanded_terms: int = 10,
+    keywords: list[str], synonym_groups: dict[str, list[str]], max_expanded_terms: int = 10
 ) -> list[str]:
     """
     Expand keywords with synonyms (pure function).
@@ -167,11 +159,7 @@ def expand_terms_with_synonyms(
 
 
 def calculate_query_confidence(
-    original_query: str,
-    processed_query: str,
-    keywords: list[str],
-    query_type: str,
-    patterns_matched: int = 0,
+    original_query: str, processed_query: str, keywords: list[str], query_type: str, patterns_matched: int = 0
 ) -> float:
     """
     Calculate confidence score for query processing (pure function).
@@ -211,7 +199,7 @@ def calculate_query_confidence(
 
 
 def generate_query_filters(
-    query: str, context: dict[str, Any], filter_config: dict[str, Any] = None
+    query: str, context: dict[str, Any], filter_config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """
     Generate retrieval filters from query and context (pure function).
@@ -349,14 +337,12 @@ class MultilingualQueryProcessor:
         self.logger = logger or logging.getLogger(__name__)
 
         # Cache language data if provider available
-        self._stop_words = None
-        self._question_patterns = None
-        self._synonym_groups = None
-        self._morphological_patterns = None
+        self._stop_words: set[str] | None = None
+        self._question_patterns: dict[str, list[str]] | None = None
+        self._synonym_groups: dict[str, list[str]] | None = None
+        self._morphological_patterns: dict[str, list[str]] | None = None
 
-    def process_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: dict[str, Any] | None = None) -> ProcessedQuery:
         """
         Process a query for multilingual retrieval.
 
@@ -376,17 +362,12 @@ class MultilingualQueryProcessor:
 
         # Step 1: Preprocess text using pure function
         processed_query = normalize_text(
-            query,
-            normalize_case=self.config.normalize_case,
-            normalize_quotes=True,
-            normalize_punctuation=True,
+            query, normalize_case=self.config.normalize_case, normalize_quotes=True, normalize_punctuation=True
         )
 
         # Step 2: Spell check if enabled and available
         if self.config.enable_spell_check and self.spell_checker:
-            processed_query = self.spell_checker.check_and_correct(
-                processed_query, self.config.language
-            )
+            processed_query = self.spell_checker.check_and_correct(processed_query, self.config.language)
 
         # Step 3: Classify query type using pure function
         question_patterns = self._get_question_patterns()
@@ -407,15 +388,11 @@ class MultilingualQueryProcessor:
         if self.config.expand_synonyms:
             synonym_groups = self._get_synonym_groups()
             expanded_terms = expand_terms_with_synonyms(
-                keywords,
-                synonym_groups=synonym_groups,
-                max_expanded_terms=self.config.max_expanded_terms,
+                keywords, synonym_groups=synonym_groups, max_expanded_terms=self.config.max_expanded_terms
             )
 
         # Step 6: Generate filters using pure function
-        filters = generate_query_filters(
-            processed_query, context, filter_config=self.filter_config
-        )
+        filters = generate_query_filters(processed_query, context, filter_config=self.filter_config)
 
         # Step 7: Calculate confidence using pure function
         confidence = calculate_query_confidence(
@@ -428,13 +405,7 @@ class MultilingualQueryProcessor:
 
         # Create metadata
         metadata = {
-            "processing_steps": [
-                "preprocess",
-                "classify",
-                "extract",
-                "expand",
-                "filter",
-            ],
+            "processing_steps": ["preprocess", "classify", "extract", "expand", "filter"],
             "language": self.config.language,
             "original_length": len(original_query),
             "processed_length": len(processed_query),
@@ -465,9 +436,7 @@ class MultilingualQueryProcessor:
         """Get stop words with caching."""
         if self._stop_words is None:
             if self.language_data_provider:
-                self._stop_words = self.language_data_provider.get_stop_words(
-                    self.config.language
-                )
+                self._stop_words = self.language_data_provider.get_stop_words(self.config.language)
             else:
                 # Fallback to common stop words
                 self._stop_words = {
@@ -493,11 +462,7 @@ class MultilingualQueryProcessor:
         """Get question patterns with caching."""
         if self._question_patterns is None:
             if self.language_data_provider:
-                self._question_patterns = (
-                    self.language_data_provider.get_question_patterns(
-                        self.config.language
-                    )
-                )
+                self._question_patterns = self.language_data_provider.get_question_patterns(self.config.language)
             else:
                 # Fallback to basic patterns
                 self._question_patterns = {
@@ -513,9 +478,7 @@ class MultilingualQueryProcessor:
         """Get synonym groups with caching."""
         if self._synonym_groups is None:
             if self.language_data_provider:
-                self._synonym_groups = self.language_data_provider.get_synonym_groups(
-                    self.config.language
-                )
+                self._synonym_groups = self.language_data_provider.get_synonym_groups(self.config.language)
             else:
                 # Fallback to empty synonyms
                 self._synonym_groups = {}
@@ -553,9 +516,7 @@ class MultilingualQueryProcessor:
 
 
 def create_query_processor(
-    main_config: dict[str, Any],
-    language: str = "hr",
-    config_provider: Optional["ConfigProvider"] = None,
+    main_config: dict[str, Any], language: str = "hr", config_provider: Optional["ConfigProvider"] = None
 ) -> MultilingualQueryProcessor:
     """
     Create a MultilingualQueryProcessor with validated configuration.
@@ -569,9 +530,7 @@ def create_query_processor(
         Configured MultilingualQueryProcessor instance
     """
     # Create configuration from validated config - no fallbacks needed
-    config = QueryProcessingConfig.from_validated_config(
-        main_config=main_config, language=language
-    )
+    config = QueryProcessingConfig.from_validated_config(main_config=main_config, language=language)
 
     # Create language data provider (can be mocked in tests)
     language_data_provider = None
@@ -582,9 +541,7 @@ def create_query_processor(
     filter_config = {}
     if config_provider:
         try:
-            language_config = config_provider.get_language_specific_config(
-                "query_filters", language
-            )
+            language_config = config_provider.get_language_specific_config("query_filters", language)
             if "filters" not in language_config:
                 raise ValueError("Missing 'filters' in language configuration")
             filter_config = language_config["filters"]
@@ -594,9 +551,7 @@ def create_query_processor(
         filter_config = main_config["query_filters"]
 
     return MultilingualQueryProcessor(
-        config=config,
-        language_data_provider=language_data_provider,
-        filter_config=filter_config,
+        config=config, language_data_provider=language_data_provider, filter_config=filter_config
     )
 
 
@@ -609,14 +564,14 @@ class ProductionLanguageDataProvider:
     def __init__(self, config_provider: "ConfigProvider"):
         """Initialize with configuration provider."""
         self.config_provider = config_provider
-        self._cache = {}
+        self._cache: dict[str, Any] = {}
 
     def get_stop_words(self, language: str) -> set[str]:
         """Get stop words for language."""
         cache_key = f"stop_words_{language}"
         if cache_key not in self._cache:
             try:
-                shared_config = self.config_provider.get_language_shared(language)
+                shared_config = self.config_provider.get_language_config(language)
                 # Direct access - ConfigValidator guarantees existence
                 stopwords_config = shared_config["stopwords"]
                 words = stopwords_config["words"]
@@ -624,27 +579,27 @@ class ProductionLanguageDataProvider:
             except (KeyError, AttributeError):
                 self._cache[cache_key] = set()
 
-        return self._cache[cache_key]
+        return cast(set[str], self._cache[cache_key])
 
     def get_question_patterns(self, language: str) -> dict[str, list[str]]:
         """Get question classification patterns for language."""
         cache_key = f"question_patterns_{language}"
         if cache_key not in self._cache:
             try:
-                shared_config = self.config_provider.get_language_shared(language)
+                shared_config = self.config_provider.get_language_config(language)
                 # Direct access - ConfigValidator guarantees existence
                 self._cache[cache_key] = shared_config["question_patterns"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
-        return self._cache[cache_key]
+        return cast(dict[str, list[str]], self._cache[cache_key])
 
     def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get synonym groups for language."""
         cache_key = f"synonym_groups_{language}"
         if cache_key not in self._cache:
             try:
-                shared_config = self.config_provider.get_language_shared(language)
+                shared_config = self.config_provider.get_language_config(language)
                 # Direct access - ConfigValidator guarantees existence if synonym_groups exists in config
                 if "synonym_groups" not in shared_config:
                     raise ValueError("Missing 'synonym_groups' in shared configuration")
@@ -652,21 +607,19 @@ class ProductionLanguageDataProvider:
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
-        return self._cache[cache_key]
+        return cast(dict[str, list[str]], self._cache[cache_key])
 
     def get_morphological_patterns(self, language: str) -> dict[str, Any]:
         """Get morphological patterns for language."""
         cache_key = f"morphological_patterns_{language}"
         if cache_key not in self._cache:
             try:
-                shared_config = self.config_provider.get_language_shared(language)
+                shared_config = self.config_provider.get_language_config(language)
                 # Direct access - ConfigValidator guarantees existence if morphological_patterns exists in config
                 if "morphological_patterns" not in shared_config:
-                    raise ValueError(
-                        "Missing 'morphological_patterns' in shared configuration"
-                    )
+                    raise ValueError("Missing 'morphological_patterns' in shared configuration")
                 self._cache[cache_key] = shared_config["morphological_patterns"]
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 
-        return self._cache[cache_key]
+        return cast(dict[str, Any], self._cache[cache_key])

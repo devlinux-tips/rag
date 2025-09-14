@@ -4,9 +4,8 @@ Clean architecture with dependency injection and pure functions.
 """
 
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +45,7 @@ def validate_query_for_prompt(query: str) -> str:
     return normalized
 
 
-def truncate_context_chunks(
-    chunks: list[str], max_total_length: int, chunk_separator: str = "\n---\n"
-) -> list[str]:
+def truncate_context_chunks(chunks: list[str], max_total_length: int, chunk_separator: str = "\n---\n") -> list[str]:
     """
     Truncate context chunks to fit within length limit.
     Pure function - no side effects, deterministic output.
@@ -103,9 +100,7 @@ def truncate_context_chunks(
 
 
 def format_context_with_headers(
-    chunks: list[str],
-    header_template: str = "Document {index}:",
-    chunk_separator: str = "\n\n",
+    chunks: list[str], header_template: str = "Document {index}:", chunk_separator: str = "\n\n"
 ) -> str:
     """
     Format context chunks with headers and separators.
@@ -137,7 +132,7 @@ def format_context_with_headers(
         try:
             header = header_template.format(index=i)
         except KeyError as e:
-            raise ValueError(f"Invalid header_template: {e}")
+            raise ValueError(f"Invalid header_template: {e}") from e
 
         formatted_part = f"{header}\n{chunk.strip()}"
         formatted_parts.append(formatted_part)
@@ -169,44 +164,27 @@ def classify_query_type(query: str, keyword_patterns: dict[str, list[str]]) -> s
     query_lower = query.lower()
 
     # Check patterns in priority order
-    priority_order = [
-        "tourism",
-        "cultural",
-        "summarization",
-        "comparison",
-        "explanatory",
-        "factual",
-    ]
+    priority_order = ["tourism", "cultural", "summarization", "comparison", "explanatory", "factual"]
 
     for query_type in priority_order:
         if query_type in keyword_patterns:
             keywords = keyword_patterns[query_type]
             if isinstance(keywords, list) and any(
-                keyword.lower() in query_lower
-                for keyword in keywords
-                if isinstance(keyword, str)
+                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
             ):
                 return query_type
 
     # Check remaining patterns
     for query_type, keywords in keyword_patterns.items():
         if query_type not in priority_order and isinstance(keywords, list):
-            if any(
-                keyword.lower() in query_lower
-                for keyword in keywords
-                if isinstance(keyword, str)
-            ):
+            if any(keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)):
                 return query_type
 
     return "default"
 
 
 def build_complete_prompt(
-    system_prompt: str,
-    user_template: str,
-    context_template: str,
-    query: str,
-    context_text: str = "",
+    system_prompt: str, user_template: str, context_template: str, query: str, context_text: str = ""
 ) -> tuple[str, str]:
     """
     Build complete prompt from components.
@@ -249,14 +227,14 @@ def build_complete_prompt(
             formatted_context = context_template.format(context=context_text)
             user_prompt_parts.append(formatted_context)
         except KeyError as e:
-            raise ValueError(f"Invalid context_template: {e}")
+            raise ValueError(f"Invalid context_template: {e}") from e
 
     # Add query
     try:
         formatted_query = user_template.format(query=query)
         user_prompt_parts.append(formatted_query)
     except KeyError as e:
-        raise ValueError(f"Invalid user_template: {e}")
+        raise ValueError(f"Invalid user_template: {e}") from e
 
     user_prompt = "".join(user_prompt_parts)
 
@@ -309,11 +287,7 @@ class PromptConfig:
             raise ValueError("formatting must be dict")
 
         # Validate required formatting keys
-        required_formatting = [
-            "header_template",
-            "chunk_separator",
-            "context_separator",
-        ]
+        required_formatting = ["header_template", "chunk_separator", "context_separator"]
         for key in required_formatting:
             if key not in self.formatting:
                 raise ValueError(f"formatting must contain {key}")
@@ -387,9 +361,7 @@ class MultilingualRAGPrompts:
         """
         if template_name not in self._config.templates:
             available = list(self._config.templates.keys())
-            raise KeyError(
-                f"Template '{template_name}' not found. Available: {available}"
-            )
+            raise KeyError(f"Template '{template_name}' not found. Available: {available}")
 
         return self._config.templates[template_name]
 
@@ -430,9 +402,7 @@ class MultilingualRAGPrompts:
         }
 
         if query_type not in template_mapping:
-            raise ValueError(
-                f"Unknown query type '{query_type}'. Supported types: {list(template_mapping.keys())}"
-            )
+            raise ValueError(f"Unknown query type '{query_type}'. Supported types: {list(template_mapping.keys())}")
         template_name = template_mapping[query_type]
 
         try:
@@ -458,10 +428,7 @@ class PromptBuilder:
         self.logger = logging.getLogger(__name__)
 
     def build_prompt(
-        self,
-        query: str,
-        context: list[str] | None = None,
-        max_context_length: int = 2000,
+        self, query: str, context: list[str] | None = None, max_context_length: int = 2000
     ) -> tuple[str, str]:
         """
         Build complete prompt from query and context.
@@ -517,16 +484,12 @@ class PromptBuilder:
 
         # Truncate chunks to fit length limit
         truncated_chunks = truncate_context_chunks(
-            chunks=context,
-            max_total_length=max_length,
-            chunk_separator=chunk_separator,
+            chunks=context, max_total_length=max_length, chunk_separator=chunk_separator
         )
 
         # Format with headers
         formatted_context = format_context_with_headers(
-            chunks=truncated_chunks,
-            header_template=header_template,
-            chunk_separator=chunk_separator,
+            chunks=truncated_chunks, header_template=header_template, chunk_separator=chunk_separator
         )
 
         return formatted_context
@@ -535,9 +498,7 @@ class PromptBuilder:
 # ===== FACTORY FUNCTIONS =====
 
 
-def create_multilingual_prompts(
-    config_provider: ConfigProvider, language: str = "hr"
-) -> MultilingualRAGPrompts:
+def create_multilingual_prompts(config_provider: ConfigProvider, language: str = "hr") -> MultilingualRAGPrompts:
     """
     Factory function to create multilingual prompts.
 
@@ -551,9 +512,7 @@ def create_multilingual_prompts(
     return MultilingualRAGPrompts(config_provider, language)
 
 
-def create_prompt_builder_for_query(
-    config_provider: ConfigProvider, query: str, language: str = "hr"
-) -> PromptBuilder:
+def create_prompt_builder_for_query(config_provider: ConfigProvider, query: str, language: str = "hr") -> PromptBuilder:
     """
     Factory function to create prompt builder for specific query.
 

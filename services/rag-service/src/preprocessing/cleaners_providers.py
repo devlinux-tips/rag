@@ -6,7 +6,7 @@ Production and mock providers for configurable text cleaning operations.
 import locale
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, cast
 
 # ================================
 # PRODUCTION PROVIDERS
@@ -36,10 +36,7 @@ class ProductionConfigProvider:
 
     def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get chunking configuration (merged)."""
-        from ..utils.config_loader import (
-            get_chunking_config,
-            get_language_specific_config,
-        )
+        from ..utils.config_loader import get_chunking_config, get_language_specific_config
 
         # Load main chunking config
         main_chunking_config = get_chunking_config()
@@ -62,7 +59,7 @@ class ProductionConfigProvider:
 class ProductionLoggerProvider:
     """Production logger provider using actual Python logging."""
 
-    def __init__(self, logger_name: str = None):
+    def __init__(self, logger_name: str | None = None):
         """Initialize with logger name."""
         self.logger = logging.getLogger(logger_name or __name__)
 
@@ -115,9 +112,7 @@ class MockConfigProvider:
         """Set mock cleaning configuration."""
         self.cleaning_config = config
 
-    def set_document_cleaning_config(
-        self, language: str, config: dict[str, Any]
-    ) -> None:
+    def set_document_cleaning_config(self, language: str, config: dict[str, Any]) -> None:
         """Set mock document cleaning configuration."""
         self.document_cleaning_configs[language] = config
 
@@ -183,11 +178,7 @@ class MockLoggerProvider:
 
     def get_all_messages(self) -> dict[str, list]:
         """Get all logged messages for testing."""
-        return {
-            "debug": self.debug_messages,
-            "info": self.info_messages,
-            "error": self.error_messages,
-        }
+        return {"debug": self.debug_messages, "info": self.info_messages, "error": self.error_messages}
 
     def clear_messages(self) -> None:
         """Clear all logged messages."""
@@ -231,7 +222,7 @@ class MockEnvironmentProvider:
 # ================================
 
 
-def create_config_provider(mock_data: dict[str, Any] = None):
+def create_config_provider(mock_data: dict[str, Any] | None = None):
     """Create configuration provider (production or mock)."""
     if mock_data is not None:
         provider = MockConfigProvider()
@@ -261,7 +252,7 @@ def create_config_provider(mock_data: dict[str, Any] = None):
     return ProductionConfigProvider()
 
 
-def create_logger_provider(logger_name: str = None, mock: bool = False):
+def create_logger_provider(logger_name: str | None = None, mock: bool = False):
     """Create logger provider (production or mock)."""
     if mock:
         return MockLoggerProvider()
@@ -282,7 +273,7 @@ def create_environment_provider(mock: bool = False):
 
 def create_test_providers(
     language: str = "hr",
-    mock_configs: dict[str, Any] = None,
+    mock_configs: dict[str, Any] | None = None,
     mock_logging: bool = True,
     mock_environment: bool = True,
 ):
@@ -325,17 +316,10 @@ def create_test_providers(
                 },
             }
         },
-        "chunking_configs": {
-            language: {
-                "sentence_ending_pattern": r"[.!?]+\s+",
-                "min_sentence_length": 10,
-            }
-        },
+        "chunking_configs": {language: {"sentence_ending_pattern": r"[.!?]+\s+", "min_sentence_length": 10}},
         "shared_language_configs": {
             language: {
-                "stopwords": {
-                    "words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]
-                },
+                "stopwords": {"words": ["i", "je", "da", "se", "na", "za", "od", "do", "u", "s"]},
                 "chars_pattern": r"[^\w\s.,!?:;()-]",
             }
         },
@@ -345,8 +329,8 @@ def create_test_providers(
     if mock_configs:
         # Deep merge the configurations
         for key, value in mock_configs.items():
-            if key in default_configs and isinstance(value, dict):
-                default_configs[key].update(value)
+            if key in default_configs and isinstance(value, dict) and isinstance(default_configs[key], dict):
+                cast(dict[str, Any], default_configs[key]).update(value)
             else:
                 default_configs[key] = value
 
@@ -357,7 +341,7 @@ def create_test_providers(
     return config_provider, logger_provider, environment_provider
 
 
-def create_production_providers(logger_name: str = None):
+def create_production_providers(logger_name: str | None = None):
     """
     Create full set of production providers.
 
@@ -400,10 +384,7 @@ def create_multilingual_test_providers():
             },
         },
         "shared_language_configs": {
-            "hr": {
-                "stopwords": {"words": ["i", "je", "da", "se", "na", "za"]},
-                "chars_pattern": r"[^\w\s.,!?:;()-]",
-            },
+            "hr": {"stopwords": {"words": ["i", "je", "da", "se", "na", "za"]}, "chars_pattern": r"[^\w\s.,!?:;()-]"},
             "en": {
                 "stopwords": {"words": ["the", "and", "or", "but", "in", "on"]},
                 "chars_pattern": r"[^\w\s.,!?:;()-]",
@@ -421,9 +402,7 @@ def create_multilingual_test_providers():
 def create_minimal_test_providers():
     """Create test providers with minimal configurations for fast testing."""
     minimal_configs = {
-        "language_configs": {
-            "test": {"diacritic_map": {"ç": "c"}, "word_char_pattern": r"[a-zA-Z]"}
-        },
+        "language_configs": {"test": {"diacritic_map": {"ç": "c"}, "word_char_pattern": r"[a-zA-Z]"}},
         "cleaning_config": {
             "multiple_whitespace": r"\s+",
             "multiple_linebreaks": r"\n+",
@@ -431,20 +410,10 @@ def create_minimal_test_providers():
             "min_word_char_ratio": 0.1,
         },
         "document_cleaning_configs": {
-            "test": {
-                "header_footer_patterns": [r"^\s*Page\s+\d+\s*$"],
-                "ocr_corrections": {},
-            }
+            "test": {"header_footer_patterns": [r"^\s*Page\s+\d+\s*$"], "ocr_corrections": {}}
         },
-        "chunking_configs": {
-            "test": {"sentence_ending_pattern": r"[.!?]+\s+", "min_sentence_length": 1}
-        },
-        "shared_language_configs": {
-            "test": {
-                "stopwords": {"words": ["the", "and"]},
-                "chars_pattern": r"[^\w\s]",
-            }
-        },
+        "chunking_configs": {"test": {"sentence_ending_pattern": r"[.!?]+\s+", "min_sentence_length": 1}},
+        "shared_language_configs": {"test": {"stopwords": {"words": ["the", "and"]}, "chars_pattern": r"[^\w\s]"}},
     }
 
     return create_test_providers(language="test", mock_configs=minimal_configs)

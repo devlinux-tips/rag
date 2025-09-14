@@ -4,7 +4,7 @@ Includes production implementations and mock providers for testing.
 """
 
 import logging
-from typing import Any, Dict, List, Set
+from typing import Any, cast
 
 from .ranker import ConfigProvider, LanguageFeatures, LanguageProvider
 
@@ -28,85 +28,44 @@ class MockConfigProvider(ConfigProvider):
         self.language_configs = {
             "hr": {
                 "morphology": {
-                    "important_words": [
-                        "zagreb",
-                        "hrvatska",
-                        "dubrovnik",
-                        "važan",
-                        "značajan",
-                    ],
-                    "quality_positive": [
-                        "detaljno",
-                        "sveobuhvatno",
-                        "temeljito",
-                        "precizno",
-                    ],
+                    "important_words": ["zagreb", "hrvatska", "dubrovnik", "važan", "značajan"],
+                    "quality_positive": ["detaljno", "sveobuhvatno", "temeljito", "precizno"],
                     "quality_negative": ["možda", "vjerojatno", "nejasno", "približno"],
-                    "cultural_patterns": [
-                        "biser jadrana",
-                        "perla jadrana",
-                        "adriatic",
-                        "unesco",
-                    ],
-                    "grammar_patterns": [
-                        "\\w+ić\\b",
-                        "\\w+ović\\b",
-                        "\\w+ski\\b",
-                        "\\w+nja\\b",
-                    ],
+                    "cultural_patterns": ["biser jadrana", "perla jadrana", "adriatic", "unesco"],
+                    "grammar_patterns": ["\\w+ić\\b", "\\w+ović\\b", "\\w+ski\\b", "\\w+nja\\b"],
                 }
             },
             "en": {
                 "morphology": {
-                    "important_words": [
-                        "important",
-                        "significant",
-                        "major",
-                        "primary",
-                        "essential",
-                    ],
-                    "quality_positive": [
-                        "detailed",
-                        "comprehensive",
-                        "thorough",
-                        "precise",
-                    ],
-                    "quality_negative": [
-                        "maybe",
-                        "probably",
-                        "unclear",
-                        "approximately",
-                    ],
+                    "important_words": ["important", "significant", "major", "primary", "essential"],
+                    "quality_positive": ["detailed", "comprehensive", "thorough", "precise"],
+                    "quality_negative": ["maybe", "probably", "unclear", "approximately"],
                     "cultural_patterns": ["United States", "UK", "Britain", "American"],
-                    "grammar_patterns": [
-                        "\\w+ing\\b",
-                        "\\w+ly\\b",
-                        "\\w+tion\\b",
-                        "\\w+ness\\b",
-                    ],
+                    "grammar_patterns": ["\\w+ing\\b", "\\w+ly\\b", "\\w+tion\\b", "\\w+ness\\b"],
                 }
             },
         }
 
     def get_ranking_config(self) -> dict[str, Any]:
         """Get ranking configuration for testing."""
-        return self.config_dict.get(
-            "ranking",
-            {
-                "method": "language_enhanced",
-                "enable_diversity": True,
-                "diversity_threshold": 0.8,
-                "boost_recent": False,
-                "boost_authoritative": True,
-                "content_length_factor": True,
-                "keyword_density_factor": True,
-                "language_specific_boost": True,
-            },
+        return cast(
+            dict[str, Any],
+            self.config_dict.get(
+                "ranking",
+                {
+                    "method": "language_enhanced",
+                    "enable_diversity": True,
+                    "diversity_threshold": 0.8,
+                    "boost_recent": False,
+                    "boost_authoritative": True,
+                    "content_length_factor": True,
+                    "keyword_density_factor": True,
+                    "language_specific_boost": True,
+                },
+            ),
         )
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get language-specific configuration for testing."""
         return self.language_configs.get(language, {})
 
@@ -121,7 +80,7 @@ class MockLanguageProvider(LanguageProvider):
     def get_language_features(self, language: str) -> LanguageFeatures:
         """Get language features for testing."""
         if language in self.language_features_cache:
-            return self.language_features_cache[language]
+            return cast(LanguageFeatures, self.language_features_cache[language])
 
         if language == "hr":
             features = LanguageFeatures(
@@ -160,12 +119,7 @@ class MockLanguageProvider(LanguageProvider):
                     r"\b(adriatic|jadransko more)\b",
                     r"\b(unesco|svjetska baština)\b",
                 ],
-                grammar_patterns=[
-                    r"\b\w+ić\b",
-                    r"\b\w+ović\b",
-                    r"\b\w+ski\b",
-                    r"\b\w+nja\b",
-                ],
+                grammar_patterns=[r"\b\w+ić\b", r"\b\w+ović\b", r"\b\w+ski\b", r"\b\w+nja\b"],
                 type_weights={
                     "encyclopedia": 1.2,
                     "academic": 1.1,
@@ -211,12 +165,7 @@ class MockLanguageProvider(LanguageProvider):
                     r"\b(United States|UK|Britain|England|American|British)\b",
                     r"\b(technology|science|research|development|innovation)\b",
                 ],
-                grammar_patterns=[
-                    r"\b\w+ing\b",
-                    r"\b\w+ly\b",
-                    r"\b\w+tion\b",
-                    r"\b\w+ness\b",
-                ],
+                grammar_patterns=[r"\b\w+ing\b", r"\b\w+ly\b", r"\b\w+tion\b", r"\b\w+ness\b"],
                 type_weights={
                     "encyclopedia": 1.2,
                     "academic": 1.1,
@@ -258,10 +207,7 @@ class ProductionConfigProvider(ConfigProvider):
     def __init__(self):
         """Initialize production config provider."""
         # Import here to avoid circular imports
-        from ..utils.config_loader import (
-            get_language_specific_config,
-            get_ranking_config,
-        )
+        from ..utils.config_loader import get_language_specific_config, get_ranking_config
 
         self._get_ranking_config = get_ranking_config
         self._get_language_specific_config = get_language_specific_config
@@ -274,15 +220,11 @@ class ProductionConfigProvider(ConfigProvider):
             raise ValueError("Missing ranking configuration in config files")
         return config
 
-    def get_language_specific_config(
-        self, section: str, language: str
-    ) -> dict[str, Any]:
+    def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get language-specific configuration from config files."""
         config = self._get_language_specific_config(section, language)
         if not config:
-            raise ValueError(
-                f"Missing {section} configuration for language '{language}'"
-            )
+            raise ValueError(f"Missing {section} configuration for language '{language}'")
         return config
 
 
@@ -298,7 +240,7 @@ class ProductionLanguageProvider(LanguageProvider):
         """
         self.config_provider = config_provider
         self.logger = logging.getLogger(__name__)
-        self.features_cache = {}
+        self.features_cache: dict[str, LanguageFeatures] = {}
 
     def get_language_features(self, language: str) -> LanguageFeatures:
         """Get language features from configuration."""
@@ -307,14 +249,10 @@ class ProductionLanguageProvider(LanguageProvider):
 
         try:
             # Get language-specific configuration
-            language_config = self.config_provider.get_language_specific_config(
-                "retrieval", language
-            )
+            language_config = self.config_provider.get_language_specific_config("retrieval", language)
 
             if "morphology" not in language_config:
-                raise ValueError(
-                    f"Missing 'morphology' section in language config for '{language}'"
-                )
+                raise ValueError(f"Missing 'morphology' section in language config for '{language}'")
             morphology = language_config["morphology"]
 
             # Build language features from configuration
@@ -327,9 +265,7 @@ class ProductionLanguageProvider(LanguageProvider):
             self.logger.error(f"Failed to load language features for {language}: {e}")
             raise
 
-    def _build_language_features(
-        self, language: str, morphology: dict[str, Any]
-    ) -> LanguageFeatures:
+    def _build_language_features(self, language: str, morphology: dict[str, Any]) -> LanguageFeatures:
         """Build language features from configuration."""
 
         # Importance words from morphology config
@@ -371,14 +307,7 @@ class ProductionLanguageProvider(LanguageProvider):
         )
 
         # Type weights
-        type_weights = {
-            "encyclopedia": 1.2,
-            "academic": 1.1,
-            "news": 1.0,
-            "blog": 0.9,
-            "forum": 0.8,
-            "social": 0.7,
-        }
+        type_weights = {"encyclopedia": 1.2, "academic": 1.1, "news": 1.0, "blog": 0.9, "forum": 0.8, "social": 0.7}
 
         return LanguageFeatures(
             importance_words=importance_words,
@@ -487,9 +416,27 @@ class ProductionLanguageProvider(LanguageProvider):
     def detect_language_content(self, text: str) -> dict[str, Any]:
         """Detect language from content."""
         # Import here to avoid circular imports
-        from ..preprocessing.cleaners import detect_language_content
+        from ..preprocessing.cleaners import detect_language_content_with_config
 
-        return detect_language_content(text)
+        # Try to detect language using config-based approach
+        try:
+            # Cast config provider to expected type
+            from ..preprocessing.cleaners import ConfigProvider as CleanersConfigProvider
+
+            cleaners_provider = cast(CleanersConfigProvider, self.config_provider)
+            hr_confidence = detect_language_content_with_config(text, "hr", cleaners_provider)
+            en_confidence = detect_language_content_with_config(text, "en", cleaners_provider)
+
+            if hr_confidence > en_confidence:
+                return {"language": "hr", "confidence": hr_confidence}
+            else:
+                return {"language": "en", "confidence": en_confidence}
+        except Exception:
+            # Fallback to simple heuristic
+            if any(char in text.lower() for char in "čćšžđ"):
+                return {"language": "hr", "confidence": 0.9}
+            else:
+                return {"language": "en", "confidence": 0.8}
 
 
 # ===== FACTORY FUNCTIONS =====
@@ -497,21 +444,27 @@ class ProductionLanguageProvider(LanguageProvider):
 
 def create_config_provider() -> ConfigProvider:
     """Create production configuration provider."""
-    return ProductionConfigProvider()
+    from ..utils.config_protocol import ProductionConfigProvider as FullProductionConfigProvider
+
+    return FullProductionConfigProvider()
 
 
-def create_language_provider(
-    config_provider: ConfigProvider = None,
-) -> LanguageProvider:
+def create_language_provider(config_provider: ConfigProvider | None = None) -> LanguageProvider:
     """Create production language provider."""
     if config_provider is None:
         config_provider = create_config_provider()
     return ProductionLanguageProvider(config_provider)
 
 
-def create_mock_config_provider(config_dict: dict[str, Any] = None) -> ConfigProvider:
+def create_mock_config_provider(config_dict: dict[str, Any] | None = None) -> ConfigProvider:
     """Create mock configuration provider for testing."""
-    return MockConfigProvider(config_dict or {})
+    from ..utils.config_protocol import MockConfigProvider as FullMockConfigProvider
+
+    provider = FullMockConfigProvider()
+    if config_dict:
+        for key, value in config_dict.items():
+            provider.set_config(key, value)
+    return provider
 
 
 def create_mock_language_provider() -> LanguageProvider:

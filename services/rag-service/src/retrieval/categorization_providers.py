@@ -3,7 +3,7 @@ Provider implementations for categorization dependency injection.
 Production and mock providers for testable categorization system.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from .categorization import ConfigProvider
 
@@ -19,22 +19,18 @@ class ProductionConfigProvider:
 
     def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
-        return self._config_loader.get_language_specific_config(
-            "categorization", language
-        )
+        return self._config_loader.get_language_specific_config("categorization", language)
 
 
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, mock_configs: dict[str, dict[str, Any]] = None):
+    def __init__(self, mock_configs: dict[str, dict[str, Any]] | None = None):
         """Initialize with mock configuration data."""
         self.mock_configs = mock_configs or {}
         self._default_config = self._create_default_test_config()
 
-    def set_categorization_config(
-        self, language: str, config_data: dict[str, Any]
-    ) -> None:
+    def set_categorization_config(self, language: str, config_data: dict[str, Any]) -> None:
         """Set mock categorization configuration for specified language."""
         self.mock_configs[f"categorization_{language}"] = config_data
 
@@ -66,12 +62,7 @@ class MockConfigProvider:
                 "test_croatian": ["test_hrvatski", "test_zagreb"],
                 "test_english": ["test_english", "test_london"],
             },
-            "complexity_thresholds": {
-                "simple": 1.0,
-                "moderate": 3.0,
-                "complex": 6.0,
-                "analytical": 10.0,
-            },
+            "complexity_thresholds": {"simple": 1.0, "moderate": 3.0, "complex": 6.0, "analytical": 10.0},
             "retrieval_strategies": {
                 "default": "test_hybrid",
                 "category_technical": "test_dense",
@@ -87,24 +78,12 @@ class MockConfigProvider:
 
         if language == "hr":
             # Croatian-specific test patterns
-            base_config["patterns"]["cultural"].extend(
-                ["hrvatska", "dubrovnik", "split", "zagreb"]
-            )
-            base_config["cultural_keywords"]["croatian_test"] = [
-                "test_hr",
-                "test_croatia",
-                "test_jadran",
-            ]
+            base_config["patterns"]["cultural"].extend(["hrvatska", "dubrovnik", "split", "zagreb"])
+            base_config["cultural_keywords"]["croatian_test"] = ["test_hr", "test_croatia", "test_jadran"]
         elif language == "en":
             # English-specific test patterns
-            base_config["patterns"]["cultural"].extend(
-                ["england", "london", "british", "american"]
-            )
-            base_config["cultural_keywords"]["english_test"] = [
-                "test_en",
-                "test_uk",
-                "test_usa",
-            ]
+            base_config["patterns"]["cultural"].extend(["england", "london", "british", "american"])
+            base_config["cultural_keywords"]["english_test"] = ["test_en", "test_uk", "test_usa"]
 
         return base_config
 
@@ -130,7 +109,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages = {"info": [], "debug": [], "warning": []}
+        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "warning": []}
 
     def info(self, message: str) -> None:
         """Capture info message."""
@@ -149,7 +128,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> dict[str, list] | list:
+    def get_messages(self, level: str | None = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             return self.messages.get(level, [])
@@ -178,7 +157,7 @@ def create_config_provider(use_mock: bool = False) -> ConfigProvider:
 
 
 def create_test_categorization_setup(
-    language: str = "hr", custom_config: dict[str, Any] = None
+    language: str = "hr", custom_config: dict[str, Any] | None = None
 ) -> tuple[MockConfigProvider, MockLoggerProvider]:
     """
     Create complete test setup for categorization testing.
@@ -206,12 +185,7 @@ def create_minimal_test_config() -> dict[str, Any]:
         "categories": {"general": {"priority": 1}, "technical": {"priority": 2}},
         "patterns": {"general": ["test"], "technical": ["API", "kod"]},
         "cultural_keywords": {"test": ["test_keyword"]},
-        "complexity_thresholds": {
-            "simple": 2.0,
-            "moderate": 5.0,
-            "complex": 8.0,
-            "analytical": 12.0,
-        },
+        "complexity_thresholds": {"simple": 2.0, "moderate": 5.0, "complex": 8.0, "analytical": 12.0},
         "retrieval_strategies": {"default": "hybrid", "category_technical": "dense"},
     }
 
@@ -229,67 +203,20 @@ def create_complex_test_config() -> dict[str, Any]:
         },
         "patterns": {
             "general": ["what", "how", "why", "što", "kako", "zašto"],
-            "technical": [
-                "API",
-                "database",
-                "server",
-                "kod",
-                "programming",
-                "software",
-                "system",
-            ],
-            "cultural": [
-                "kultura",
-                "tradicija",
-                "povijest",
-                "culture",
-                "tradition",
-                "history",
-            ],
-            "academic": [
-                "research",
-                "study",
-                "analysis",
-                "istraživanje",
-                "studij",
-                "analiza",
-            ],
+            "technical": ["API", "database", "server", "kod", "programming", "software", "system"],
+            "cultural": ["kultura", "tradicija", "povijest", "culture", "tradition", "history"],
+            "academic": ["research", "study", "analysis", "istraživanje", "studij", "analiza"],
             "legal": ["law", "legal", "court", "zakon", "pravni", "sud"],
-            "medical": [
-                "health",
-                "medicine",
-                "treatment",
-                "zdravlje",
-                "medicina",
-                "liječenje",
-            ],
+            "medical": ["health", "medicine", "treatment", "zdravlje", "medicina", "liječenje"],
         },
         "cultural_keywords": {
-            "croatian_culture": [
-                "hrvatski",
-                "hrvatska",
-                "zagreb",
-                "split",
-                "dubrovnik",
-                "jadran",
-            ],
+            "croatian_culture": ["hrvatski", "hrvatska", "zagreb", "split", "dubrovnik", "jadran"],
             "croatian_history": ["povijest", "domovinski rat", "jugoslavija", "ndh"],
             "croatian_language": ["ije", "je", "kajkavski", "čakavski", "štokavski"],
             "english_culture": ["english", "british", "american", "london", "new york"],
-            "general_culture": [
-                "culture",
-                "tradition",
-                "heritage",
-                "kultura",
-                "tradicija",
-            ],
+            "general_culture": ["culture", "tradition", "heritage", "kultura", "tradicija"],
         },
-        "complexity_thresholds": {
-            "simple": 1.5,
-            "moderate": 4.0,
-            "complex": 7.5,
-            "analytical": 11.0,
-        },
+        "complexity_thresholds": {"simple": 1.5, "moderate": 4.0, "complex": 7.5, "analytical": 11.0},
         "retrieval_strategies": {
             "default": "hybrid",
             "category_general": "sparse",

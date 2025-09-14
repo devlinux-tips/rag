@@ -5,7 +5,7 @@ Production and mock providers for configurable document text extraction.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 # ================================
 # PRODUCTION PROVIDERS
@@ -45,7 +45,7 @@ class ProductionFileSystemProvider:
 class ProductionLoggerProvider:
     """Production logger provider using actual Python logging."""
 
-    def __init__(self, logger_name: str = None):
+    def __init__(self, logger_name: str | None = None):
         """Initialize with logger name."""
         self.logger = logging.getLogger(logger_name or __name__)
 
@@ -84,18 +84,14 @@ class MockFileSystemProvider:
         self.file_sizes_mb: dict[str, float] = {}
         self.existing_files: set = set()
 
-    def add_file(self, file_path: str, content: bytes, size_mb: float = None) -> None:
+    def add_file(self, file_path: str, content: bytes, size_mb: float | None = None) -> None:
         """Add a mock file to the file system."""
         self.files[file_path] = content
         self.file_sizes_mb[file_path] = size_mb or len(content) / (1024 * 1024)
         self.existing_files.add(file_path)
 
     def add_text_file(
-        self,
-        file_path: str,
-        content: str,
-        encoding: str = "utf-8",
-        size_mb: float = None,
+        self, file_path: str, content: str, encoding: str = "utf-8", size_mb: float | None = None
     ) -> None:
         """Add a mock text file to the file system."""
         binary_content = content.encode(encoding)
@@ -156,14 +152,14 @@ class MockLoggerProvider:
 # ================================
 
 
-def create_config_provider(mock_config: dict[str, Any] = None):
+def create_config_provider(mock_config: dict[str, Any] | None = None):
     """Create configuration provider (production or mock)."""
     if mock_config is not None:
         return MockConfigProvider(mock_config)
     return ProductionConfigProvider()
 
 
-def create_file_system_provider(mock_files: dict[str, bytes] = None):
+def create_file_system_provider(mock_files: dict[str, bytes] | None = None):
     """Create file system provider (production or mock)."""
     if mock_files is not None:
         provider = MockFileSystemProvider()
@@ -173,7 +169,7 @@ def create_file_system_provider(mock_files: dict[str, bytes] = None):
     return ProductionFileSystemProvider()
 
 
-def create_logger_provider(logger_name: str = None, mock: bool = False):
+def create_logger_provider(logger_name: str | None = None, mock: bool = False):
     """Create logger provider (production or mock)."""
     if mock:
         return MockLoggerProvider()
@@ -186,9 +182,7 @@ def create_logger_provider(logger_name: str = None, mock: bool = False):
 
 
 def create_test_providers(
-    config: dict[str, Any] = None,
-    files: dict[str, bytes] = None,
-    mock_logging: bool = True,
+    config: dict[str, Any] | None = None, files: dict[str, bytes] | None = None, mock_logging: bool = True
 ):
     """
     Create full set of test providers for testing.
@@ -216,7 +210,7 @@ def create_test_providers(
     return config_provider, file_system_provider, logger_provider
 
 
-def create_production_providers(logger_name: str = None):
+def create_production_providers(logger_name: str | None = None):
     """
     Create full set of production providers.
 

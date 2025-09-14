@@ -3,13 +3,12 @@ Pure function hierarchical retrieval system with dependency injection.
 Clean architecture with no side effects and deterministic output.
 """
 
-import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-from .categorization import CategoryMatch, CategoryType
+from .categorization import CategoryMatch
 
 
 class RetrievalStrategyType(Enum):
@@ -75,9 +74,7 @@ class RetrievalConfig:
 class QueryProcessor(Protocol):
     """Protocol for query processing operations."""
 
-    def process_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: dict[str, Any] | None = None) -> ProcessedQuery:
         """Process query into structured format."""
         ...
 
@@ -86,9 +83,7 @@ class QueryProcessor(Protocol):
 class Categorizer(Protocol):
     """Protocol for query categorization operations."""
 
-    def categorize_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> CategoryMatch:
+    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
         """Categorize query and determine retrieval strategy."""
         ...
 
@@ -97,9 +92,7 @@ class Categorizer(Protocol):
 class SearchEngine(Protocol):
     """Protocol for search engine operations."""
 
-    async def search(
-        self, query_text: str, k: int = 5, similarity_threshold: float = 0.3
-    ) -> list[SearchResult]:
+    async def search(self, query_text: str, k: int = 5, similarity_threshold: float = 0.3) -> list[SearchResult]:
         """Execute semantic search."""
         ...
 
@@ -109,10 +102,7 @@ class Reranker(Protocol):
     """Protocol for document reranking operations."""
 
     async def rerank(
-        self,
-        query: str,
-        documents: list[dict[str, Any]],
-        category: str | None = None,
+        self, query: str, documents: list[dict[str, Any]], category: str | None = None
     ) -> list[dict[str, Any]]:
         """Rerank documents based on relevance."""
         ...
@@ -140,9 +130,7 @@ class LoggerProvider(Protocol):
 # ================================
 
 
-def calculate_keyword_boost(
-    content: str, keywords: list[str], boost_weight: float = 0.2
-) -> float:
+def calculate_keyword_boost(content: str, keywords: list[str], boost_weight: float = 0.2) -> float:
     """
     Calculate keyword match boost for content.
     Pure function with no side effects.
@@ -190,18 +178,13 @@ def calculate_technical_boost(content: str, boost_weight: float = 0.1) -> float:
     ]
 
     content_lower = content.lower()
-    technical_score = sum(
-        boost_weight for indicator in technical_indicators if indicator in content_lower
-    )
+    technical_score = sum(boost_weight for indicator in technical_indicators if indicator in content_lower)
 
     return min(technical_score, boost_weight * 5)  # Cap the boost
 
 
 def calculate_temporal_boost(
-    content: str,
-    metadata: dict[str, Any],
-    current_year: int = 2024,
-    boost_weight: float = 0.15,
+    content: str, metadata: dict[str, Any], current_year: int = 2024, boost_weight: float = 0.15
 ) -> float:
     """
     Calculate temporal relevance boost.
@@ -232,9 +215,7 @@ def calculate_temporal_boost(
     ]
 
     content_lower = content.lower()
-    temporal_score = (
-        sum(boost_weight for term in temporal_terms if term in content_lower) * 0.5
-    )  # Limit temporal boost
+    temporal_score = sum(boost_weight for term in temporal_terms if term in content_lower) * 0.5  # Limit temporal boost
 
     # Recent content boost based on metadata
     if "year" in metadata:
@@ -281,14 +262,11 @@ def calculate_faq_boost(content: str, boost_weight: float = 0.1) -> float:
 
     content_lower = content.lower()
     faq_score = (
-        sum(boost_weight for indicator in faq_indicators if indicator in content_lower)
-        * 0.3
+        sum(boost_weight for indicator in faq_indicators if indicator in content_lower) * 0.3
     )  # Moderate FAQ boost
 
     # Question-answer structure boost
-    if any(
-        pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]
-    ):
+    if any(pattern in content_lower for pattern in ["q:", "a:", "pitanje:", "odgovor:"]):
         faq_score += 0.2
 
     # Short, concise answer boost (FAQ answers are usually brief)
@@ -328,22 +306,16 @@ def calculate_comparative_boost(content: str, boost_weight: float = 0.1) -> floa
     ]
 
     content_lower = content.lower()
-    comparative_score = (
-        sum(boost_weight for term in comparative_terms if term in content_lower) * 0.4
-    )
+    comparative_score = sum(boost_weight for term in comparative_terms if term in content_lower) * 0.4
 
     # Structure indicators boost (tables, lists, comparisons)
     structure_indicators = ["|", "vs", "•", "-", "1.", "2.", "prvo", "drugo"]
-    structure_score = sum(
-        0.05 for indicator in structure_indicators if indicator in content
-    )
+    structure_score = sum(0.05 for indicator in structure_indicators if indicator in content)
 
     return comparative_score + structure_score
 
 
-def calculate_exact_match_boost(
-    content: str, query_words: list[str], boost_weight: float = 0.2
-) -> float:
+def calculate_exact_match_boost(content: str, query_words: list[str], boost_weight: float = 0.2) -> float:
     """
     Calculate exact term matching boost.
     Pure function with no side effects.
@@ -403,9 +375,7 @@ def apply_strategy_specific_processing(
             if "keyword" not in config.boost_weights:
                 raise ValueError("Missing 'keyword' weight in boost configuration")
             keyword_boost = calculate_keyword_boost(
-                result.content,
-                processed_query.keywords,
-                config.boost_weights["keyword"],
+                result.content, processed_query.keywords, config.boost_weights["keyword"]
             )
             boosts["keyword"] = keyword_boost
             total_boost += keyword_boost
@@ -415,13 +385,9 @@ def apply_strategy_specific_processing(
                 raise ValueError("Missing 'technical' weight in boost configuration")
             if "exact_match" not in config.boost_weights:
                 raise ValueError("Missing 'exact_match' weight in boost configuration")
-            technical_boost = calculate_technical_boost(
-                result.content, config.boost_weights["technical"]
-            )
+            technical_boost = calculate_technical_boost(result.content, config.boost_weights["technical"])
             exact_boost = calculate_exact_match_boost(
-                result.content,
-                processed_query.original.split(),
-                config.boost_weights["exact_match"],
+                result.content, processed_query.original.split(), config.boost_weights["exact_match"]
             )
             boosts["technical"] = technical_boost
             boosts["exact_match"] = exact_boost
@@ -431,9 +397,7 @@ def apply_strategy_specific_processing(
             if "temporal" not in config.boost_weights:
                 raise ValueError("Missing 'temporal' weight in boost configuration")
             temporal_boost = calculate_temporal_boost(
-                result.content,
-                result.metadata,
-                boost_weight=config.boost_weights["temporal"],
+                result.content, result.metadata, boost_weight=config.boost_weights["temporal"]
             )
             boosts["temporal"] = temporal_boost
             total_boost += temporal_boost
@@ -448,9 +412,7 @@ def apply_strategy_specific_processing(
         elif strategy == RetrievalStrategyType.COMPARATIVE_STRUCTURED:
             if "comparative" not in config.boost_weights:
                 raise ValueError("Missing 'comparative' weight in boost configuration")
-            comparative_boost = calculate_comparative_boost(
-                result.content, config.boost_weights["comparative"]
-            )
+            comparative_boost = calculate_comparative_boost(result.content, config.boost_weights["comparative"])
             boosts["comparative"] = comparative_boost
             total_boost += comparative_boost
 
@@ -473,9 +435,7 @@ def apply_strategy_specific_processing(
     return processed_results
 
 
-def filter_results_by_threshold(
-    results: list[SearchResult], similarity_threshold: float
-) -> list[SearchResult]:
+def filter_results_by_threshold(results: list[SearchResult], similarity_threshold: float) -> list[SearchResult]:
     """
     Filter results by similarity threshold.
     Pure function with no side effects.
@@ -487,15 +447,11 @@ def filter_results_by_threshold(
     Returns:
         Filtered search results
     """
-    return [
-        result for result in results if result.similarity_score >= similarity_threshold
-    ]
+    return [result for result in results if result.similarity_score >= similarity_threshold]
 
 
 def calculate_overall_confidence(
-    category_confidence: float,
-    top_results: list[SearchResult],
-    weights: tuple[float, float] = (0.6, 0.4),
+    category_confidence: float, top_results: list[SearchResult], weights: tuple[float, float] = (0.6, 0.4)
 ) -> float:
     """
     Calculate overall retrieval confidence.
@@ -559,10 +515,7 @@ def create_routing_metadata(
             "cultural_indicators": categorization.cultural_indicators,
             "complexity": categorization.complexity.value,
         },
-        "strategy": {
-            "selected": strategy_used.value,
-            "retrieval_strategy": categorization.retrieval_strategy,
-        },
+        "strategy": {"selected": strategy_used.value, "retrieval_strategy": categorization.retrieval_strategy},
         "performance": {
             "retrieval_time": retrieval_time,
             "results_count": len(results),
@@ -598,13 +551,10 @@ class HierarchicalRetriever:
 
         # Performance tracking (optional)
         self._retrieval_count = 0
-        self._strategy_stats = {} if config.performance_tracking else None
+        self._strategy_stats: dict[str, Any] | None = {} if config.performance_tracking else None
 
     async def retrieve(
-        self,
-        query: str,
-        max_results: int = None,
-        context: dict[str, Any] | None = None,
+        self, query: str, max_results: int | None = None, context: dict[str, Any] | None = None
     ) -> HierarchicalRetrievalResult:
         """
         Execute hierarchical retrieval with intelligent routing.
@@ -627,25 +577,18 @@ class HierarchicalRetriever:
         processed_query = self._query_processor.process_query(query, context)
         categorization = self._categorizer.categorize_query(query, context)
 
-        self._log_info(
-            f"📂 Category: {categorization.category.value} "
-            f"(confidence: {categorization.confidence:.3f})"
-        )
+        self._log_info(f"📂 Category: {categorization.category.value} (confidence: {categorization.confidence:.3f})")
 
         # Step 2: Map strategy and get threshold
         strategy_type = self._map_retrieval_strategy(categorization.retrieval_strategy)
         if strategy_type.value not in self._config.similarity_thresholds:
-            raise ValueError(
-                f"Missing similarity threshold for strategy '{strategy_type.value}'"
-            )
+            raise ValueError(f"Missing similarity threshold for strategy '{strategy_type.value}'")
         similarity_threshold = self._config.similarity_thresholds[strategy_type.value]
 
         # Step 3: Execute search with expanded results for processing
         expanded_results = max_results * 2
         raw_results = await self._search_engine.search(
-            query_text=processed_query.processed,
-            k=expanded_results,
-            similarity_threshold=similarity_threshold,
+            query_text=processed_query.processed, k=expanded_results, similarity_threshold=similarity_threshold
         )
 
         # Step 4: Apply strategy-specific processing
@@ -654,18 +597,13 @@ class HierarchicalRetriever:
         )
 
         # Step 5: Filter and limit results
-        filtered_results = filter_results_by_threshold(
-            processed_results, similarity_threshold
-        )[:max_results]
+        filtered_results = filter_results_by_threshold(processed_results, similarity_threshold)[:max_results]
 
         # Step 6: Convert to dict format for compatibility
         result_dicts = [
             {
                 "content": result.content,
-                "metadata": {
-                    **result.metadata,
-                    "detected_category": categorization.category.value,
-                },
+                "metadata": {**result.metadata, "detected_category": categorization.category.value},
                 "similarity_score": result.similarity_score,
                 "final_score": result.final_score,
                 **result.boosts,  # Add boost scores
@@ -677,23 +615,14 @@ class HierarchicalRetriever:
         if self._reranker and len(result_dicts) > 1:
             self._log_debug("🔄 Applying reranking...")
             result_dicts = await self._reranker.rerank(
-                query=query,
-                documents=result_dicts,
-                category=categorization.category.value,
+                query=query, documents=result_dicts, category=categorization.category.value
             )
 
         # Step 8: Calculate metrics and metadata
         retrieval_time = time.time() - start_time
-        overall_confidence = calculate_overall_confidence(
-            categorization.confidence, filtered_results
-        )
+        overall_confidence = calculate_overall_confidence(categorization.confidence, filtered_results)
         routing_metadata = create_routing_metadata(
-            processed_query,
-            categorization,
-            strategy_type,
-            filtered_results,
-            retrieval_time,
-            self._reranker is not None,
+            processed_query, categorization, strategy_type, filtered_results, retrieval_time, self._reranker is not None
         )
 
         # Update statistics
@@ -738,9 +667,7 @@ class HierarchicalRetriever:
             raise ValueError(f"Unknown retrieval strategy: '{strategy_name}'")
         return strategy_mapping[strategy_name]
 
-    def _update_strategy_stats(
-        self, strategy: RetrievalStrategyType, retrieval_time: float
-    ) -> None:
+    def _update_strategy_stats(self, strategy: RetrievalStrategyType, retrieval_time: float) -> None:
         """Update performance statistics for strategies."""
         if not self._strategy_stats:
             return
@@ -748,11 +675,7 @@ class HierarchicalRetriever:
         strategy_name = strategy.value
 
         if strategy_name not in self._strategy_stats:
-            self._strategy_stats[strategy_name] = {
-                "count": 0,
-                "total_time": 0.0,
-                "avg_time": 0.0,
-            }
+            self._strategy_stats[strategy_name] = {"count": 0, "total_time": 0.0, "avg_time": 0.0}
 
         stats = self._strategy_stats[strategy_name]
         stats["count"] += 1
@@ -765,9 +688,7 @@ class HierarchicalRetriever:
         """Get performance statistics."""
         return {
             "total_retrievals": self._retrieval_count,
-            "strategy_stats": (
-                self._strategy_stats.copy() if self._strategy_stats else {}
-            ),
+            "strategy_stats": (self._strategy_stats.copy() if self._strategy_stats else {}),
             "reranking_enabled": self._reranker is not None,
             "performance_tracking": self._config.performance_tracking,
         }

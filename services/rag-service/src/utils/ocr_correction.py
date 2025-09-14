@@ -6,7 +6,7 @@ Works for any language and content, not specific Croatian/English patterns.
 """
 
 import re
-from typing import Any, Dict
+from typing import Any
 
 
 def fix_spaced_capitals(text: str) -> str:
@@ -26,11 +26,7 @@ def fix_spaced_capitals(text: str) -> str:
         Text with spaced capitals fixed
     """
     # Fix fully spaced capitals: "H R V A T S K A" → "HRVATSKA"
-    text = re.sub(
-        r"\b([A-Z])\s+([A-Z](?:\s+[A-Z])*)\b",
-        lambda m: m.group(0).replace(" ", ""),
-        text,
-    )
+    text = re.sub(r"\b([A-Z])\s+([A-Z](?:\s+[A-Z])*)\b", lambda m: m.group(0).replace(" ", ""), text)
 
     # Fix partially spaced capitals: "HR VATSKA" → "HRVATSKA"
     text = re.sub(r"\b([A-Z]{2,})\s+([A-Z]{2,})\b", r"\1\2", text)
@@ -133,9 +129,7 @@ def fix_spaced_diacritics(text: str, language: str | None = None) -> str:
     return text
 
 
-def apply_ocr_corrections(
-    text: str, config: dict[str, Any], language: str | None = None
-) -> str:
+def apply_ocr_corrections(text: str, config: dict[str, Any], language: str | None = None) -> str:
     """
     Apply OCR corrections based on configuration flags.
 
@@ -180,8 +174,6 @@ def get_ocr_correction_stats(original_text: str, corrected_text: str) -> dict[st
     return {
         "original_length": len(original_text),
         "corrected_length": len(corrected_text),
-        "characters_changed": sum(
-            1 for a, b in zip(original_text, corrected_text, strict=False) if a != b
-        ),
+        "characters_changed": sum(1 for a, b in zip(original_text, corrected_text, strict=False) if a != b),
         "length_difference": len(corrected_text) - len(original_text),
     }

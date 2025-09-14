@@ -4,10 +4,9 @@ Provides reliable text extraction from PDF, DOCX, and plain text files
 with proper encoding handling and error recovery.
 """
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from docx import Document
 from pypdf import PdfReader
@@ -83,9 +82,7 @@ class LoggerProvider(Protocol):
 # ================================
 
 
-def validate_file_format(
-    file_path: Path, supported_formats: list[str]
-) -> tuple[bool, str | None]:
+def validate_file_format(file_path: Path, supported_formats: list[str]) -> tuple[bool, str | None]:
     """
     Validate if file format is supported.
 
@@ -168,9 +165,7 @@ def extract_text_from_docx_binary(docx_binary: bytes) -> str:
     return full_text
 
 
-def extract_text_with_encoding_fallback(
-    text_binary: bytes, encodings: list[str]
-) -> tuple[str, str]:
+def extract_text_with_encoding_fallback(text_binary: bytes, encodings: list[str]) -> tuple[str, str]:
     """
     Extract text with multiple encoding fallback.
     Pure function with no side effects.
@@ -275,14 +270,10 @@ class DocumentExtractor:
         # File size validation
         file_size_mb = self._file_system.get_file_size_mb(file_path)
         if file_size_mb > self._config.max_file_size_mb:
-            raise ValueError(
-                f"File too large: {file_size_mb:.1f}MB > {self._config.max_file_size_mb}MB"
-            )
+            raise ValueError(f"File too large: {file_size_mb:.1f}MB > {self._config.max_file_size_mb}MB")
 
         # Format validation
-        is_valid, error_msg = validate_file_format(
-            file_path, self._config.supported_formats
-        )
+        is_valid, error_msg = validate_file_format(file_path, self._config.supported_formats)
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -305,9 +296,7 @@ class DocumentExtractor:
         text, pages_processed = extract_text_from_pdf_binary(pdf_binary)
         processed_text = post_process_extracted_text(text)
 
-        self._log_info(
-            f"Extracted {len(processed_text)} characters from {pages_processed} PDF pages"
-        )
+        self._log_info(f"Extracted {len(processed_text)} characters from {pages_processed} PDF pages")
 
         return ExtractionResult(
             text=processed_text,
@@ -324,18 +313,12 @@ class DocumentExtractor:
 
         self._log_info(f"Extracted {len(processed_text)} characters from DOCX")
 
-        return ExtractionResult(
-            text=processed_text,
-            character_count=len(processed_text),
-            extraction_method="DOCX",
-        )
+        return ExtractionResult(text=processed_text, character_count=len(processed_text), extraction_method="DOCX")
 
     def _extract_txt(self, file_path: Path) -> ExtractionResult:
         """Extract text from TXT using pure function with encoding fallback."""
         text_binary = self._file_system.open_binary(file_path)
-        text, encoding_used = extract_text_with_encoding_fallback(
-            text_binary, self._config.text_encodings
-        )
+        text, encoding_used = extract_text_with_encoding_fallback(text_binary, self._config.text_encodings)
         processed_text = post_process_extracted_text(text)
 
         self._log_info(f"Successfully read TXT file with {encoding_used} encoding")
@@ -380,10 +363,7 @@ def extract_document_text(
     Returns:
         Extracted text content
     """
-    from .extractors_providers import (
-        create_config_provider,
-        create_file_system_provider,
-    )
+    from .extractors_providers import create_config_provider, create_file_system_provider
 
     if isinstance(file_path, str):
         file_path = Path(file_path)

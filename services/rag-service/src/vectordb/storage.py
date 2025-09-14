@@ -3,13 +3,11 @@ ChromaDB storage system for document vectors and metadata.
 Implements pure functions and dependency injection for robust storage operations.
 """
 
-import asyncio
 import logging
 import uuid
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -68,8 +66,7 @@ class VectorCollection(Protocol):
         documents: list[str],
         metadatas: list[dict[str, Any]],
         embeddings: list[np.ndarray] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def query(
         self,
@@ -79,8 +76,7 @@ class VectorCollection(Protocol):
         where: dict[str, Any] | None = None,
         where_document: dict[str, Any] | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
     def get(
         self,
@@ -89,8 +85,7 @@ class VectorCollection(Protocol):
         limit: int | None = None,
         offset: int | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
     def update(
         self,
@@ -98,45 +93,31 @@ class VectorCollection(Protocol):
         documents: list[str] | None = None,
         metadatas: list[dict[str, Any]] | None = None,
         embeddings: list[np.ndarray] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def delete(
-        self, ids: list[str] | None = None, where: dict[str, Any] | None = None
-    ) -> None:
-        ...
+    def delete(self, ids: list[str] | None = None, where: dict[str, Any] | None = None) -> None: ...
 
-    def count(self) -> int:
-        ...
+    def count(self) -> int: ...
 
     @property
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
-    def metadata(self) -> dict[str, Any]:
-        ...
+    def metadata(self) -> dict[str, Any]: ...
 
 
 class VectorDatabase(Protocol):
     """Vector database interface."""
 
-    def create_collection(
-        self, name: str, reset_if_exists: bool = False
-    ) -> VectorCollection:
-        ...
+    def create_collection(self, name: str, reset_if_exists: bool = False) -> VectorCollection: ...
 
-    def get_collection(self, name: str) -> VectorCollection:
-        ...
+    def get_collection(self, name: str) -> VectorCollection: ...
 
-    def delete_collection(self, name: str) -> None:
-        ...
+    def delete_collection(self, name: str) -> None: ...
 
-    def list_collections(self) -> list[str]:
-        ...
+    def list_collections(self) -> list[str]: ...
 
-    def reset(self) -> None:
-        ...
+    def reset(self) -> None: ...
 
 
 # Pure functions for business logic
@@ -158,9 +139,7 @@ def validate_documents_for_storage(documents: list[str]) -> list[str]:
     return validated_docs
 
 
-def validate_embeddings_for_storage(
-    embeddings: list[np.ndarray], expected_dim: int | None = None
-) -> list[np.ndarray]:
+def validate_embeddings_for_storage(embeddings: list[np.ndarray], expected_dim: int | None = None) -> list[np.ndarray]:
     """Validate embeddings for storage - pure function."""
     if not embeddings:
         raise ValueError("Embeddings list cannot be empty")
@@ -170,14 +149,10 @@ def validate_embeddings_for_storage(
         if emb is None:
             raise ValueError(f"Embedding at index {i} is None")
         if not isinstance(emb, np.ndarray):
-            raise ValueError(
-                f"Embedding at index {i} must be numpy array, got {type(emb)}"
-            )
+            raise ValueError(f"Embedding at index {i} must be numpy array, got {type(emb)}")
 
         if expected_dim is not None and emb.shape[0] != expected_dim:
-            raise ValueError(
-                f"Embedding at index {i} has shape {emb.shape}, expected ({expected_dim},)"
-            )
+            raise ValueError(f"Embedding at index {i} has shape {emb.shape}, expected ({expected_dim},)")
 
         validated_embeddings.append(emb)
 
@@ -185,16 +160,11 @@ def validate_embeddings_for_storage(
 
 
 def prepare_storage_batch(
-    documents: list[str],
-    embeddings: list[np.ndarray],
-    metadata_list: list[DocumentMetadata],
-    batch_size: int = 100,
+    documents: list[str], embeddings: list[np.ndarray], metadata_list: list[DocumentMetadata], batch_size: int = 100
 ) -> list[dict[str, Any]]:
     """Prepare documents for batch storage - pure function."""
     if len(documents) != len(embeddings) != len(metadata_list):
-        raise ValueError(
-            "Documents, embeddings, and metadata lists must have same length"
-        )
+        raise ValueError("Documents, embeddings, and metadata lists must have same length")
 
     batches = []
     total_items = len(documents)
@@ -276,9 +246,7 @@ def extract_document_ids(documents: list[dict[str, Any]]) -> list[str]:
     return ids
 
 
-def merge_search_results(
-    results_list: list[list[QueryResult]], max_results: int = 10
-) -> list[QueryResult]:
+def merge_search_results(results_list: list[list[QueryResult]], max_results: int = 10) -> list[QueryResult]:
     """Merge and sort search results from multiple sources - pure function."""
     all_results = []
     for results in results_list:
@@ -299,13 +267,9 @@ class VectorStorage:
         self.collection: VectorCollection | None = None
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(
-        self, collection_name: str, reset_if_exists: bool = False
-    ) -> None:
+    async def initialize(self, collection_name: str, reset_if_exists: bool = False) -> None:
         """Initialize storage with collection."""
-        self.collection = self.database.create_collection(
-            name=collection_name, reset_if_exists=reset_if_exists
-        )
+        self.collection = self.database.create_collection(name=collection_name, reset_if_exists=reset_if_exists)
         self.logger.info(f"Initialized storage with collection: {collection_name}")
 
     async def store_documents(
@@ -317,19 +281,14 @@ class VectorStorage:
     ) -> StorageResult:
         """Store documents in batches."""
         if not self.collection:
-            return StorageResult(
-                success=False,
-                error_message="Storage not initialized - call initialize() first",
-            )
+            return StorageResult(success=False, error_message="Storage not initialized - call initialize() first")
 
         # Validate inputs using pure functions
         validated_docs = validate_documents_for_storage(documents)
         validated_embeddings = validate_embeddings_for_storage(embeddings)
 
         # Prepare batches using pure function
-        batches = prepare_storage_batch(
-            validated_docs, validated_embeddings, metadata_list, batch_size
-        )
+        batches = prepare_storage_batch(validated_docs, validated_embeddings, metadata_list, batch_size)
 
         # Store each batch
         all_doc_ids = []
@@ -337,15 +296,10 @@ class VectorStorage:
             self.collection.add(**batch)
             all_doc_ids.extend(batch["ids"])
 
-        self.logger.info(
-            f"Stored {len(validated_docs)} documents in {len(batches)} batches"
-        )
+        self.logger.info(f"Stored {len(validated_docs)} documents in {len(batches)} batches")
 
         return StorageResult(
-            success=True,
-            documents_stored=len(validated_docs),
-            batches_processed=len(batches),
-            document_ids=all_doc_ids,
+            success=True, documents_stored=len(validated_docs), batches_processed=len(batches), document_ids=all_doc_ids
         )
 
     async def search_documents(
@@ -359,22 +313,22 @@ class VectorStorage:
         if not self.collection:
             raise RuntimeError("Storage not initialized - call initialize() first")
 
-        query_kwargs = {
-            "n_results": top_k,
-            "include": ["documents", "metadatas", "distances"],
-        }
-
         if query_text:
-            query_kwargs["query_texts"] = [query_text]
+            raw_results = self.collection.query(
+                query_texts=[query_text],
+                n_results=top_k,
+                where=filter_metadata,
+                include=["documents", "metadatas", "distances"],
+            )
         elif query_embedding is not None:
-            query_kwargs["query_embeddings"] = [query_embedding]
+            raw_results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+                where=filter_metadata,
+                include=["documents", "metadatas", "distances"],
+            )
         else:
             raise ValueError("Either query_text or query_embedding must be provided")
-
-        if filter_metadata:
-            query_kwargs["where"] = filter_metadata
-
-        raw_results = self.collection.query(**query_kwargs)
         results = parse_query_results(raw_results)
 
         self.logger.debug(f"Search returned {len(results)} results")
@@ -386,31 +340,19 @@ class VectorStorage:
             raise RuntimeError("Storage not initialized - call initialize() first")
 
         count = self.collection.count()
-        return {
-            "name": self.collection.name,
-            "document_count": count,
-            "metadata": self.collection.metadata,
-        }
+        return {"name": self.collection.name, "document_count": count, "metadata": self.collection.metadata}
 
     async def delete_documents(
-        self,
-        ids: list[str] | None = None,
-        filter_metadata: dict[str, Any] | None = None,
+        self, ids: list[str] | None = None, filter_metadata: dict[str, Any] | None = None
     ) -> None:
         """Delete documents from collection."""
         if not self.collection:
             raise ValueError("Storage not initialized")
 
-        delete_kwargs = {}
-        if ids:
-            delete_kwargs["ids"] = ids
-        if filter_metadata:
-            delete_kwargs["where"] = filter_metadata
-
-        if not delete_kwargs:
+        if not ids and not filter_metadata:
             raise ValueError("Either ids or filter_metadata must be provided")
 
-        self.collection.delete(**delete_kwargs)
+        self.collection.delete(ids=ids, where=filter_metadata)
         self.logger.info("Documents deleted successfully")
 
 

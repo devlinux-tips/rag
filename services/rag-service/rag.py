@@ -20,6 +20,7 @@ from pathlib import Path
 # Add src to Python path for proper module resolution
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+# Import after path modification
 from src.cli.rag_cli import cli_main
 
 if __name__ == "__main__":

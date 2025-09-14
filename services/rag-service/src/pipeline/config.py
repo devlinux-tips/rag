@@ -2,17 +2,14 @@
 Configuration management for RAG system.
 """
 
-import os
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..utils.config_protocol import ConfigProvider
+    pass
 
 import yaml
-from pydantic import ConfigDict, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.config_models import (
     ChromaConfig,
@@ -51,30 +48,19 @@ class RAGConfig(BaseSettings):
     processed_dir: str
     test_data_dir: str
 
-    # Use ConfigDict for modern Pydantic compatibility
-    if ConfigDict:
-        model_config = ConfigDict(env_file=".env", extra="allow")
-    else:
-
-        class Config:
-            env_file = ".env"
-            extra = "allow"
+    # Use SettingsConfigDict for modern Pydantic settings compatibility
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
     def __init__(self, language: str = "hr", **data):
         """Initialize with validated config loading."""
         # If no data provided, load from config files
         if not data:
-            from ..utils.config_loader import (
-                get_paths_config,
-                get_performance_config,
-                get_shared_config,
-                get_system_config,
-            )
+            from ..utils.config_loader import get_paths_config, get_shared_config, get_system_config
             from ..utils.config_protocol import get_config_provider
 
             # Get validated config through provider
             config_provider = get_config_provider()
-            main_config = config_provider.get_main_config()
+            main_config = config_provider.get_shared_config()
 
             # Get language-specific config for embeddings
             language_config = config_provider.get_language_config(language)
@@ -87,9 +73,7 @@ class RAGConfig(BaseSettings):
             # Create component configs using validated approach
             data = {
                 "processing": ProcessingConfig.from_validated_config(main_config),
-                "embedding": EmbeddingConfig.from_validated_config(
-                    main_config, language_config
-                ),
+                "embedding": EmbeddingConfig.from_validated_config(main_config, language_config),
                 "chroma": ChromaConfig.from_validated_config(main_config),
                 "retrieval": RetrievalConfig.from_validated_config(main_config),
                 "ollama": OllamaConfig.from_validated_config(main_config),
@@ -107,7 +91,6 @@ class RAGConfig(BaseSettings):
             }
 
         super().__init__(**data)
-        extra = "allow"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -140,14 +123,7 @@ class RAGConfig(BaseSettings):
 
         # Update other fields
         for key, value in data.items():
-            if key not in [
-                "processing",
-                "embedding",
-                "chroma",
-                "retrieval",
-                "ollama",
-                "language",
-            ]:
+            if key not in ["processing", "embedding", "chroma", "retrieval", "ollama", "language"]:
                 setattr(config, key, value)
 
         return config

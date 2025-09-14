@@ -27,10 +27,6 @@ try:
         Document,
         DocumentScope,
         Language,
-        Tenant,
-        TenantStatus,
-        User,
-        UserRole,
     )
 
     logger.info("✅ Multi-tenant models imported successfully")
@@ -194,7 +190,7 @@ def test_document_operations():
 
     # Test document properties
     assert doc.get_display_name() == "Test Croatian Document"
-    assert doc.can_be_promoted_to_tenant() == False  # Not processed yet
+    assert doc.can_be_promoted_to_tenant() is False  # Not processed yet
     assert not doc.is_processed()
 
     logger.info(f"✅ Document properties: {doc.get_display_name()}")
@@ -208,7 +204,7 @@ def test_tenant_settings():
     tenant = DEFAULT_DEVELOPMENT_TENANT
 
     # Test tenant methods
-    assert tenant.can_create_user() == True
+    assert tenant.can_create_user() is True
     assert tenant.get_max_documents() == 10000
     assert tenant.get_max_documents_per_user() == 1000
 
@@ -238,7 +234,7 @@ async def test_surrealdb_connection():
             await db.use("test", "multitenant")
 
             # Simple test query
-            result = await db.query("SELECT * FROM tenant LIMIT 1")
+            await db.query("SELECT * FROM tenant LIMIT 1")
             logger.info("✅ SurrealDB connection successful")
             return True
 

@@ -3,6 +3,7 @@
 Test Runner for Multilingual RAG System
 Runs all tests with optional coverage reporting using pytest
 """
+
 import argparse
 import os
 import subprocess
@@ -12,8 +13,6 @@ from pathlib import Path
 
 def check_dependencies():
     """Check if required dependencies are installed"""
-    import coverage
-    import pytest
 
 
 def run_tests(coverage_enabled=False, verbose=False):
@@ -28,8 +27,6 @@ def run_tests(coverage_enabled=False, verbose=False):
         cmd.append("-q")
 
     if coverage_enabled:
-        import pytest_cov
-
         cmd.extend(["--cov=src", "--cov-report=term-missing"])
 
     # Add colored output

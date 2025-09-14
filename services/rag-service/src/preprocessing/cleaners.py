@@ -5,13 +5,10 @@ language-specific rules and encoding preservation.
 """
 
 import locale
-import logging
-import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 
 @dataclass
@@ -74,23 +71,23 @@ class SharedLanguageConfig:
 class ConfigProvider(Protocol):
     """Protocol for configuration access."""
 
-    def get_language_config(self, language: str) -> dict[str, any]:
+    def get_language_config(self, language: str) -> dict[str, Any]:
         """Get language-specific text processing configuration."""
         ...
 
-    def get_cleaning_config(self) -> dict[str, any]:
+    def get_cleaning_config(self) -> dict[str, Any]:
         """Get general cleaning configuration."""
         ...
 
-    def get_document_cleaning_config(self, language: str) -> dict[str, any]:
+    def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get document cleaning configuration."""
         ...
 
-    def get_chunking_config(self, language: str) -> dict[str, any]:
+    def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get chunking configuration."""
         ...
 
-    def get_shared_language_config(self, language: str) -> dict[str, any]:
+    def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get shared language configuration."""
         ...
 
@@ -238,9 +235,7 @@ def fix_ocr_errors(text: str, ocr_corrections: dict[str, str]) -> str:
     return text
 
 
-def extract_sentences(
-    text: str, sentence_ending_pattern: str, min_sentence_length: int
-) -> list[str]:
+def extract_sentences(text: str, sentence_ending_pattern: str, min_sentence_length: int) -> list[str]:
     """
     Extract sentences from text using language-specific patterns.
     Pure function with no side effects.
@@ -289,9 +284,7 @@ def normalize_diacritics(text: str, diacritic_map: dict[str, str]) -> str:
     return text
 
 
-def is_meaningful_text(
-    text: str, min_words: int, word_char_pattern: str, min_word_char_ratio: float
-) -> bool:
+def is_meaningful_text(text: str, min_words: int, word_char_pattern: str, min_word_char_ratio: float) -> bool:
     """
     Check if text contains meaningful content.
     Pure function with no side effects.
@@ -355,22 +348,16 @@ def detect_language_content(text: str, language_words: list[str]) -> float:
     total_words = len(text.split())
 
     # Dynamic diacritic expectation based on actual text
-    char_ratio = (
-        char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0
-    )  # 5% threshold
+    char_ratio = char_score / max(total_chars * 0.05, 1) if char_score > 0 else 0  # 5% threshold
     word_ratio = word_score / max(total_words * 0.2, 1)  # 20% common words threshold
 
     # Language-agnostic scoring
-    score = (
-        min((char_ratio + word_ratio) / 2, 1.0)
-        if char_score > 0
-        else min(word_ratio, 1.0)
-    )
+    score = min((char_ratio + word_ratio) / 2, 1.0) if char_score > 0 else min(word_ratio, 1.0)
 
     return score
 
 
-def preserve_text_encoding(text: any) -> str:
+def preserve_text_encoding(text: Any) -> str:
     """
     Preserve proper text encoding.
     Pure function with no side effects.
@@ -418,10 +405,7 @@ def clean_text_comprehensive(
     """
     if not text or not text.strip():
         return CleaningResult(
-            text="",
-            original_length=len(text) if text else 0,
-            cleaned_length=0,
-            operations_performed=[],
+            text="", original_length=len(text) if text else 0, cleaned_length=0, operations_performed=[]
         )
 
     original_length = len(text)
@@ -431,9 +415,7 @@ def clean_text_comprehensive(
     cleaned = text
 
     # Remove document header/footer artifacts
-    cleaned = remove_headers_footers(
-        cleaned, document_cleaning_config.header_footer_patterns
-    )
+    cleaned = remove_headers_footers(cleaned, document_cleaning_config.header_footer_patterns)
     if len(cleaned) != len(text):
         operations.append("header_footer_removal")
 
@@ -459,10 +441,7 @@ def clean_text_comprehensive(
     cleaned = cleaned.strip()
 
     return CleaningResult(
-        text=cleaned,
-        original_length=original_length,
-        cleaned_length=len(cleaned),
-        operations_performed=operations,
+        text=cleaned, original_length=original_length, cleaned_length=len(cleaned), operations_performed=operations
     )
 
 
@@ -499,16 +478,16 @@ class MultilingualTextCleaner:
             raise ValueError("Missing 'word_char_pattern' in language configuration")
         if "locale" not in language_data:
             raise ValueError("Missing 'locale' in language configuration")
-        if "primary" not in language_data["locale"]:
+        if "primary" not in cast(dict[str, Any], language_data["locale"]):
             raise ValueError("Missing 'primary' in locale configuration")
-        if "fallback" not in language_data["locale"]:
+        if "fallback" not in cast(dict[str, Any], language_data["locale"]):
             raise ValueError("Missing 'fallback' in locale configuration")
 
         self.language_config = LanguageConfig(
             diacritic_map=language_data["diacritic_map"],
             word_char_pattern=language_data["word_char_pattern"],
-            locale_primary=language_data["locale"]["primary"],
-            locale_fallback=language_data["locale"]["fallback"],
+            locale_primary=cast(dict[str, Any], language_data["locale"])["primary"],
+            locale_fallback=cast(dict[str, Any], language_data["locale"])["fallback"],
         )
 
         # General cleaning configuration
@@ -521,9 +500,7 @@ class MultilingualTextCleaner:
         )
 
         # Document cleaning configuration
-        doc_cleaning_data = self._config_provider.get_document_cleaning_config(
-            self.language
-        )
+        doc_cleaning_data = self._config_provider.get_document_cleaning_config(self.language)
         self.document_cleaning_config = DocumentCleaningConfig(
             header_footer_patterns=doc_cleaning_data["header_footer_patterns"],
             ocr_corrections=doc_cleaning_data["ocr_corrections"],
@@ -543,7 +520,7 @@ class MultilingualTextCleaner:
             raise ValueError("Missing 'chars_pattern' in shared language configuration")
 
         self.shared_config = SharedLanguageConfig(
-            stopwords=shared_data["stopwords"]["words"],
+            stopwords=cast(dict[str, Any], shared_data["stopwords"])["words"],
             chars_pattern=shared_data["chars_pattern"],
         )
 
@@ -584,7 +561,7 @@ class MultilingualTextCleaner:
         """Normalize diacritics for the specified language."""
         return normalize_diacritics(text, self.language_config.diacritic_map)
 
-    def is_meaningful_text(self, text: str, min_words: int = None) -> bool:
+    def is_meaningful_text(self, text: str, min_words: int | None = None) -> bool:
         """Check if text contains meaningful content."""
         if min_words is None:
             min_words = self.cleaning_config.min_meaningful_words
@@ -610,10 +587,7 @@ class MultilingualTextCleaner:
         language_chars = 0
         total_chars = len(text.replace(" ", ""))
 
-        if (
-            hasattr(self.language_config, "word_char_pattern")
-            and self.language_config.word_char_pattern
-        ):
+        if hasattr(self.language_config, "word_char_pattern") and self.language_config.word_char_pattern:
             import re
 
             matches = re.findall(self.language_config.word_char_pattern, text)
@@ -624,30 +598,23 @@ class MultilingualTextCleaner:
         # Check for stopwords if available
         stopword_ratio = 0.0
         if hasattr(self.shared_config, "stopwords") and self.shared_config.stopwords:
-            matching_stopwords = sum(
-                1 for word in words if word in self.shared_config.stopwords
-            )
+            matching_stopwords = sum(1 for word in words if word in self.shared_config.stopwords)
             stopword_ratio = matching_stopwords / len(words) if words else 0.0
 
         # Combined score
         return (char_ratio * 0.6) + (stopword_ratio * 0.4)
 
-    def preserve_encoding(self, text: any) -> str:
+    def preserve_encoding(self, text: Any) -> str:
         """Preserve proper text encoding for the language."""
         if not isinstance(text, str):
             text = str(text)
 
         # Apply language-specific diacritic preservation
-        if (
-            hasattr(self.language_config, "diacritic_map")
-            and self.language_config.diacritic_map
-        ):
+        if hasattr(self.language_config, "diacritic_map") and self.language_config.diacritic_map:
             # For languages with diacritics, ensure proper UTF-8 encoding
-            text = text.encode("utf-8", errors="replace").decode(
-                "utf-8", errors="replace"
-            )
+            text = text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
 
-        return text
+        return cast(str, text)
 
     def setup_language_environment(self) -> None:
         """Setup language-specific environment from configuration."""
@@ -659,9 +626,7 @@ class MultilingualTextCleaner:
 
         # Set language-specific locale (fail-fast approach)
         if self.language_config.locale_primary:
-            self._environment.set_locale(
-                locale.LC_ALL, self.language_config.locale_primary
-            )
+            self._environment.set_locale(locale.LC_ALL, self.language_config.locale_primary)
 
     def _log_debug(self, message: str) -> None:
         """Log debug message if logger available."""
@@ -675,10 +640,7 @@ class MultilingualTextCleaner:
 
 
 def clean_text(
-    text: str,
-    language: str,
-    preserve_structure: bool = True,
-    config_provider: ConfigProvider | None = None,
+    text: str, language: str, preserve_structure: bool = True, config_provider: ConfigProvider | None = None
 ) -> str:
     """
     Clean and normalize text for the specified language.
@@ -723,9 +685,7 @@ def detect_language_content_with_config(
     return cleaner.detect_language_content(text)
 
 
-def preserve_text_encoding_with_config(
-    text: any, language: str, config_provider: ConfigProvider | None = None
-) -> str:
+def preserve_text_encoding_with_config(text: Any, language: str, config_provider: ConfigProvider | None = None) -> str:
     """
     Preserve proper text encoding for the specified language.
 
@@ -745,9 +705,7 @@ def preserve_text_encoding_with_config(
     return cleaner.preserve_encoding(text)
 
 
-def setup_language_environment(
-    language: str, config_provider: ConfigProvider | None = None
-) -> None:
+def setup_language_environment(language: str, config_provider: ConfigProvider | None = None) -> None:
     """
     Setup language-specific environment.
 
@@ -759,8 +717,6 @@ def setup_language_environment(
 
     config_prov = config_provider or create_config_provider()
     env_prov = create_environment_provider()
-    cleaner = MultilingualTextCleaner(
-        language, config_prov, environment_provider=env_prov
-    )
+    cleaner = MultilingualTextCleaner(language, config_prov, environment_provider=env_prov)
 
     cleaner.setup_language_environment()

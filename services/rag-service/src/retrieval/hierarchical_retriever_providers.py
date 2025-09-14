@@ -3,37 +3,25 @@ Provider implementations for hierarchical retriever dependency injection.
 Production and mock providers for testable hierarchical retrieval system.
 """
 
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .categorization import CategoryMatch, CategoryType, QueryComplexity
-from .hierarchical_retriever import (
-    Categorizer,
-    LoggerProvider,
-    ProcessedQuery,
-    QueryProcessor,
-    Reranker,
-    RetrievalConfig,
-    SearchEngine,
-    SearchResult,
-)
+from .hierarchical_retriever import ProcessedQuery, RetrievalConfig, SearchResult
 
 
 class MockQueryProcessor:
     """Mock query processor for testing."""
 
-    def __init__(self, mock_responses: dict[str, ProcessedQuery] = None):
+    def __init__(self, mock_responses: dict[str, ProcessedQuery] | None | None = None):
         """Initialize with optional mock responses."""
         self.mock_responses = mock_responses or {}
-        self.call_history = []
+        self.call_history: list[dict[str, Any]] = []
 
     def set_mock_response(self, query: str, response: ProcessedQuery) -> None:
         """Set mock response for specific query."""
         self.mock_responses[query] = response
 
-    def process_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> ProcessedQuery:
+    def process_query(self, query: str, context: dict[str, Any] | None = None) -> ProcessedQuery:
         """Mock query processing."""
         self.call_history.append({"query": query, "context": context})
 
@@ -54,18 +42,16 @@ class MockQueryProcessor:
 class MockCategorizer:
     """Mock categorizer for testing."""
 
-    def __init__(self, mock_responses: dict[str, CategoryMatch] = None):
+    def __init__(self, mock_responses: dict[str, CategoryMatch] | None = None):
         """Initialize with optional mock responses."""
         self.mock_responses = mock_responses or {}
-        self.call_history = []
+        self.call_history: list[dict[str, Any]] = []
 
     def set_mock_response(self, query: str, response: CategoryMatch) -> None:
         """Set mock response for specific query."""
         self.mock_responses[query] = response
 
-    def categorize_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> CategoryMatch:
+    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
         """Mock query categorization."""
         self.call_history.append({"query": query, "context": context})
 
@@ -96,10 +82,10 @@ class MockCategorizer:
 class MockSearchEngine:
     """Mock search engine for testing."""
 
-    def __init__(self, mock_results: list[SearchResult] = None):
+    def __init__(self, mock_results: list[SearchResult] | None = None):
         """Initialize with optional mock results."""
         self.mock_results = mock_results or []
-        self.call_history = []
+        self.call_history: list[dict[str, Any]] = []
         self.delay_seconds = 0.0  # Simulate search delay
 
     def set_mock_results(self, results: list[SearchResult]) -> None:
@@ -110,29 +96,17 @@ class MockSearchEngine:
         """Set artificial delay for performance testing."""
         self.delay_seconds = seconds
 
-    async def search(
-        self, query_text: str, k: int = 5, similarity_threshold: float = 0.3
-    ) -> list[SearchResult]:
+    async def search(self, query_text: str, k: int = 5, similarity_threshold: float = 0.3) -> list[SearchResult]:
         """Mock search operation."""
         if self.delay_seconds > 0:
             import asyncio
 
             await asyncio.sleep(self.delay_seconds)
 
-        self.call_history.append(
-            {
-                "query_text": query_text,
-                "k": k,
-                "similarity_threshold": similarity_threshold,
-            }
-        )
+        self.call_history.append({"query_text": query_text, "k": k, "similarity_threshold": similarity_threshold})
 
         # Filter mock results by threshold and limit
-        filtered_results = [
-            result
-            for result in self.mock_results
-            if result.similarity_score >= similarity_threshold
-        ]
+        filtered_results = [result for result in self.mock_results if result.similarity_score >= similarity_threshold]
 
         return filtered_results[:k]
 
@@ -143,8 +117,8 @@ class MockSearchEngine:
             similarity = max(0.1, base_similarity - (i * 0.1))
             results.append(
                 SearchResult(
-                    content=f"Mock document {i+1} content with relevant information",
-                    metadata={"source": f"doc_{i+1}", "mock": True},
+                    content=f"Mock document {i + 1} content with relevant information",
+                    metadata={"source": f"doc_{i + 1}", "mock": True},
                     similarity_score=similarity,
                     final_score=similarity,
                     boosts={},
@@ -160,7 +134,7 @@ class MockReranker:
     def __init__(self, rerank_enabled: bool = True):
         """Initialize mock reranker."""
         self.rerank_enabled = rerank_enabled
-        self.call_history = []
+        self.call_history: list[dict[str, Any]] = []
         self.delay_seconds = 0.0
 
     def set_delay(self, seconds: float) -> None:
@@ -168,10 +142,7 @@ class MockReranker:
         self.delay_seconds = seconds
 
     async def rerank(
-        self,
-        query: str,
-        documents: list[dict[str, Any]],
-        category: str | None = None,
+        self, query: str, documents: list[dict[str, Any]], category: str | None = None
     ) -> list[dict[str, Any]]:
         """Mock reranking operation."""
         if self.delay_seconds > 0:
@@ -179,9 +150,7 @@ class MockReranker:
 
             await asyncio.sleep(self.delay_seconds)
 
-        self.call_history.append(
-            {"query": query, "document_count": len(documents), "category": category}
-        )
+        self.call_history.append({"query": query, "document_count": len(documents), "category": category})
 
         if not self.rerank_enabled:
             return documents
@@ -192,9 +161,7 @@ class MockReranker:
 
         # Update final scores to show reranking effect
         for i, doc in enumerate(reranked):
-            doc["final_score"] = max(
-                0.1, doc.get("final_score", 0.5) + (0.1 * (len(reranked) - i))
-            )
+            doc["final_score"] = max(0.1, doc.get("final_score", 0.5) + (0.1 * (len(reranked) - i)))
             doc["reranked"] = True
 
         return reranked
@@ -205,7 +172,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages = {"info": [], "debug": [], "error": []}
+        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "error": []}
 
     def info(self, message: str) -> None:
         """Capture info message."""
@@ -224,7 +191,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> dict[str, list] | list:
+    def get_messages(self, level: str | None = None) -> dict[str, list] | list:
         """Get captured messages by level or all messages."""
         if level:
             return self.messages.get(level, [])
@@ -241,22 +208,33 @@ class ProductionQueryProcessor:
 
         try:
             # Try to use the new factory function if available
-            self._processor = create_query_processor(language=language)
+            self._processor = create_query_processor(main_config={}, language=language)
         except (ImportError, TypeError):
             # Fallback to direct instantiation - may need config
             try:
-                from .query_processor import QueryProcessingConfig
                 from .query_processor_providers import create_default_config
 
                 config = create_default_config(language=language)
                 self._processor = MultilingualQueryProcessor(config=config)
             except (ImportError, TypeError):
-                # Final fallback to basic processor
-                self._processor = None
+                # Final fallback to basic processor with minimal config
+                from ..utils.config_models import QueryProcessingConfig
 
-    def process_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> ProcessedQuery:
+                minimal_config = QueryProcessingConfig(
+                    language=language,
+                    expand_synonyms=False,
+                    normalize_case=True,
+                    remove_stopwords=False,
+                    min_query_length=1,
+                    max_query_length=1000,
+                    max_expanded_terms=5,
+                    enable_morphological_analysis=False,
+                    use_query_classification=False,
+                    enable_spell_check=False,
+                )
+                self._processor = MultilingualQueryProcessor(config=minimal_config)
+
+    def process_query(self, query: str, context: dict[str, Any] | None = None) -> ProcessedQuery:
         """Process query using production processor."""
         # Handle case where processor couldn't be initialized
         if self._processor is None:
@@ -287,9 +265,7 @@ class ProductionCategorizer:
         config_provider = create_config_provider()
         self._categorizer = QueryCategorizer(language, config_provider)
 
-    def categorize_query(
-        self, query: str, context: dict[str, Any] | None = None
-    ) -> CategoryMatch:
+    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
         """Categorize query using production categorizer."""
         return self._categorizer.categorize_query(query)
 
@@ -301,9 +277,7 @@ class ProductionSearchEngineAdapter:
         """Initialize with production search engine."""
         self._search_engine = search_engine
 
-    async def search(
-        self, query_text: str, k: int = 5, similarity_threshold: float = 0.3
-    ) -> list[SearchResult]:
+    async def search(self, query_text: str, k: int = 5, similarity_threshold: float = 0.3) -> list[SearchResult]:
         """Adapt production search engine to our interface."""
         # Assuming production search engine has similar interface
         results = await self._search_engine.search(
@@ -329,11 +303,7 @@ class ProductionSearchEngineAdapter:
 
             adapted_results.append(
                 SearchResult(
-                    content=content,
-                    metadata=metadata,
-                    similarity_score=similarity,
-                    final_score=similarity,
-                    boosts={},
+                    content=content, metadata=metadata, similarity_score=similarity, final_score=similarity, boosts={}
                 )
             )
 
@@ -349,15 +319,10 @@ class ProductionRerankerAdapter:
         self.language = language
 
     async def rerank(
-        self,
-        query: str,
-        documents: list[dict[str, Any]],
-        category: str | None = None,
+        self, query: str, documents: list[dict[str, Any]], category: str | None = None
     ) -> list[dict[str, Any]]:
         """Adapt production reranker to our interface."""
-        return await self._reranker.rerank(
-            query=query, documents=documents, category=category
-        )
+        return await self._reranker.rerank(query=query, documents=documents, category=category)
 
 
 # ================================
@@ -366,9 +331,9 @@ class ProductionRerankerAdapter:
 
 
 def create_mock_setup(
-    query_responses: dict[str, ProcessedQuery] = None,
-    category_responses: dict[str, CategoryMatch] = None,
-    search_results: list[SearchResult] = None,
+    query_responses: dict[str, ProcessedQuery] | None = None,
+    category_responses: dict[str, CategoryMatch] | None = None,
+    search_results: list[SearchResult] | None = None,
     enable_reranking: bool = True,
     search_delay: float = 0.0,
 ) -> tuple:
@@ -428,10 +393,7 @@ def create_mock_setup(
 
 
 def create_production_setup(
-    search_engine,
-    language: str = "hr",
-    reranker=None,
-    enable_performance_tracking: bool = True,
+    search_engine, language: str = "hr", reranker=None, enable_performance_tracking: bool = True
 ) -> tuple:
     """
     Create production setup with real components.
@@ -449,9 +411,7 @@ def create_production_setup(
     query_processor = ProductionQueryProcessor(language)
     categorizer = ProductionCategorizer(language)
     search_engine_adapter = ProductionSearchEngineAdapter(search_engine)
-    reranker_adapter = (
-        ProductionRerankerAdapter(reranker, language) if reranker else None
-    )
+    reranker_adapter = ProductionRerankerAdapter(reranker, language) if reranker else None
 
     # Use Python's standard logger
     import logging
@@ -495,19 +455,10 @@ def create_production_setup(
         performance_tracking=enable_performance_tracking,
     )
 
-    return (
-        query_processor,
-        categorizer,
-        search_engine_adapter,
-        reranker_adapter,
-        logger,
-        config,
-    )
+    return (query_processor, categorizer, search_engine_adapter, reranker_adapter, logger, config)
 
 
-def create_test_config(
-    max_results: int = 5, performance_tracking: bool = True
-) -> RetrievalConfig:
+def create_test_config(max_results: int = 5, performance_tracking: bool = True) -> RetrievalConfig:
     """Create test configuration with customizable parameters."""
     return RetrievalConfig(
         default_max_results=max_results,

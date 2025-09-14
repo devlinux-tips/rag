@@ -4,16 +4,9 @@ Production and mock providers for testable language management system.
 """
 
 import logging
-from typing import Dict, List, Optional, Set
 
 from .config_validator import ConfigurationError
-from .language_manager import (
-    ConfigProvider,
-    LanguagePatterns,
-    LanguageSettings,
-    LoggerProvider,
-    PatternProvider,
-)
+from .language_manager import LanguagePatterns, LanguageSettings
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -35,11 +28,7 @@ class MockConfigProvider:
             default_language="hr",
             auto_detect=True,
             fallback_language="hr",
-            language_names={
-                "hr": "Croatian",
-                "en": "English",
-                "multilingual": "Multilingual",
-            },
+            language_names={"hr": "Croatian", "en": "English", "multilingual": "Multilingual"},
             embedding_model="BAAI/bge-m3",
             chunk_size=512,
             chunk_overlap=50,
@@ -74,18 +63,7 @@ class MockPatternProvider:
             stopwords={
                 "hr": {"i", "u", "na", "za", "je", "se", "da", "od", "do", "sa"},
                 "en": {"a", "an", "and", "are", "as", "at", "be", "by", "for", "from"},
-                "multilingual": {
-                    "the",
-                    "of",
-                    "and",
-                    "to",
-                    "a",
-                    "in",
-                    "is",
-                    "it",
-                    "you",
-                    "that",
-                },
+                "multilingual": {"the", "of", "and", "to", "a", "in", "is", "it", "you", "that"},
             },
         )
 
@@ -112,12 +90,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: dict[str, list[str]] = {
-            "info": [],
-            "debug": [],
-            "warning": [],
-            "error": [],
-        }
+        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "warning": [], "error": []}
 
     def info(self, message: str) -> None:
         """Capture info message."""
@@ -140,7 +113,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
+    def get_messages(self, level: str | None = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -171,11 +144,7 @@ class ProductionConfigProvider:
         """Load settings from the real configuration system."""
         try:
             # Import at runtime to avoid circular dependencies
-            from .config_loader import (
-                get_shared_config,
-                get_supported_languages,
-                load_config,
-            )
+            from .config_loader import get_shared_config, get_supported_languages, load_config
 
             # Load configurations
             supported_langs = get_supported_languages()
@@ -199,9 +168,8 @@ class ProductionConfigProvider:
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language settings: {e}. "
-                f"Please check your configuration files."
-            )
+                f"Failed to load language settings: {e}. Please check your configuration files."
+            ) from e
 
 
 class ProductionPatternProvider:
@@ -234,10 +202,7 @@ class ProductionPatternProvider:
                     lang_config = get_language_config(lang_code)
 
                     # Extract question patterns for detection
-                    if (
-                        "shared" not in lang_config
-                        or "question_patterns" not in lang_config["shared"]
-                    ):
+                    if "shared" not in lang_config or "question_patterns" not in lang_config["shared"]:
                         continue  # Skip languages without question patterns
                     question_patterns = lang_config["shared"]["question_patterns"]
                     if question_patterns:
@@ -268,18 +233,15 @@ class ProductionPatternProvider:
                     raise ConfigurationError(
                         f"Failed to load patterns for language '{lang_code}': {e}. "
                         f"Please check configuration for {lang_code}"
-                    )
+                    ) from e
 
-            return LanguagePatterns(
-                detection_patterns=detection_patterns, stopwords=stopwords
-            )
+            return LanguagePatterns(detection_patterns=detection_patterns, stopwords=stopwords)
 
         except Exception as e:
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
-                f"Failed to load language patterns: {e}. "
-                f"Please check your configuration files."
-            )
+                f"Failed to load language patterns: {e}. Please check your configuration files."
+            ) from e
 
 
 class StandardLoggerProvider:
@@ -365,7 +327,7 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
 
 
 def create_test_settings(
-    supported_languages: list[str] = None,
+    supported_languages: list[str] | None = None,
     default_language: str = "hr",
     auto_detect: bool = True,
     embedding_model: str = "BAAI/bge-m3",
@@ -398,8 +360,7 @@ def create_test_settings(
 
 
 def create_test_patterns(
-    detection_patterns: dict[str, list[str]] | None = None,
-    stopwords: dict[str, set[str]] | None = None,
+    detection_patterns: dict[str, list[str]] | None = None, stopwords: dict[str, set[str]] | None = None
 ) -> LanguagePatterns:
     """Create test patterns with customizable parameters."""
     default_detection = {
@@ -415,8 +376,7 @@ def create_test_patterns(
     }
 
     return LanguagePatterns(
-        detection_patterns=detection_patterns or default_detection,
-        stopwords=stopwords or default_stopwords,
+        detection_patterns=detection_patterns or default_detection, stopwords=stopwords or default_stopwords
     )
 
 
@@ -431,9 +391,7 @@ def create_development_language_manager():
 
     config_provider, pattern_provider, logger_provider = create_production_setup()
     return create_language_manager(
-        config_provider=config_provider,
-        pattern_provider=pattern_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, pattern_provider=pattern_provider, logger_provider=logger_provider
     )
 
 
@@ -447,14 +405,9 @@ def create_test_language_manager(
     from .language_manager import create_language_manager
 
     config_provider, pattern_provider, logger_provider = create_mock_setup(
-        settings=settings,
-        patterns=patterns,
-        custom_patterns=custom_patterns,
-        custom_stopwords=custom_stopwords,
+        settings=settings, patterns=patterns, custom_patterns=custom_patterns, custom_stopwords=custom_stopwords
     )
 
     return create_language_manager(
-        config_provider=config_provider,
-        pattern_provider=pattern_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, pattern_provider=pattern_provider, logger_provider=logger_provider
     ), (config_provider, pattern_provider, logger_provider)

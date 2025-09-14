@@ -25,7 +25,7 @@ Usage:
 import logging
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +102,9 @@ class ConfigLoader:
             return config_data
 
         except tomllib.TOMLDecodeError as e:
-            raise ConfigError(f"Invalid TOML in {config_path}: {e}")
+            raise ConfigError(f"Invalid TOML in {config_path}: {e}") from e
         except Exception as e:
-            raise ConfigError(f"Failed to load {config_path}: {e}")
+            raise ConfigError(f"Failed to load {config_path}: {e}") from e
 
     def get_section(self, config_name: str, section: str) -> dict[str, Any]:
         """
@@ -125,7 +125,7 @@ class ConfigLoader:
         if section not in config:
             raise ConfigError(f"Section '{section}' not found in {config_name}.toml")
 
-        return config[section]
+        return cast(dict[str, Any], config[section])
 
     def merge_configs(self, *config_names: str) -> dict[str, Any]:
         """
@@ -186,7 +186,7 @@ def get_config_section(config_name: str, section: str) -> dict[str, Any]:
 def get_shared_config() -> dict[str, Any]:
     """Get shared configuration from main config (constants and common settings)."""
     main_config = load_config("config")
-    return main_config["shared"]
+    return cast(dict[str, Any], main_config["shared"])
 
 
 # ============================================================================
@@ -209,9 +209,7 @@ def get_language_config(language: str) -> dict[str, Any]:
     """
     if not is_language_supported(language):
         supported = get_supported_languages()
-        raise ConfigError(
-            f"Unsupported language: {language}. Supported languages: {', '.join(supported)}"
-        )
+        raise ConfigError(f"Unsupported language: {language}. Supported languages: {', '.join(supported)}")
 
     # Get config file name for language
     config_file = get_language_config_file(language)
@@ -231,7 +229,7 @@ def get_language_shared(language: str) -> dict[str, Any]:
         Dictionary containing language-specific shared configuration
     """
     config = get_language_config(language)
-    return config["shared"]
+    return cast(dict[str, Any], config["shared"])
 
 
 def get_language_specific_config(section: str, language: str) -> dict[str, Any]:
@@ -251,7 +249,7 @@ def get_language_specific_config(section: str, language: str) -> dict[str, Any]:
     config = get_language_config(language)
     if section not in config:
         raise ConfigError(f"Section '{section}' not found in {language}.toml")
-    return config[section]
+    return cast(dict[str, Any], config[section])
 
 
 def get_supported_languages() -> list[str]:
@@ -267,10 +265,10 @@ def get_supported_languages() -> list[str]:
     try:
         main_config = load_config("config")
         # FAIL FAST: No fallback defaults - configuration must be complete
-        return main_config["languages"]["supported"]
+        return cast(list[str], main_config["languages"]["supported"])
     except Exception as e:
         # FAIL FAST: Language configuration must be valid
-        raise ConfigError(f"Failed to load supported languages: {e}")
+        raise ConfigError(f"Failed to load supported languages: {e}") from e
 
 
 def get_language_config_file(language: str) -> str:
@@ -369,7 +367,7 @@ def get_ollama_config() -> dict[str, Any]:
 def get_response_parsing_config() -> dict[str, Any]:
     """Get response parsing configuration."""
     generation_config = get_generation_config()
-    return generation_config["response_parsing"]
+    return cast(dict[str, Any], generation_config["response_parsing"])
 
 
 def get_preprocessing_config() -> dict[str, Any]:
@@ -380,19 +378,19 @@ def get_preprocessing_config() -> dict[str, Any]:
 def get_extraction_config() -> dict[str, Any]:
     """Get extraction configuration."""
     preprocessing_config = get_preprocessing_config()
-    return preprocessing_config["extraction"]
+    return cast(dict[str, Any], preprocessing_config["extraction"])
 
 
 def get_chunking_config() -> dict[str, Any]:
     """Get chunking configuration."""
     preprocessing_config = get_preprocessing_config()
-    return preprocessing_config["chunking"]
+    return cast(dict[str, Any], preprocessing_config["chunking"])
 
 
 def get_cleaning_config() -> dict[str, Any]:
     """Get cleaning configuration."""
     preprocessing_config = get_preprocessing_config()
-    return preprocessing_config["cleaning"]
+    return cast(dict[str, Any], preprocessing_config["cleaning"])
 
 
 def get_generation_prompts_config() -> dict[str, Any]:
@@ -460,19 +458,19 @@ def get_vectordb_config() -> dict[str, Any]:
 def get_embeddings_config() -> dict[str, Any]:
     """Get embeddings configuration."""
     vectordb_config = get_vectordb_config()
-    return vectordb_config["embeddings"]
+    return cast(dict[str, Any], vectordb_config["embeddings"])
 
 
 def get_storage_config() -> dict[str, Any]:
     """Get storage configuration."""
     vectordb_config = get_vectordb_config()
-    return vectordb_config["storage"]
+    return cast(dict[str, Any], vectordb_config["storage"])
 
 
 def get_search_config() -> dict[str, Any]:
     """Get search configuration."""
     vectordb_config = get_vectordb_config()
-    return vectordb_config["search"]
+    return cast(dict[str, Any], vectordb_config["search"])
 
 
 # Retrieval Configuration Functions
@@ -484,13 +482,13 @@ def get_retrieval_config() -> dict[str, Any]:
 def get_query_processing_config() -> dict[str, Any]:
     """Get query processing configuration."""
     retrieval_config = get_retrieval_config()
-    return retrieval_config["query_processing"]
+    return cast(dict[str, Any], retrieval_config["query_processing"])
 
 
 def get_ranking_config() -> dict[str, Any]:
     """Get ranking configuration."""
     retrieval_config = get_retrieval_config()
-    return retrieval_config["ranking"]
+    return cast(dict[str, Any], retrieval_config["ranking"])
 
 
 def get_language_ranking_features(language: str) -> dict[str, Any]:
@@ -529,29 +527,24 @@ def get_language_ranking_features(language: str) -> dict[str, Any]:
     try:
         ranking_config = get_language_specific_config("ranking", language)
         if "language_features" not in ranking_config:
-            raise ConfigError(
-                f"Missing 'language_features' section in ranking configuration "
-                f"for language '{language}'"
-            )
-        return ranking_config["language_features"]
+            raise ConfigError(f"Missing 'language_features' section in ranking configuration for language '{language}'")
+        return cast(dict[str, Any], ranking_config["language_features"])
     except ConfigError:
         raise
     except Exception as e:
-        raise ConfigError(
-            f"Failed to load language ranking features for '{language}': {e}"
-        )
+        raise ConfigError(f"Failed to load language ranking features for '{language}': {e}") from e
 
 
 def get_reranking_config() -> dict[str, Any]:
     """Get reranking configuration."""
     retrieval_config = get_retrieval_config()
-    return retrieval_config["reranking"]
+    return cast(dict[str, Any], retrieval_config["reranking"])
 
 
 def get_hybrid_retrieval_config() -> dict[str, Any]:
     """Get hybrid retrieval configuration."""
     retrieval_config = get_retrieval_config()
-    return retrieval_config["hybrid_retrieval"]
+    return cast(dict[str, Any], retrieval_config["hybrid_retrieval"])
 
 
 # Pipeline configuration functions
@@ -563,22 +556,22 @@ def get_pipeline_config() -> dict[str, Any]:
 def get_processing_config() -> dict[str, Any]:
     """Get document processing configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config["processing"]
+    return cast(dict[str, Any], pipeline_config["processing"])
 
 
 def get_chroma_config() -> dict[str, Any]:
     """Get ChromaDB configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config["chroma"]
+    return cast(dict[str, Any], pipeline_config["chroma"])
 
 
 def get_performance_config() -> dict[str, Any]:
     """Get performance configuration."""
     pipeline_config = get_pipeline_config()
-    return pipeline_config["performance"]
+    return cast(dict[str, Any], pipeline_config["performance"])
 
 
 def get_system_config() -> dict[str, Any]:
     """Get system configuration."""
     main_config = load_config("config")
-    return main_config["system"]
+    return cast(dict[str, Any], main_config["system"])

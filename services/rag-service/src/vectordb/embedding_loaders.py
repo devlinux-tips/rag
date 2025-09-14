@@ -5,11 +5,11 @@ Provides testable model loading abstraction layer.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from sentence_transformers import SentenceTransformer
 
-from .embeddings import EmbeddingModel, ModelLoader
+from .embeddings import EmbeddingModel
 
 
 class SentenceTransformerLoader:
@@ -20,31 +20,26 @@ class SentenceTransformerLoader:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def load_model(
-        self, model_name: str, cache_dir: str, device: str, **kwargs
-    ) -> EmbeddingModel:
+    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
         """Load sentence-transformers model."""
         try:
             # Create cache directory
             Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
             # Load model with configuration
-            model = SentenceTransformer(
-                model_name, cache_folder=cache_dir, device=device, **kwargs
-            )
+            model = SentenceTransformer(model_name, cache_folder=cache_dir, device=device, **kwargs)
 
             self.logger.info(f"Loaded model {model_name} on device {device}")
             return SentenceTransformerAdapter(model)
         except Exception as e:
             self.logger.error(f"Failed to load model {model_name}: {e}")
-            raise RuntimeError(f"Model loading failed: {e}")
+            raise RuntimeError(f"Model loading failed: {e}") from e
 
     def is_model_available(self, model_name: str) -> bool:
         """Check if model is available for loading."""
         try:
             # Try to access model info without downloading
             from huggingface_hub import model_info
-            from sentence_transformers import SentenceTransformer
 
             # Check if it's a valid Hugging Face model
             info = model_info(model_name)
@@ -63,16 +58,9 @@ class SentenceTransformerAdapter:
     def __init__(self, model):
         self._model = model
 
-    def encode(
-        self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs
-    ):
+    def encode(self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs):
         """Generate embeddings for texts."""
-        return self._model.encode(
-            texts,
-            batch_size=batch_size,
-            normalize_embeddings=normalize_embeddings,
-            **kwargs,
-        )
+        return self._model.encode(texts, batch_size=batch_size, normalize_embeddings=normalize_embeddings, **kwargs)
 
     @property
     def device(self) -> str:
@@ -122,9 +110,7 @@ class MockModelLoader:
         """Clear call log."""
         self.call_log.clear()
 
-    def load_model(
-        self, model_name: str, cache_dir: str, device: str, **kwargs
-    ) -> EmbeddingModel:
+    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
         """Mock model loading."""
         self.call_log.append(
             {
@@ -164,11 +150,9 @@ class MockEmbeddingModel:
         self._device = device
         self._max_seq_length = 512
         self._embedding_dim = 1024
-        self.call_log = []
+        self.call_log: list[dict[str, Any]] = []
 
-    def encode(
-        self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs
-    ):
+    def encode(self, texts, batch_size: int = 32, normalize_embeddings: bool = True, **kwargs):
         """Mock embedding generation."""
         import numpy as np
 

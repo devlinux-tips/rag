@@ -4,7 +4,6 @@ Provides fail-fast error handling following AI_INSTRUCTIONS.md governance.
 """
 
 import logging
-from typing import Optional
 
 
 def get_logger(name: str | None = None) -> logging.Logger:

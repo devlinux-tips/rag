@@ -4,10 +4,8 @@ Implements dependency injection and pure functions for robust embedding generati
 """
 
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -53,13 +51,7 @@ class DeviceInfo:
 class EmbeddingModel(Protocol):
     """Embedding model interface for dependency injection."""
 
-    def encode(
-        self,
-        texts: list[str],
-        batch_size: int = 32,
-        normalize_embeddings: bool = True,
-        **kwargs,
-    ) -> np.ndarray:
+    def encode(self, texts: list[str], batch_size: int = 32, normalize_embeddings: bool = True, **kwargs) -> np.ndarray:
         """Generate embeddings for texts."""
         ...
 
@@ -81,9 +73,7 @@ class EmbeddingModel(Protocol):
 class ModelLoader(Protocol):
     """Model loader interface for dependency injection."""
 
-    def load_model(
-        self, model_name: str, cache_dir: str, device: str, **kwargs
-    ) -> EmbeddingModel:
+    def load_model(self, model_name: str, cache_dir: str, device: str, **kwargs) -> EmbeddingModel:
         """Load embedding model."""
         ...
 
@@ -143,10 +133,7 @@ def validate_texts_for_embedding(texts: list[str]) -> list[str]:
 
 
 def calculate_optimal_batch_size(
-    num_texts: int,
-    available_memory: int | None,
-    base_batch_size: int = 32,
-    max_batch_size: int = 256,
+    num_texts: int, available_memory: int | None, base_batch_size: int = 32, max_batch_size: int = 256
 ) -> int:
     """
     Calculate optimal batch size for embedding generation.
@@ -237,9 +224,7 @@ def combine_batch_embeddings(batch_embeddings: list[np.ndarray]) -> np.ndarray:
 
 
 def validate_embedding_dimensions(
-    embeddings: np.ndarray,
-    expected_dim: int | None = None,
-    num_texts: int | None = None,
+    embeddings: np.ndarray, expected_dim: int | None = None, num_texts: int | None = None
 ) -> None:
     """
     Validate embedding array dimensions.
@@ -262,9 +247,7 @@ def validate_embedding_dimensions(
         raise ValueError(f"Expected {num_texts} embeddings, got {embeddings.shape[0]}")
 
     if expected_dim is not None and embeddings.shape[1] != expected_dim:
-        raise ValueError(
-            f"Expected embedding dimension {expected_dim}, got {embeddings.shape[1]}"
-        )
+        raise ValueError(f"Expected embedding dimension {expected_dim}, got {embeddings.shape[1]}")
 
 
 def calculate_embedding_statistics(embeddings: np.ndarray) -> dict[str, Any]:
@@ -324,15 +307,9 @@ class MultilingualEmbeddingGenerator:
         """
         self.config = config
         # Dependency injection - explicit defaults for optional dependencies
-        self.model_loader = (
-            model_loader
-            if model_loader is not None
-            else self._create_default_model_loader()
-        )
+        self.model_loader = model_loader if model_loader is not None else self._create_default_model_loader()
         self.device_detector = (
-            device_detector
-            if device_detector is not None
-            else self._create_default_device_detector()
+            device_detector if device_detector is not None else self._create_default_device_detector()
         )
         self.logger = logger if logger is not None else logging.getLogger(__name__)
 
@@ -361,9 +338,7 @@ class MultilingualEmbeddingGenerator:
         """
         try:
             # Detect device
-            self._device_info = self.device_detector.detect_best_device(
-                self.config.device
-            )
+            self._device_info = self.device_detector.detect_best_device(self.config.device)
             self.logger.info(f"Using device: {self._device_info.device_type}")
 
             # Load model
@@ -377,19 +352,14 @@ class MultilingualEmbeddingGenerator:
             )
 
             self._is_initialized = True
-            self.logger.info(
-                f"Embedding system initialized with model: {self.config.model_name}"
-            )
+            self.logger.info(f"Embedding system initialized with model: {self.config.model_name}")
 
         except Exception as e:
             self.logger.error(f"Failed to initialize embedding system: {e}")
-            raise RuntimeError(f"Embedding system initialization failed: {e}")
+            raise RuntimeError(f"Embedding system initialization failed: {e}") from e
 
     def generate_embeddings(
-        self,
-        texts: list[str],
-        normalize: bool | None = None,
-        batch_size: int | None = None,
+        self, texts: list[str], normalize: bool | None = None, batch_size: int | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings for input texts.
@@ -407,38 +377,34 @@ class MultilingualEmbeddingGenerator:
             ValueError: If input texts are invalid
         """
         if not self._is_initialized:
-            raise RuntimeError(
-                "Embedding system not initialized. Call initialize() first."
-            )
+            raise RuntimeError("Embedding system not initialized. Call initialize() first.")
 
         import time
 
         start_time = time.time()
 
         try:
+            # Ensure model is initialized
+            if self._model is None:
+                raise RuntimeError("Embedding model not initialized. Call initialize() first.")
+            if self._device_info is None:
+                raise RuntimeError("Device info not initialized. Call initialize() first.")
+
             # Validate and clean input texts
             cleaned_texts = validate_texts_for_embedding(texts)
 
             # Determine processing parameters
-            use_normalize = (
-                normalize if normalize is not None else self.config.normalize_embeddings
-            )
-            use_batch_size = (
-                batch_size if batch_size is not None else self.config.batch_size
-            )
+            use_normalize = normalize if normalize is not None else self.config.normalize_embeddings
+            use_batch_size = batch_size if batch_size is not None else self.config.batch_size
 
             # Calculate optimal batch size
             available_memory = None
             if self._device_info and self._device_info.available_memory:
                 available_memory = self._device_info.available_memory
 
-            optimal_batch_size = calculate_optimal_batch_size(
-                len(cleaned_texts), available_memory, use_batch_size
-            )
+            optimal_batch_size = calculate_optimal_batch_size(len(cleaned_texts), available_memory, use_batch_size)
 
-            self.logger.info(
-                f"Processing {len(cleaned_texts)} texts with batch size {optimal_batch_size}"
-            )
+            self.logger.info(f"Processing {len(cleaned_texts)} texts with batch size {optimal_batch_size}")
 
             # Generate embeddings in batches
             text_batches = split_texts_into_batches(cleaned_texts, optimal_batch_size)
@@ -461,9 +427,7 @@ class MultilingualEmbeddingGenerator:
 
             # Validate results
             embedding_dim = self._model.get_sentence_embedding_dimension()
-            validate_embedding_dimensions(
-                all_embeddings, expected_dim=embedding_dim, num_texts=len(cleaned_texts)
-            )
+            validate_embedding_dimensions(all_embeddings, expected_dim=embedding_dim, num_texts=len(cleaned_texts))
 
             # Calculate processing time and statistics
             processing_time = time.time() - start_time
@@ -490,7 +454,7 @@ class MultilingualEmbeddingGenerator:
 
         except Exception as e:
             self.logger.error(f"Embedding generation failed: {e}")
-            raise RuntimeError(f"Failed to generate embeddings: {e}")
+            raise RuntimeError(f"Failed to generate embeddings: {e}") from e
 
     def get_embedding_dimension(self) -> int:
         """
@@ -574,8 +538,5 @@ def create_embedding_generator(
         config = EmbeddingConfig()
 
     return MultilingualEmbeddingGenerator(
-        config=config,
-        model_loader=model_loader,
-        device_detector=device_detector,
-        logger=logger,
+        config=config, model_loader=model_loader, device_detector=device_detector, logger=logger
     )

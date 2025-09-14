@@ -4,14 +4,8 @@ Production and mock providers for configurable prompt template system.
 """
 
 import logging
-from typing import Dict, List, Optional
 
-from src.generation.enhanced_prompt_templates import (
-    ConfigProvider,
-    LoggerProvider,
-    PromptConfig,
-    PromptType,
-)
+from src.generation.enhanced_prompt_templates import PromptConfig, PromptType
 from src.retrieval.categorization import CategoryType
 
 # ================================
@@ -61,19 +55,14 @@ class MockConfigProvider:
         }
 
         return PromptConfig(
-            category_templates=category_templates,
-            messages=messages,
-            formatting=formatting,
-            language="hr",
+            category_templates=category_templates, messages=messages, formatting=formatting, language="hr"
         )
 
     def set_config(self, config: PromptConfig) -> None:
         """Set mock configuration."""
         self.config = config
 
-    def add_category_template(
-        self, category: CategoryType, prompt_type: PromptType, template: str
-    ) -> None:
+    def add_category_template(self, category: CategoryType, prompt_type: PromptType, template: str) -> None:
         """Add a template for specific category and type."""
         if category not in self.config.category_templates:
             self.config.category_templates[category] = {}
@@ -104,12 +93,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: dict[str, list[str]] = {
-            "info": [],
-            "debug": [],
-            "warning": [],
-            "error": [],
-        }
+        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "warning": [], "error": []}
 
     def info(self, message: str) -> None:
         """Capture info message."""
@@ -132,7 +116,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
+    def get_messages(self, level: str | None = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -171,7 +155,7 @@ class ProductionConfigProvider:
             formatting_config = get_language_specific_config("formatting", language)
 
             # Parse category templates
-            category_templates = {}
+            category_templates: dict[CategoryType, dict[PromptType, str]] = {}
 
             for category_name, category_data in prompts_config.items():
                 try:
@@ -198,9 +182,7 @@ class ProductionConfigProvider:
             )
 
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to load prompt configuration for language '{language}': {e}"
-            ) from e
+            raise RuntimeError(f"Failed to load prompt configuration for language '{language}': {e}") from e
 
 
 class StandardLoggerProvider:
@@ -288,10 +270,7 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
 
 
 def create_test_config(
-    language: str = "hr",
-    include_followup: bool = True,
-    include_technical: bool = True,
-    include_cultural: bool = True,
+    language: str = "hr", include_followup: bool = True, include_technical: bool = True, include_cultural: bool = True
 ) -> PromptConfig:
     """Create test configuration with customizable parameters."""
 
@@ -304,9 +283,9 @@ def create_test_config(
     }
 
     if include_followup:
-        category_templates[CategoryType.GENERAL][
-            PromptType.FOLLOWUP
-        ] = "Previous: {original_query} -> {original_answer}\nNew: {followup_query}\nAnswer:"
+        category_templates[CategoryType.GENERAL][PromptType.FOLLOWUP] = (
+            "Previous: {original_query} -> {original_answer}\nNew: {followup_query}\nAnswer:"
+        )
 
     if include_technical:
         category_templates[CategoryType.TECHNICAL] = {
@@ -332,20 +311,14 @@ def create_test_config(
     }
 
     return PromptConfig(
-        category_templates=category_templates,
-        messages=messages,
-        formatting=formatting,
-        language=language,
+        category_templates=category_templates, messages=messages, formatting=formatting, language=language
     )
 
 
 def create_minimal_config(language: str = "hr") -> PromptConfig:
     """Create minimal configuration for basic testing."""
     category_templates = {
-        CategoryType.GENERAL: {
-            PromptType.SYSTEM: "Basic assistant.",
-            PromptType.USER: "{query} - {context}",
-        }
+        CategoryType.GENERAL: {PromptType.SYSTEM: "Basic assistant.", PromptType.USER: "{query} - {context}"}
     }
 
     return PromptConfig(
@@ -361,7 +334,7 @@ def create_invalid_config(language: str = "hr") -> PromptConfig:
     # Missing USER template for GENERAL category
     category_templates = {
         CategoryType.GENERAL: {
-            PromptType.SYSTEM: "You are a helpful assistant.",
+            PromptType.SYSTEM: "You are a helpful assistant."
             # Missing PromptType.USER intentionally
         }
     }
@@ -408,9 +381,7 @@ def create_test_prompt_builder(
     )
 
     return create_enhanced_prompt_builder(
-        language=language,
-        config_provider=config_provider,
-        logger_provider=logger_provider,
+        language=language, config_provider=config_provider, logger_provider=logger_provider
     ), (config_provider, logger_provider)
 
 
@@ -419,11 +390,9 @@ def create_test_prompt_builder(
 # ================================
 
 
-def build_category_templates(
-    templates: dict[str, str],
-) -> dict[CategoryType, dict[PromptType, str]]:
+def build_category_templates(templates: dict[str, str]) -> dict[CategoryType, dict[PromptType, str]]:
     """Helper to build category templates from flat dictionary."""
-    result = {}
+    result: dict[CategoryType, dict[PromptType, str]] = {}
 
     for key, template in templates.items():
         if "." not in key:
@@ -446,9 +415,7 @@ def build_category_templates(
     return result
 
 
-def create_template_variants(
-    base_template: str, variants: dict[str, str]
-) -> dict[str, str]:
+def create_template_variants(base_template: str, variants: dict[str, str]) -> dict[str, str]:
     """Create template variants by substituting parts of base template."""
     result = {"base": base_template}
 

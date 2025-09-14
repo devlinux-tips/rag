@@ -5,7 +5,7 @@ Includes production implementations and mock providers for testing.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -28,7 +28,7 @@ class MockEmbeddingProvider(EmbeddingProvider):
         """
         self.dimension = dimension
         self.deterministic = deterministic
-        self._embedding_cache = {}
+        self._embedding_cache: dict[str, np.ndarray] = {}
         self.logger = logging.getLogger(__name__)
 
     async def encode_text(self, text: str) -> np.ndarray:
@@ -58,24 +58,12 @@ class MockVectorSearchProvider(VectorSearchProvider):
 
     def __init__(self):
         """Initialize mock search provider."""
-        self.documents = (
-            {}
-        )  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
+        self.documents = {}  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
         self.logger = logging.getLogger(__name__)
 
-    def add_document(
-        self,
-        doc_id: str,
-        content: str,
-        embedding: np.ndarray,
-        metadata: dict[str, Any] | None = None,
-    ):
+    def add_document(self, doc_id: str, content: str, embedding: np.ndarray, metadata: dict[str, Any] | None = None):
         """Add document for testing."""
-        self.documents[doc_id] = {
-            "content": content,
-            "embedding": embedding,
-            "metadata": metadata or {},
-        }
+        self.documents[doc_id] = {"content": content, "embedding": embedding, "metadata": metadata or {}}
 
     async def search_by_embedding(
         self,
@@ -86,12 +74,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
     ) -> dict[str, Any]:
         """Mock embedding-based search."""
         if not self.documents:
-            return {
-                "ids": [[]],
-                "documents": [[]],
-                "metadatas": [[]],
-                "distances": [[]],
-            }
+            return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         # Calculate similarities
         similarities = []
@@ -128,28 +111,14 @@ class MockVectorSearchProvider(VectorSearchProvider):
         metadatas = [[item["metadata"] for item in similarities]]
         distances = [[item["distance"] for item in similarities]]
 
-        return {
-            "ids": ids,
-            "documents": documents,
-            "metadatas": metadatas,
-            "distances": distances,
-        }
+        return {"ids": ids, "documents": documents, "metadatas": metadatas, "distances": distances}
 
     async def search_by_text(
-        self,
-        query_text: str,
-        top_k: int,
-        filters: dict[str, Any] | None = None,
-        include_metadata: bool = True,
+        self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
     ) -> dict[str, Any]:
         """Mock text-based search using simple keyword matching."""
         if not self.documents:
-            return {
-                "ids": [[]],
-                "documents": [[]],
-                "metadatas": [[]],
-                "distances": [[]],
-            }
+            return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         query_terms = set(query_text.lower().split())
         scores = []
@@ -176,12 +145,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
             distance = 1.0 - min(1.0, score)  # Convert to distance
 
             scores.append(
-                {
-                    "id": doc_id,
-                    "content": doc_data["content"],
-                    "metadata": doc_data["metadata"],
-                    "distance": distance,
-                }
+                {"id": doc_id, "content": doc_data["content"], "metadata": doc_data["metadata"], "distance": distance}
             )
 
         # Sort by distance (ascending)
@@ -196,12 +160,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
         metadatas = [[item["metadata"] for item in scores]]
         distances = [[item["distance"] for item in scores]]
 
-        return {
-            "ids": ids,
-            "documents": documents,
-            "metadatas": metadatas,
-            "distances": distances,
-        }
+        return {"ids": ids, "documents": documents, "metadatas": metadatas, "distances": distances}
 
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
         """Get document by ID."""
@@ -213,9 +172,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
             }
         return None
 
-    def _matches_filters(
-        self, metadata: dict[str, Any], filters: dict[str, Any]
-    ) -> bool:
+    def _matches_filters(self, metadata: dict[str, Any], filters: dict[str, Any]) -> bool:
         """Check if metadata matches filters."""
         for key, value in filters.items():
             if key not in metadata or metadata[key] != value:
@@ -295,9 +252,8 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
         try:
             # Run encoding in thread pool to avoid blocking async loop
             loop = asyncio.get_event_loop()
-            embedding = await loop.run_in_executor(
-                None, lambda: self.model.encode(text, normalize_embeddings=True)
-            )
+            raw_embedding = await loop.run_in_executor(None, lambda: self.model.encode(text, normalize_embeddings=True))
+            embedding: np.ndarray = np.asarray(raw_embedding)
 
             # Ensure numpy array format
             if not isinstance(embedding, np.ndarray):
@@ -344,22 +300,16 @@ class ChromaDBSearchProvider(VectorSearchProvider):
                 "query_embeddings": [query_embedding.tolist()],
                 "n_results": top_k,
                 "include": (
-                    ["documents", "metadatas", "distances"]
-                    if include_metadata
-                    else ["documents", "distances"]
+                    ["documents", "metadatas", "distances"] if include_metadata else ["documents", "distances"]
                 ),
             }
 
             if filters:
                 query_kwargs["where"] = filters
 
-            results = await loop.run_in_executor(
-                None, lambda: self.collection.query(**query_kwargs)
-            )
+            results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
 
-            self.logger.debug(
-                f"ChromaDB embedding search returned {len(results.get('ids', [[]])[0])} results"
-            )
+            self.logger.debug(f"ChromaDB embedding search returned {len(results.get('ids', [[]])[0])} results")
             return results
 
         except Exception as e:
@@ -367,11 +317,7 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             raise
 
     async def search_by_text(
-        self,
-        query_text: str,
-        top_k: int,
-        filters: dict[str, Any] | None = None,
-        include_metadata: bool = True,
+        self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
     ) -> dict[str, Any]:
         """Search using query text (relies on ChromaDB's built-in embedding)."""
         try:
@@ -381,22 +327,16 @@ class ChromaDBSearchProvider(VectorSearchProvider):
                 "query_texts": [query_text],
                 "n_results": top_k,
                 "include": (
-                    ["documents", "metadatas", "distances"]
-                    if include_metadata
-                    else ["documents", "distances"]
+                    ["documents", "metadatas", "distances"] if include_metadata else ["documents", "distances"]
                 ),
             }
 
             if filters:
                 query_kwargs["where"] = filters
 
-            results = await loop.run_in_executor(
-                None, lambda: self.collection.query(**query_kwargs)
-            )
+            results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
 
-            self.logger.debug(
-                f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results"
-            )
+            self.logger.debug(f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results")
             return results
 
         except Exception as e:
@@ -409,21 +349,14 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             loop = asyncio.get_event_loop()
 
             results = await loop.run_in_executor(
-                None,
-                lambda: self.collection.get(
-                    ids=[document_id], include=["documents", "metadatas"]
-                ),
+                None, lambda: self.collection.get(ids=[document_id], include=["documents", "metadatas"])
             )
 
             if results and results.get("ids") and results["ids"]:
                 return {
                     "id": document_id,
-                    "content": (
-                        results["documents"][0] if results.get("documents") else ""
-                    ),
-                    "metadata": (
-                        results["metadatas"][0] if results.get("metadatas") else {}
-                    ),
+                    "content": (results["documents"][0] if results.get("documents") else ""),
+                    "metadata": (results["metadatas"][0] if results.get("metadatas") else {}),
                 }
 
             return None
@@ -456,7 +389,7 @@ class ProductionConfigProvider(ConfigProvider):
 
     def get_search_config(self) -> dict[str, Any]:
         """Get search configuration from config files."""
-        if self.get_search_config_func:
+        if self.get_search_config_func is not None:
             return self.get_search_config_func()
         else:
             # Fallback default configuration
@@ -479,16 +412,11 @@ class ProductionConfigProvider(ConfigProvider):
 
         # Validate required weight keys
         if "semantic_weight" not in weights:
-            raise ValueError(
-                "Missing 'semantic_weight' in search weights configuration"
-            )
+            raise ValueError("Missing 'semantic_weight' in search weights configuration")
         if "keyword_weight" not in weights:
             raise ValueError("Missing 'keyword_weight' in search weights configuration")
 
-        return {
-            "semantic": weights["semantic_weight"],
-            "keyword": weights["keyword_weight"],
-        }
+        return {"semantic": weights["semantic_weight"], "keyword": weights["keyword_weight"]}
 
 
 # Factory Functions
@@ -502,16 +430,12 @@ def create_mock_search_provider() -> VectorSearchProvider:
     return MockVectorSearchProvider()
 
 
-def create_mock_config_provider(
-    custom_config: dict[str, Any] | None = None,
-) -> ConfigProvider:
+def create_mock_config_provider(custom_config: dict[str, Any] | None = None) -> ConfigProvider:
     """Create mock config provider for testing."""
     return MockConfigProvider(custom_config=custom_config)
 
 
-def create_production_embedding_provider(
-    model_name: str = "BAAI/bge-m3", device: str = "cpu"
-) -> EmbeddingProvider:
+def create_production_embedding_provider(model_name: str = "BAAI/bge-m3", device: str = "cpu") -> EmbeddingProvider:
     """Create production embedding provider."""
     return SentenceTransformerEmbeddingProvider(model_name=model_name, device=device)
 

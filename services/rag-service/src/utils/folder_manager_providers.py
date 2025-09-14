@@ -6,15 +6,8 @@ Production and mock providers for testable folder management system.
 import logging
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional
 
-from .folder_manager import (
-    ConfigProvider,
-    FileSystemProvider,
-    FolderConfig,
-    FolderStats,
-    LoggerProvider,
-)
+from .folder_manager import FolderConfig, FolderStats
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -46,9 +39,7 @@ class MockFileSystemProvider:
 
     def create_folder(self, folder_path: Path) -> bool:
         """Mock folder creation."""
-        self.call_history.append(
-            {"operation": "create_folder", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "create_folder", "path": str(folder_path)})
 
         if self.should_fail.get("create_folder", False):
             return False
@@ -62,9 +53,7 @@ class MockFileSystemProvider:
 
     def folder_exists(self, folder_path: Path) -> bool:
         """Mock folder existence check."""
-        self.call_history.append(
-            {"operation": "folder_exists", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "folder_exists", "path": str(folder_path)})
         path_str = str(folder_path)
         if path_str not in self.existing_folders:
             raise ValueError(f"Mock folder existence not configured for {folder_path}")
@@ -72,9 +61,7 @@ class MockFileSystemProvider:
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Mock folder removal."""
-        self.call_history.append(
-            {"operation": "remove_folder", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "remove_folder", "path": str(folder_path)})
 
         if self.should_fail.get("remove_folder", False):
             return False
@@ -88,9 +75,7 @@ class MockFileSystemProvider:
 
     def get_folder_stats(self, folder_path: Path) -> FolderStats:
         """Mock folder statistics."""
-        self.call_history.append(
-            {"operation": "get_folder_stats", "path": str(folder_path)}
-        )
+        self.call_history.append({"operation": "get_folder_stats", "path": str(folder_path)})
 
         path_str = str(folder_path)
         if path_str not in self.folder_stats:
@@ -145,12 +130,7 @@ class MockLoggerProvider:
 
     def __init__(self):
         """Initialize message capture."""
-        self.messages: dict[str, list[str]] = {
-            "info": [],
-            "debug": [],
-            "warning": [],
-            "error": [],
-        }
+        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "warning": [], "error": []}
 
     def info(self, message: str) -> None:
         """Capture info message."""
@@ -173,7 +153,7 @@ class MockLoggerProvider:
         for level in self.messages:
             self.messages[level].clear()
 
-    def get_messages(self, level: str = None) -> dict[str, list[str]] | list[str]:
+    def get_messages(self, level: str | None = None) -> dict[str, list[str]] | list[str]:
         """Get captured messages by level or all messages."""
         if level:
             if level not in self.messages:
@@ -262,7 +242,7 @@ class ProductionConfigProvider:
                 collection_name_template=config["collection_name_template"],
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to load folder configuration from system: {e}")
+            raise RuntimeError(f"Failed to load folder configuration from system: {e}") from e
 
 
 class StandardLoggerProvider:
@@ -353,9 +333,7 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
 
 
 def create_test_config(
-    data_base_dir: str = "/test/data",
-    models_base_dir: str = "/test/models",
-    system_dir: str = "/test/system",
+    data_base_dir: str = "/test/data", models_base_dir: str = "/test/models", system_dir: str = "/test/system"
 ) -> FolderConfig:
     """Create test configuration with customizable parameters."""
     return FolderConfig(
@@ -384,9 +362,7 @@ def create_development_folder_manager():
 
     config_provider, filesystem_provider, logger_provider = create_production_setup()
     return create_tenant_folder_manager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, filesystem_provider=filesystem_provider, logger_provider=logger_provider
     )
 
 
@@ -407,7 +383,5 @@ def create_test_folder_manager(
     )
 
     return create_tenant_folder_manager(
-        config_provider=config_provider,
-        filesystem_provider=filesystem_provider,
-        logger_provider=logger_provider,
+        config_provider=config_provider, filesystem_provider=filesystem_provider, logger_provider=logger_provider
     ), (config_provider, filesystem_provider, logger_provider)
