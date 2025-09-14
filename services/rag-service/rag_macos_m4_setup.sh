@@ -101,17 +101,13 @@ brew install --cask libreoffice
 print_success "✅ System dependencies installed"
 
 # Create uv project and virtual environment
-print_status "Creating uv project with Python 3.13..."
+print_status "Setting up uv project with Python 3.13..."
 if [ ! -f "pyproject.toml" ]; then
     print_error "No pyproject.toml found. Please run from rag-service directory."
     exit 1
 fi
 
-# Initialize uv project if not already done
-if [ ! -f "uv.lock" ]; then
-    print_status "Initializing uv project..."
-    uv init --python 3.13
-fi
+print_success "✅ Found pyproject.toml with modern Python project configuration"
 
 # Install dependencies with uv (much faster than pip)
 print_status "Installing Python dependencies with uv..."

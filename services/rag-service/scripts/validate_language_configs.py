@@ -113,7 +113,7 @@ def compare_config_structures(
 
 def validate_all_language_configs() -> bool:
     """Validate all language configuration files."""
-    config_dir = Path(__file__).parent / "config"
+    config_dir = Path(__file__).parent / "../config"
 
     # Find all language config files (excluding main config.toml)
     language_files = []

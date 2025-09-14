@@ -9,7 +9,7 @@ from typing import Any
 
 import toml
 
-sys.path.insert(0, "src")
+sys.path.insert(0, "../src")
 
 
 def extract_keys_from_config(
