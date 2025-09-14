@@ -35,7 +35,7 @@ dependencies = [
     "requests>=2.31.0",
 ]
 
-requires-python = ">=3.12"
+requires-python = ">=3.12"  # Supports both Ubuntu 3.12 and macOS 3.13
 
 [project.optional-dependencies]
 dev = [
@@ -55,7 +55,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 120
-target-version = "py313"  # Updated for Python 3.13
+target-version = "py312"  # Compatible with both Ubuntu 3.12 and macOS 3.13
 exclude = [
     ".git",
     "__pycache__",
@@ -104,7 +104,7 @@ line-ending = "auto"
 skip-magic-trailing-comma = true
 
 [tool.mypy]
-python_version = "3.13"  # Updated for Python 3.13
+python_version = "3.12"  # Compatible with both Ubuntu 3.12 and macOS 3.13
 warn_return_any = false  # AI-friendly: focus on functional correctness
 warn_unused_configs = false
 disallow_untyped_defs = false
@@ -128,7 +128,7 @@ exclude = [
 
 [tool.black]
 line-length = 120
-target-version = ["py313"]  # Updated for Python 3.13
+target-version = ["py312"]  # Compatible with both Ubuntu 3.12 and macOS 3.13
 # AI-friendly: prevent breaking clean one-liners and type annotations
 skip-string-normalization = false
 

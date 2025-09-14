@@ -63,13 +63,14 @@ if ! command -v uv &> /dev/null; then
     exit 1
 fi
 
-# Check Python 3.13
-if ! uv python list | grep -q "3.13"; then
-    print_warning "Python 3.13 not found with uv. Installing..."
+# Check Python 3.12+ (3.12 or 3.13 both work)
+if ! uv python list | grep -qE "(3\.12|3\.13)"; then
+    print_warning "Python 3.12+ not found with uv. Installing 3.13..."
     uv python install 3.13
 fi
 
-print_success "✅ Prerequisites verified: Homebrew + uv + Python 3.13"
+PYTHON_VERSION=$(uv python list | grep -oE "(3\.1[23])" | head -1)
+print_success "✅ Prerequisites verified: Homebrew + uv + Python $PYTHON_VERSION"
 
 # Install system dependencies optimized for M4 Pro
 print_status "Installing macOS system dependencies with Homebrew..."
@@ -101,7 +102,7 @@ brew install --cask libreoffice
 print_success "✅ System dependencies installed"
 
 # Create uv project and virtual environment
-print_status "Setting up uv project with Python 3.13..."
+print_status "Setting up uv project with Python $PYTHON_VERSION..."
 if [ ! -f "pyproject.toml" ]; then
     print_error "No pyproject.toml found. Please run from rag-service directory."
     exit 1
