@@ -41,7 +41,7 @@ class MockFileSystemProvider:
         """Mock folder creation."""
         self.call_history.append({"operation": "create_folder", "path": str(folder_path)})
 
-        if self.should_fail.get("create_folder", False):
+        if "create_folder" in self.should_fail and self.should_fail["create_folder"]:
             return False
 
         path_str = str(folder_path)
@@ -63,7 +63,7 @@ class MockFileSystemProvider:
         """Mock folder removal."""
         self.call_history.append({"operation": "remove_folder", "path": str(folder_path)})
 
-        if self.should_fail.get("remove_folder", False):
+        if "remove_folder" in self.should_fail and self.should_fail["remove_folder"]:
             return False
 
         path_str = str(folder_path)

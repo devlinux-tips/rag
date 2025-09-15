@@ -9,7 +9,7 @@ import argparse
 import asyncio
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -90,6 +90,7 @@ class SystemStatus:
     folder_structure: dict[str, bool]  # path -> exists
     config_status: str  # "loaded", "failed"
     details: dict[str, Any]
+    error_messages: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -484,7 +485,9 @@ def format_reprocess_result(result: dict[str, Any], context: TenantContext, lang
         )
 
         # Show clear results
-        clear_result = result.get("clear_result")
+        if "clear_result" not in result:
+            raise RuntimeError("Missing 'clear_result' in reprocessing operation result")
+        clear_result = result["clear_result"]
         if clear_result:
             lines.extend(
                 [
@@ -496,7 +499,9 @@ def format_reprocess_result(result: dict[str, Any], context: TenantContext, lang
             )
 
         # Show process results
-        process_result = result.get("process_result")
+        if "process_result" not in result:
+            raise RuntimeError("Missing 'process_result' in reprocessing operation result")
+        process_result = result["process_result"]
         if process_result:
             lines.extend(
                 [
@@ -516,15 +521,16 @@ def format_reprocess_result(result: dict[str, Any], context: TenantContext, lang
         )
 
         # Show any partial results or errors
-        clear_result = result.get("clear_result")
-        if clear_result and clear_result.errors:
-            lines.extend(
-                [
-                    "❌ Clear phase errors:",
-                    *[f"  • {error}" for error in clear_result.errors],
-                    "",
-                ]
-            )
+        if "clear_result" in result:
+            clear_result = result["clear_result"]
+            if clear_result and clear_result.errors:
+                lines.extend(
+                    [
+                        "❌ Clear phase errors:",
+                        *[f"  • {error}" for error in clear_result.errors],
+                        "",
+                    ]
+                )
 
     lines.extend(
         [
@@ -1353,7 +1359,7 @@ async def main():
 
                                 # Validate embedding dimension matches expectation
                                 actual_dim = self._model.get_sentence_embedding_dimension()
-                                expected_dim = embedding_config.get("expected_dimension")
+                                expected_dim = embedding_config["expected_dimension"]
                                 if expected_dim and actual_dim != expected_dim:
                                     print(
                                         f"⚠️ Dimension mismatch: {primary_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
@@ -1369,7 +1375,7 @@ async def main():
 
                                     # Validate fallback model dimension too
                                     actual_dim = self._model.get_sentence_embedding_dimension()
-                                    expected_dim = embedding_config.get("expected_dimension")
+                                    expected_dim = embedding_config["expected_dimension"]
                                     if expected_dim and actual_dim != expected_dim:
                                         print(
                                             f"⚠️ Fallback dimension mismatch: {fallback_model} produces {actual_dim}D embeddings, expected {expected_dim}D"

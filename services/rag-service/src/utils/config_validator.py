@@ -177,47 +177,202 @@ class ConfigValidator:
         "response_parsing.include_metadata": bool,
     }
 
-    # Ranking features schema for language-specific configuration files
-    RANKING_FEATURES_SCHEMA: dict[str, type | tuple[Any, ...]] = {
-        # Special characters configuration (Croatian diacritics, etc.)
+    # Language-specific config schema (hr.toml, en.toml) - ALL 214 keys from language configs
+    LANGUAGE_SCHEMA: dict[str, type | tuple[Any, ...]] = {
+        # Language metadata
+        "language.code": str,
+        "language.name": str,
+        "language.family": str,
+        # Shared constants
+        "shared.chars_pattern": str,
+        "shared.response_language": str,
+        "shared.preserve_diacritics": bool,
+        # Question patterns
+        "shared.question_patterns.factual": list,
+        "shared.question_patterns.explanatory": list,
+        "shared.question_patterns.comparison": list,
+        "shared.question_patterns.summarization": list,
+        # Stopwords
+        "shared.stopwords.words": list,
+        # Categorization
+        "categorization.cultural_indicators": list,
+        "categorization.tourism_indicators": list,
+        "categorization.technical_indicators": list,
+        "categorization.legal_indicators": list,
+        "categorization.business_indicators": list,
+        "categorization.educational_indicators": list,
+        "categorization.news_indicators": list,
+        "categorization.faq_indicators": list,
+        # Patterns
+        "patterns.cultural": list,
+        "patterns.tourism": list,
+        "patterns.technical": list,
+        "patterns.legal": list,
+        "patterns.business": list,
+        "patterns.faq": list,
+        "patterns.educational": list,
+        "patterns.news": list,
+        # Suggestions
+        "suggestions.low_confidence": list,
+        "suggestions.general_category": list,
+        "suggestions.faq_optimization": list,
+        "suggestions.more_keywords": list,
+        "suggestions.expand_query": list,
+        "suggestions.be_specific": list,
+        "suggestions.try_synonyms": list,
+        "suggestions.add_context": list,
+        # Language indicators
+        "language_indicators.indicators": list,
+        # Topic filters
+        "topic_filters.history": list,
+        "topic_filters.tourism": list,
+        "topic_filters.nature": list,
+        "topic_filters.food": list,
+        "topic_filters.sports": list,
+        # Ranking patterns
+        "ranking_patterns.factual": list,
+        "ranking_patterns.explanatory": list,
+        "ranking_patterns.comparison": list,
+        "ranking_patterns.summarization": list,
+        "ranking_patterns.structural_indicators": list,
+        # Text processing
+        "text_processing.remove_diacritics": bool,
+        "text_processing.normalize_case": bool,
+        "text_processing.word_char_pattern": str,
+        "text_processing.diacritic_map.č": str,
+        "text_processing.diacritic_map.ć": str,
+        "text_processing.diacritic_map.š": str,
+        "text_processing.diacritic_map.ž": str,
+        "text_processing.diacritic_map.đ": str,
+        "text_processing.locale.primary": str,
+        "text_processing.locale.fallback": str,
+        "text_processing.locale.text_encodings": list,
+        # Text cleaning
+        "text_cleaning.multiple_whitespace": bool,
+        "text_cleaning.multiple_linebreaks": bool,
+        "text_cleaning.min_meaningful_words": int,
+        "text_cleaning.min_word_char_ratio": (int, float),
+        # Chunking
+        "chunking.sentence_endings": list,
+        "chunking.abbreviations": list,
+        "chunking.sentence_ending_pattern": str,
+        # Document cleaning
+        "document_cleaning.header_footer_patterns": list,
+        "document_cleaning.ocr_corrections.fix_spaced_capitals": bool,
+        "document_cleaning.ocr_corrections.fix_spaced_punctuation": bool,
+        "document_cleaning.ocr_corrections.fix_common_ocr_errors": bool,
+        # Embeddings
+        "embeddings.model_name": str,
+        "embeddings.supports_multilingual": bool,
+        "embeddings.language_optimized": bool,
+        "embeddings.fallback_model": str,
+        "embeddings.expected_dimension": int,
+        # Vector database
+        "vectordb.collection_name": str,
+        "vectordb.embeddings.compatible_models": list,
+        "vectordb.metadata.content_indicators": list,
+        "vectordb.search.query_expansion": bool,
+        "vectordb.search.preserve_case_sensitivity": bool,
+        "vectordb.search.boost_title_matches": bool,
+        # Generation
+        "generation.system_prompt_language": str,
+        "generation.formality_level": str,
+        # Prompts
+        "prompts.system_base": str,
+        "prompts.context_intro": str,
+        "prompts.answer_intro": str,
+        "prompts.no_context_response": str,
+        "prompts.error_message_template": str,
+        "prompts.chunk_header_template": str,
+        "prompts.context_separator": str,
+        "prompts.base_system_prompt": str,
+        "prompts.question_answering_system": str,
+        "prompts.question_answering_user": str,
+        "prompts.question_answering_context": str,
+        "prompts.summarization_system": str,
+        "prompts.summarization_user": str,
+        "prompts.summarization_context": str,
+        "prompts.factual_qa_system": str,
+        "prompts.factual_qa_user": str,
+        "prompts.factual_qa_context": str,
+        "prompts.explanatory_system": str,
+        "prompts.explanatory_user": str,
+        "prompts.explanatory_context": str,
+        "prompts.comparison_system": str,
+        "prompts.comparison_user": str,
+        "prompts.comparison_context": str,
+        "prompts.tourism_system": str,
+        "prompts.tourism_user": str,
+        "prompts.tourism_context": str,
+        "prompts.business_system": str,
+        "prompts.business_user": str,
+        "prompts.business_context": str,
+        # Prompt keywords
+        "prompts.keywords.tourism": list,
+        "prompts.keywords.comparison": list,
+        "prompts.keywords.explanation": list,
+        "prompts.keywords.factual": list,
+        "prompts.keywords.summary": list,
+        "prompts.keywords.business": list,
+        # Formal prompts
+        "prompts.formal.formal_instruction": str,
+        # Confidence
+        "confidence.error_phrases": list,
+        "confidence.positive_indicators": list,
+        "confidence.confidence_threshold": (int, float),
+        # Response parsing
+        "response_parsing.no_answer_patterns": list,
+        "response_parsing.source_patterns": list,
+        "response_parsing.confidence_indicators.high": list,
+        "response_parsing.confidence_indicators.medium": list,
+        "response_parsing.confidence_indicators.low": list,
+        "response_parsing.display.no_answer_message": str,
+        "response_parsing.display.high_confidence_label": str,
+        "response_parsing.display.medium_confidence_label": str,
+        "response_parsing.display.low_confidence_label": str,
+        "response_parsing.display.sources_prefix": str,
+        "response_parsing.cleaning.prefixes_to_remove": list,
+        # Pipeline
+        "pipeline.enable_morphological_expansion": bool,
+        "pipeline.enable_synonym_expansion": bool,
+        "pipeline.use_language_query_processing": bool,
+        "pipeline.language_priority": bool,
+        "pipeline.processing.preserve_diacritics": bool,
+        "pipeline.processing.preserve_formatting": bool,
+        "pipeline.processing.respect_grammar": bool,
+        "pipeline.processing.enable_sentence_boundary_detection": bool,
+        "pipeline.processing.specific_chunking": bool,
+        "pipeline.generation.prefer_formal_style": bool,
+        "pipeline.generation.formality_level": str,
+        "pipeline.retrieval.use_stop_words": bool,
+        "pipeline.retrieval.enable_morphological_matching": bool,
+        "pipeline.retrieval.cultural_relevance_boost": (int, float),
+        "pipeline.retrieval.regional_content_preference": str,
+        # Ranking language features
         "ranking.language_features.special_characters.enabled": bool,
         "ranking.language_features.special_characters.characters": list,
         "ranking.language_features.special_characters.max_score": (int, float),
-        "ranking.language_features.special_characters.density_factor": (int, float),
-        # Importance words configuration
+        "ranking.language_features.special_characters.density_factor": int,
         "ranking.language_features.importance_words.enabled": bool,
         "ranking.language_features.importance_words.words": list,
         "ranking.language_features.importance_words.max_score": (int, float),
         "ranking.language_features.importance_words.word_boost": (int, float),
-        # Cultural patterns configuration
         "ranking.language_features.cultural_patterns.enabled": bool,
         "ranking.language_features.cultural_patterns.patterns": list,
         "ranking.language_features.cultural_patterns.max_score": (int, float),
         "ranking.language_features.cultural_patterns.pattern_boost": (int, float),
-        # Grammar patterns configuration
         "ranking.language_features.grammar_patterns.enabled": bool,
         "ranking.language_features.grammar_patterns.patterns": list,
         "ranking.language_features.grammar_patterns.max_score": (int, float),
-        "ranking.language_features.grammar_patterns.pattern_boost": (int, float),
-        # Capitalization configuration
+        "ranking.language_features.grammar_patterns.density_factor": int,
         "ranking.language_features.capitalization.enabled": bool,
         "ranking.language_features.capitalization.proper_nouns": list,
         "ranking.language_features.capitalization.max_score": (int, float),
         "ranking.language_features.capitalization.capitalization_boost": (int, float),
-        # Vocabulary patterns configuration
         "ranking.language_features.vocabulary_patterns.enabled": bool,
         "ranking.language_features.vocabulary_patterns.patterns": list,
         "ranking.language_features.vocabulary_patterns.max_score": (int, float),
         "ranking.language_features.vocabulary_patterns.pattern_boost": (int, float),
-    }
-
-    # Language config schema - includes main config + ranking features for language-specific files
-    LANGUAGE_CONFIG_SCHEMA: dict[str, type | tuple[Any, ...]] = {
-        **MAIN_CONFIG_SCHEMA,  # All main config keys
-        **RANKING_FEATURES_SCHEMA,  # Plus language-specific ranking features
-        # Language-specific metadata
-        "language.code": str,
-        "language.name": str,
     }
 
     @classmethod
@@ -257,7 +412,7 @@ class ConfigValidator:
         # Validate each language configuration
         for lang_code, lang_config in language_configs.items():
             lang_result = cls._validate_config_section(
-                config=lang_config, schema=cls.LANGUAGE_CONFIG_SCHEMA, config_file=f"config/{lang_code}.toml"
+                config=lang_config, schema=cls.LANGUAGE_SCHEMA, config_file=f"config/{lang_code}.toml"
             )
 
             if not lang_result.is_valid:
@@ -467,12 +622,7 @@ class ConfigValidator:
     @classmethod
     def get_language_config_schema(cls) -> dict[str, type | tuple[Any, ...]]:
         """Get the language config schema for external validation."""
-        return cls.LANGUAGE_CONFIG_SCHEMA.copy()
-
-    @classmethod
-    def get_ranking_features_schema(cls) -> dict[str, type | tuple[Any, ...]]:
-        """Get the ranking features schema for external validation."""
-        return cls.RANKING_FEATURES_SCHEMA.copy()
+        return cls.LANGUAGE_SCHEMA.copy()
 
     @classmethod
     def validate_single_config_key(
