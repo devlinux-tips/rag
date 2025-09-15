@@ -1,0 +1,64 @@
+================================================================================
+RAG SERVICE - LINES OF CODE REPORT
+================================================================================
+Source Directory: services/rag-service/src
+Generated: count_loc.py
+
+TOTAL PYTHON CODE STATISTICS:
+  Total Files:     52
+  Total Lines:     22,381
+  Code Lines:      7,544
+  Comment Lines:   9,980
+  Blank Lines:     4,857
+
+CONFIGURATION FILES (TOML) SUMMARY:
+  Config Files:    3
+  Total Lines:     1,382
+  Config Lines:    923
+  Comment Lines:   288
+  Blank Lines:     171
+
+BREAKDOWN BY SOURCE DIRECTORY:
+----------------------------------------
+retrieval/
+  Files: 12 | Total: 6,321 | Code: 1,996 | Comments: 2,973 | Blank: 1,352
+
+utils/
+  Files: 11 | Total: 4,145 | Code: 1,570 | Comments: 1,702 | Blank: 873
+
+generation/
+  Files: 8 | Total: 3,351 | Code: 1,065 | Comments: 1,491 | Blank: 795
+
+vectordb/
+  Files: 8 | Total: 3,012 | Code: 1,053 | Comments: 1,314 | Blank: 645
+
+preprocessing/
+  Files: 6 | Total: 2,436 | Code: 759 | Comments: 1,108 | Blank: 569
+
+cli/
+  Files: 2 | Total: 1,699 | Code: 601 | Comments: 774 | Blank: 324
+
+pipeline/
+  Files: 3 | Total: 986 | Code: 354 | Comments: 425 | Blank: 207
+
+models/
+  Files: 1 | Total: 431 | Code: 146 | Comments: 193 | Blank: 92
+
+CONFIGURATION FILES BREAKDOWN:
+----------------------------------------
+hr.toml
+  Lines: 488 | Config: 327 | Comments: 100 | Blank: 61
+
+config.toml
+  Lines: 400 | Config: 263 | Comments: 86 | Blank: 51
+
+en.toml
+  Lines: 494 | Config: 333 | Comments: 102 | Blank: 59
+
+================================================================================
+Notes:
+- Python (.py) and TOML (.toml) files are counted
+- Cache directories (__pycache__, .mypy_cache, etc.) are excluded
+- Comment detection: # for single-line, """ for Python docstrings
+- Config files searched in config/ directory
+================================================================================

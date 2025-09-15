@@ -196,9 +196,11 @@ def create_default_config(language: str = "hr", config_provider: ConfigProvider 
             "normalize_case": True,
             "remove_stopwords": True,
             "min_query_length": 3,
+            "max_query_length": 50,
             "max_expanded_terms": 10,
+            "enable_morphological_analysis": False,
+            "use_query_classification": True,
             "enable_spell_check": False,
-            "min_word_length": 2,
         }
     }
 
@@ -291,9 +293,11 @@ def create_test_providers(
                     "normalize_case": True,
                     "remove_stopwords": True,
                     "min_query_length": 3,
+                    "max_query_length": 50,
                     "max_expanded_terms": 10,
+                    "enable_morphological_analysis": False,
+                    "use_query_classification": True,
                     "enable_spell_check": False,
-                    "min_word_length": 2,
                 }
             },
         )

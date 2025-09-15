@@ -6,12 +6,10 @@ Clean architecture with dependency injection and pure functions.
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import Any, Protocol, cast
 
 from ..utils.config_models import RankingConfig
-
-if TYPE_CHECKING:
-    from ..utils.config_protocol import ConfigProvider
+from ..utils.config_protocol import ConfigProvider
 
 logger = logging.getLogger(__name__)
 
