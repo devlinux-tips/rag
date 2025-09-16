@@ -1,10 +1,10 @@
 """
 Test configuration for RAG pipeline components.
 """
+
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 import yaml
 
@@ -20,14 +20,8 @@ class TestLoadYamlConfig(unittest.TestCase):
             "log_level": "INFO",
             "enable_caching": True,
             "cache_dir": "/tmp/cache",
-            "processing": {
-                "chunk_size": 1000,
-                "chunk_overlap": 200,
-            },
-            "embedding": {
-                "model_name": "test-model",
-                "batch_size": 32,
-            },
+            "processing": {"chunk_size": 1000, "chunk_overlap": 200},
+            "embedding": {"model_name": "test-model", "batch_size": 32},
         }
 
     def test_load_existing_yaml_config(self):
@@ -80,10 +74,7 @@ class TestLoadYamlConfig(unittest.TestCase):
             "log_level": "INFO",
             "language": "hrvatski",
             "message": "Čitaj konfiguraciju",
-            "settings": {
-                "encoding": "UTF-8",
-                "locale": "hr_HR",
-            },
+            "settings": {"encoding": "UTF-8", "locale": "hr_HR"},
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
@@ -270,22 +261,14 @@ class TestConfigIntegration(unittest.TestCase):
         """Test complete YAML configuration loading workflow."""
         # Create test YAML data
         test_config = {
-            "system": {
-                "log_level": "DEBUG",
-                "enable_caching": False,
-                "max_concurrent_requests": 5,
-            },
+            "system": {"log_level": "DEBUG", "enable_caching": False, "max_concurrent_requests": 5},
             "processing": {
                 "sentence_chunk_overlap": 1,
                 "preserve_paragraphs": False,
                 "enable_smart_chunking": False,
                 "respect_document_structure": True,
             },
-            "embedding": {
-                "model_name": "test-model",
-                "device": "cpu",
-                "batch_size": 8,
-            },
+            "embedding": {"model_name": "test-model", "device": "cpu", "batch_size": 8},
         }
 
         # Test YAML round-trip
