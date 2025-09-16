@@ -14,8 +14,11 @@ Usage
 
 Notes
 - This crawler is conservative: one request at a time, default 2s delay.
-- Saves files as: <output>/<year>/<broj>/<slug>.html (e.g., 2025_09_120_1707.html)
-- Only HTML pages under /clanci/sluzbeni/ are fetched (kategorija=1)
+- Saves files as: <output>/<year>/<broj>/<slug>.html and .pdf when available
+  (e.g., 2025_09_120_1707.html / .pdf).
+- Skips PDF downloads for years < 2023 to avoid known 404 responses.
+- Writes per-issue manifest at <output>/<year>/<broj>/manifest.jsonl.
+- Only HTML pages under /clanci/sluzbeni/ are fetched (kategorija=1).
 """
 
 from __future__ import annotations
@@ -230,17 +233,19 @@ def crawl_issue(fetcher: PoliteFetcher, year: int, broj: int, out_dir: Path) -> 
             print(f"Failed to save {link} -> {fpath}: {e}")
             continue
 
-        # Determine the PDF URL (prefer canonical ELI path inferred from HTML slug)
-        pdf_url: Optional[str] = derive_pdf_url_from_html_url(link)
-        if not pdf_url:
-            try:
-                for href in PDF_HREF_RE.findall(art.text):
-                    candidate = urljoin(BASE, href)
-                    if urlparse(candidate).netloc.endswith("narodne-novine.nn.hr"):
-                        pdf_url = candidate
-                        break
-            except Exception:
-                pdf_url = None
+        pdf_url: Optional[str] = None
+        if year >= 2023:
+            # Determine the PDF URL (prefer canonical ELI path inferred from HTML slug)
+            pdf_url = derive_pdf_url_from_html_url(link)
+            if not pdf_url:
+                try:
+                    for href in PDF_HREF_RE.findall(art.text):
+                        candidate = urljoin(BASE, href)
+                        if urlparse(candidate).netloc.endswith("narodne-novine.nn.hr"):
+                            pdf_url = candidate
+                            break
+                except Exception:
+                    pdf_url = None
 
         pdf_path: Optional[Path] = None
         if pdf_url:
@@ -328,7 +333,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         print("-" * 72)
         print(f"Year {args.year} — Issue broj {broj}")
         try:
-            saved = crawl_issue(fetcher, args.year, broj, args.output)
+            saved = crawl_issue(
+                fetcher,
+                args.year,
+                broj,
+                args.output,
+            )
             total_saved += saved
             print(f"Issue {broj}: saved {saved} pages")
         except KeyboardInterrupt:
