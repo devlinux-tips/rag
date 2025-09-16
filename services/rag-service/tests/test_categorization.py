@@ -153,7 +153,7 @@ class TestPureFunctions:
 
     def test_normalize_query_text_whitespace(self):
         """Test normalizing multiple whitespace."""
-        result = normalize_query_text("query\\twith\\t\\ttabs\\nand\\n\\nnewlines")
+        result = normalize_query_text("query\twith\t\ttabs\nand\n\nnewlines")
 
         assert result == "query with tabs and newlines"
 

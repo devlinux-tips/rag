@@ -571,6 +571,9 @@ class HierarchicalRetriever:
         max_results = max_results or self._config.default_max_results
         context = context or {}
 
+        # Increment retrieval counter for performance tracking
+        self._retrieval_count += 1
+
         self._log_info(f"🎯 Hierarchical retrieval for: {query[:50]}...")
 
         # Step 1: Process and categorize query
@@ -669,7 +672,7 @@ class HierarchicalRetriever:
 
     def _update_strategy_stats(self, strategy: RetrievalStrategyType, retrieval_time: float) -> None:
         """Update performance statistics for strategies."""
-        if not self._strategy_stats:
+        if self._strategy_stats is None:
             return
 
         strategy_name = strategy.value
@@ -681,8 +684,6 @@ class HierarchicalRetriever:
         stats["count"] += 1
         stats["total_time"] += retrieval_time
         stats["avg_time"] = stats["total_time"] / stats["count"]
-
-        self._retrieval_count += 1
 
     def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics."""

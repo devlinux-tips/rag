@@ -139,6 +139,7 @@ Remember that RAG is rapidly evolving. Join communities like r/LocalLLaMA on Red
 - https://github.com/D-Star-AI/dsRAG (test it)
 - https://docs.llamaindex.ai/en/stable/examples/metadata_extraction/MetadataExtractionSEC/ (metadata extraction)
 - https://github.com/NirDiamant/RAG_Techniques
+- https://github.com/f/awesome-chatgpt-prompts (many gpt prompts)
 
 
 ## GraphRAG

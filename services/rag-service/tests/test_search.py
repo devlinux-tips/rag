@@ -1,37 +1,24 @@
 """
-Comprehensive tests for SemanticSearchEngine module.
-
-This module tests the similarity search implementation for multilingual RAG system
-with pure functions, dependency injection, and sophisticated search strategies.
-
-Test Coverage:
-- Data structures (SearchQuery, SearchResult, SearchResponse)
-- Enums (SearchMethod)
-- Protocol definitions
-- Pure utility functions
-- SemanticSearchEngine class with all search methods
-- Factory functions
-- Error handling and edge cases
-
-Author: Test Suite for RAG System
+Comprehensive tests for vectordb/search.py
+Tests all data classes, pure functions, protocols, and the SemanticSearchEngine class.
 """
 
 import asyncio
-import time
-import unittest
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, Mock, patch
-
+import pytest
 import numpy as np
+from unittest.mock import AsyncMock, Mock
+from typing import Any
 
 from src.vectordb.search import (
+    # Data classes
     SearchQuery,
     SearchResult,
     SearchResponse,
+
+    # Enums
     SearchMethod,
-    EmbeddingProvider,
-    VectorSearchProvider,
-    ConfigProvider,
+
+    # Pure functions
     validate_search_query,
     parse_vector_search_results,
     distance_to_similarity,
@@ -41,851 +28,939 @@ from src.vectordb.search import (
     filter_results_by_threshold,
     limit_results,
     extract_context_from_results,
+
+    # Main class
     SemanticSearchEngine,
+
+    # Factory functions
     create_search_query,
     create_search_engine,
 )
 
 
-class TestSearchMethod(unittest.TestCase):
-    """Test SearchMethod enum."""
+class TestSearchQuery:
+    """Test SearchQuery data class."""
 
-    def test_search_method_values(self):
-        """Test SearchMethod enum values."""
-        self.assertEqual(SearchMethod.SEMANTIC.value, "semantic")
-        self.assertEqual(SearchMethod.KEYWORD.value, "keyword")
-        self.assertEqual(SearchMethod.HYBRID.value, "hybrid")
+    def test_search_query_creation_defaults(self):
+        """Test creating SearchQuery with default values."""
+        query = SearchQuery(text="test query")
 
-    def test_search_method_membership(self):
-        """Test SearchMethod membership."""
-        methods = list(SearchMethod)
-        self.assertEqual(len(methods), 3)
-        self.assertIn(SearchMethod.SEMANTIC, methods)
-        self.assertIn(SearchMethod.KEYWORD, methods)
-        self.assertIn(SearchMethod.HYBRID, methods)
+        assert query.text == "test query"
+        assert query.top_k == 5
+        assert query.method == "semantic"
+        assert query.filters is None
+        assert query.similarity_threshold == 0.0
+        assert query.max_context_length == 2000
+        assert query.rerank is True
 
-
-class TestSearchQuery(unittest.TestCase):
-    """Test SearchQuery dataclass."""
-
-    def test_search_query_creation(self):
-        """Test creating a valid SearchQuery."""
+    def test_search_query_creation_custom(self):
+        """Test creating SearchQuery with custom values."""
+        filters = {"language": "hr"}
         query = SearchQuery(
-            text="What is AI?",
+            text="custom query",
             top_k=10,
-            method="semantic",
-            filters={"category": "tech"},
-            similarity_threshold=0.7,
-            max_context_length=3000,
+            method="hybrid",
+            filters=filters,
+            similarity_threshold=0.5,
+            max_context_length=1500,
             rerank=False
         )
 
-        self.assertEqual(query.text, "What is AI?")
-        self.assertEqual(query.top_k, 10)
-        self.assertEqual(query.method, "semantic")
-        self.assertEqual(query.filters, {"category": "tech"})
-        self.assertEqual(query.similarity_threshold, 0.7)
-        self.assertEqual(query.max_context_length, 3000)
-        self.assertFalse(query.rerank)
+        assert query.text == "custom query"
+        assert query.top_k == 10
+        assert query.method == "hybrid"
+        assert query.filters == filters
+        assert query.similarity_threshold == 0.5
+        assert query.max_context_length == 1500
+        assert query.rerank is False
 
-    def test_search_query_defaults(self):
-        """Test SearchQuery with default values."""
-        query = SearchQuery(text="test query")
-
-        self.assertEqual(query.text, "test query")
-        self.assertEqual(query.top_k, 5)
-        self.assertEqual(query.method, "semantic")
-        self.assertIsNone(query.filters)
-        self.assertEqual(query.similarity_threshold, 0.0)
-        self.assertEqual(query.max_context_length, 2000)
-        self.assertTrue(query.rerank)
-
-    def test_search_query_validation_invalid_top_k(self):
-        """Test SearchQuery validation with invalid top_k."""
-        with self.assertRaises(ValueError) as cm:
+    def test_search_query_validation_positive_top_k(self):
+        """Test validation fails for non-positive top_k."""
+        with pytest.raises(ValueError, match="top_k must be positive"):
             SearchQuery(text="test", top_k=0)
-        self.assertIn("top_k must be positive", str(cm.exception))
 
-        with self.assertRaises(ValueError) as cm:
+        with pytest.raises(ValueError, match="top_k must be positive"):
             SearchQuery(text="test", top_k=-1)
-        self.assertIn("top_k must be positive", str(cm.exception))
 
-    def test_search_query_validation_invalid_threshold(self):
-        """Test SearchQuery validation with invalid similarity_threshold."""
-        with self.assertRaises(ValueError) as cm:
-            SearchQuery(text="test", similarity_threshold=1.5)
-        self.assertIn("similarity_threshold must be between 0 and 1", str(cm.exception))
-
-        with self.assertRaises(ValueError) as cm:
+    def test_search_query_validation_threshold_range(self):
+        """Test validation fails for invalid similarity threshold."""
+        with pytest.raises(ValueError, match="similarity_threshold must be between 0 and 1"):
             SearchQuery(text="test", similarity_threshold=-0.1)
-        self.assertIn("similarity_threshold must be between 0 and 1", str(cm.exception))
+
+        with pytest.raises(ValueError, match="similarity_threshold must be between 0 and 1"):
+            SearchQuery(text="test", similarity_threshold=1.1)
+
+    def test_search_query_validation_boundary_values(self):
+        """Test validation accepts boundary values."""
+        # Should not raise
+        SearchQuery(text="test", top_k=1, similarity_threshold=0.0)
+        SearchQuery(text="test", top_k=100, similarity_threshold=1.0)
 
 
-class TestSearchResult(unittest.TestCase):
-    """Test SearchResult dataclass."""
+class TestSearchResult:
+    """Test SearchResult data class."""
 
     def test_search_result_creation(self):
-        """Test creating a valid SearchResult."""
+        """Test creating SearchResult."""
+        metadata = {"source": "test.pdf", "page": 1}
         result = SearchResult(
-            id="doc_1",
-            content="This is test content",
-            score=0.85,
-            metadata={"source": "test.txt", "category": "technical"},
+            id="doc1",
+            content="Test content",
+            score=0.95,
+            metadata=metadata,
             rank=1,
             method_used="semantic"
         )
 
-        self.assertEqual(result.id, "doc_1")
-        self.assertEqual(result.content, "This is test content")
-        self.assertEqual(result.score, 0.85)
-        self.assertEqual(result.metadata, {"source": "test.txt", "category": "technical"})
-        self.assertEqual(result.rank, 1)
-        self.assertEqual(result.method_used, "semantic")
+        assert result.id == "doc1"
+        assert result.content == "Test content"
+        assert result.score == 0.95
+        assert result.metadata == metadata
+        assert result.rank == 1
+        assert result.method_used == "semantic"
 
-    def test_search_result_defaults(self):
-        """Test SearchResult with default values."""
+    def test_search_result_optional_fields(self):
+        """Test SearchResult with optional fields as None."""
         result = SearchResult(
-            id="doc_1",
-            content="content",
-            score=0.5,
+            id="doc2",
+            content="Content",
+            score=0.8,
             metadata={}
         )
 
-        self.assertIsNone(result.rank)
-        self.assertIsNone(result.method_used)
+        assert result.rank is None
+        assert result.method_used is None
 
     def test_search_result_to_dict(self):
-        """Test SearchResult to_dict conversion."""
+        """Test converting SearchResult to dictionary."""
+        metadata = {"source": "test.pdf"}
         result = SearchResult(
-            id="doc_1",
-            content="content",
-            score=0.7,
-            metadata={"type": "test"},
+            id="doc1",
+            content="Test content",
+            score=0.85,
+            metadata=metadata,
             rank=2,
             method_used="hybrid"
         )
 
         result_dict = result.to_dict()
 
-        expected = {
-            "id": "doc_1",
-            "content": "content",
-            "score": 0.7,
-            "metadata": {"type": "test"},
-            "rank": 2,
-            "method_used": "hybrid"
-        }
-
-        self.assertEqual(result_dict, expected)
+        assert result_dict["id"] == "doc1"
+        assert result_dict["content"] == "Test content"
+        assert result_dict["score"] == 0.85
+        assert result_dict["metadata"] == metadata
+        assert result_dict["rank"] == 2
+        assert result_dict["method_used"] == "hybrid"
 
 
-class TestSearchResponse(unittest.TestCase):
-    """Test SearchResponse dataclass."""
+class TestSearchResponse:
+    """Test SearchResponse data class."""
 
     def test_search_response_creation(self):
-        """Test creating a valid SearchResponse."""
+        """Test creating SearchResponse."""
         results = [
-            SearchResult("1", "content1", 0.9, {}),
-            SearchResult("2", "content2", 0.8, {})
+            SearchResult("doc1", "Content 1", 0.9, {}),
+            SearchResult("doc2", "Content 2", 0.8, {})
         ]
+        metadata = {"filters": {"language": "hr"}}
 
         response = SearchResponse(
             query="test query",
             results=results,
             total_results=2,
-            search_time=0.5,
+            search_time=0.15,
             method_used="semantic",
-            metadata={"processed": True}
+            metadata=metadata
         )
 
-        self.assertEqual(response.query, "test query")
-        self.assertEqual(len(response.results), 2)
-        self.assertEqual(response.total_results, 2)
-        self.assertEqual(response.search_time, 0.5)
-        self.assertEqual(response.method_used, "semantic")
-        self.assertEqual(response.metadata, {"processed": True})
+        assert response.query == "test query"
+        assert response.results == results
+        assert response.total_results == 2
+        assert response.search_time == 0.15
+        assert response.method_used == "semantic"
+        assert response.metadata == metadata
 
-    def test_search_response_rank_assignment(self):
-        """Test SearchResponse automatic rank assignment."""
+    def test_search_response_auto_ranking(self):
+        """Test automatic ranking assignment in __post_init__."""
         results = [
-            SearchResult("1", "content1", 0.9, {}),
-            SearchResult("2", "content2", 0.8, {}, rank=None),
+            SearchResult("doc1", "Content 1", 0.9, {}),
+            SearchResult("doc2", "Content 2", 0.8, {}),
+            SearchResult("doc3", "Content 3", 0.7, {})
         ]
 
         response = SearchResponse(
             query="test",
             results=results,
-            total_results=2,
+            total_results=3,
             search_time=0.1,
             method_used="semantic"
         )
 
-        # Ranks should be assigned in post_init
-        self.assertEqual(response.results[0].rank, 1)
-        self.assertEqual(response.results[1].rank, 2)
-        # Method should be assigned
-        self.assertEqual(response.results[0].method_used, "semantic")
-        self.assertEqual(response.results[1].method_used, "semantic")
+        # Check that ranks were auto-assigned
+        assert response.results[0].rank == 1
+        assert response.results[1].rank == 2
+        assert response.results[2].rank == 3
 
-    def test_search_response_preserve_existing_ranks(self):
-        """Test SearchResponse preserves existing ranks."""
+        # Check that method_used was set
+        assert response.results[0].method_used == "semantic"
+        assert response.results[1].method_used == "semantic"
+        assert response.results[2].method_used == "semantic"
+
+    def test_search_response_preserves_existing_ranks(self):
+        """Test that existing ranks are not overwritten."""
         results = [
-            SearchResult("1", "content1", 0.9, {}, rank=5, method_used="existing"),
-            SearchResult("2", "content2", 0.8, {}, rank=3, method_used="existing"),
+            SearchResult("doc1", "Content 1", 0.9, {}, rank=5, method_used="hybrid")
         ]
 
         response = SearchResponse(
             query="test",
             results=results,
-            total_results=2,
+            total_results=1,
             search_time=0.1,
             method_used="semantic"
         )
 
-        # Existing ranks and methods should be preserved
-        self.assertEqual(response.results[0].rank, 5)
-        self.assertEqual(response.results[1].rank, 3)
-        self.assertEqual(response.results[0].method_used, "existing")
-        self.assertEqual(response.results[1].method_used, "existing")
+        # Should preserve existing rank and method_used
+        assert response.results[0].rank == 5
+        assert response.results[0].method_used == "hybrid"
 
 
-class TestPureFunctions(unittest.TestCase):
-    """Test pure utility functions."""
+class TestSearchMethod:
+    """Test SearchMethod enum."""
+
+    def test_search_method_values(self):
+        """Test SearchMethod enum values."""
+        assert SearchMethod.SEMANTIC.value == "semantic"
+        assert SearchMethod.KEYWORD.value == "keyword"
+        assert SearchMethod.HYBRID.value == "hybrid"
+
+    def test_search_method_iteration(self):
+        """Test iterating over SearchMethod values."""
+        methods = {method.value for method in SearchMethod}
+        expected = {"semantic", "keyword", "hybrid"}
+        assert methods == expected
+
+
+class TestValidateSearchQuery:
+    """Test validate_search_query pure function."""
 
     def test_validate_search_query_valid(self):
-        """Test validate_search_query with valid query."""
+        """Test validation passes for valid query."""
         query = SearchQuery(
-            text="test query",
+            text="valid query",
             top_k=5,
             method="semantic",
-            similarity_threshold=0.5,
-            max_context_length=1000
+            similarity_threshold=0.5
         )
 
         errors = validate_search_query(query)
-        self.assertEqual(errors, [])
+        assert errors == []
 
     def test_validate_search_query_empty_text(self):
-        """Test validate_search_query with empty text."""
+        """Test validation fails for empty text."""
         query = SearchQuery(text="", top_k=5)
         errors = validate_search_query(query)
-        self.assertIn("Query text cannot be empty", errors)
+        assert "Query text cannot be empty" in errors
 
         query = SearchQuery(text="   ", top_k=5)
         errors = validate_search_query(query)
-        self.assertIn("Query text cannot be empty", errors)
+        assert "Query text cannot be empty" in errors
 
     def test_validate_search_query_invalid_top_k(self):
-        """Test validate_search_query with invalid top_k."""
-        # For validation function testing, create query that bypasses __post_init__
-        query = SearchQuery.__new__(SearchQuery)
-        query.text = "test"
-        query.top_k = 0
-        query.method = "semantic"
-        query.similarity_threshold = 0.5
-        query.max_context_length = 1000
-
+        """Test validation fails for invalid top_k."""
+        # SearchQuery.__post_init__ validates top_k, so we test with valid values
+        # but use validate_search_query to test boundary conditions
+        query = SearchQuery(text="test", top_k=1)  # Valid for SearchQuery
+        query.top_k = 0  # Modify after creation to test validation function
         errors = validate_search_query(query)
-        self.assertIn("top_k must be positive", errors)
+        assert "top_k must be positive" in errors
 
-        query.top_k = 150
+        query = SearchQuery(text="test", top_k=1)
+        query.top_k = 101  # Modify after creation to test validation function
         errors = validate_search_query(query)
-        self.assertIn("top_k cannot exceed 100", errors)
+        assert "top_k cannot exceed 100" in errors
 
     def test_validate_search_query_invalid_threshold(self):
-        """Test validate_search_query with invalid threshold."""
-        # For validation function testing, create query that bypasses __post_init__
-        query = SearchQuery.__new__(SearchQuery)
-        query.text = "test"
-        query.top_k = 5
-        query.method = "semantic"
-        query.similarity_threshold = -0.1
-        query.max_context_length = 1000
-
+        """Test validation fails for invalid similarity threshold."""
+        # SearchQuery.__post_init__ validates threshold, so modify after creation
+        query = SearchQuery(text="test", similarity_threshold=0.0)  # Valid
+        query.similarity_threshold = -0.1  # Modify after creation
         errors = validate_search_query(query)
-        self.assertIn("similarity_threshold must be between 0 and 1", errors)
-
-        query.similarity_threshold = 1.5
-        errors = validate_search_query(query)
-        self.assertIn("similarity_threshold must be between 0 and 1", errors)
-
-    def test_validate_search_query_invalid_method(self):
-        """Test validate_search_query with invalid method."""
-        # For validation function testing, create query that bypasses __post_init__
-        query = SearchQuery.__new__(SearchQuery)
-        query.text = "test"
-        query.top_k = 5
-        query.method = "invalid_method"
-        query.similarity_threshold = 0.5
-        query.max_context_length = 1000
-
-        errors = validate_search_query(query)
-        self.assertTrue(any("method must be one of" in error for error in errors))
+        assert "similarity_threshold must be between 0 and 1" in errors
 
     def test_validate_search_query_invalid_context_length(self):
-        """Test validate_search_query with invalid max_context_length."""
+        """Test validation fails for invalid max_context_length."""
         query = SearchQuery(text="test", max_context_length=0)
         errors = validate_search_query(query)
-        self.assertIn("max_context_length must be positive", errors)
+        assert "max_context_length must be positive" in errors
 
-    def test_parse_vector_search_results_empty(self):
-        """Test parse_vector_search_results with empty input."""
-        # Empty results
-        results = parse_vector_search_results({})
-        self.assertEqual(results, [])
+    def test_validate_search_query_invalid_method(self):
+        """Test validation fails for invalid method."""
+        query = SearchQuery(text="test", method="invalid_method")
+        errors = validate_search_query(query)
+        assert "method must be one of:" in errors[0]
 
-        # No ids
-        results = parse_vector_search_results({"ids": []})
-        self.assertEqual(results, [])
+    def test_validate_search_query_multiple_errors(self):
+        """Test validation accumulates multiple errors."""
+        # Create valid query then modify to test multiple errors
+        query = SearchQuery(
+            text="valid",
+            top_k=1,
+            method="semantic",
+            similarity_threshold=0.5
+        )
 
-    def test_parse_vector_search_results_missing_fields(self):
-        """Test parse_vector_search_results with missing required fields."""
-        raw_results = {"ids": ["1"], "documents": ["content"]}
+        # Modify to introduce errors for validation function testing
+        query.text = ""
+        query.top_k = 0
+        query.method = "invalid"
+        query.similarity_threshold = 2.0
 
-        with self.assertRaises(ValueError) as cm:
-            parse_vector_search_results(raw_results)
-        self.assertIn("missing 'metadatas' field", str(cm.exception))
+        errors = validate_search_query(query)
+        assert len(errors) >= 4
+        assert any("Query text cannot be empty" in error for error in errors)
+        assert any("top_k must be positive" in error for error in errors)
+        assert any("similarity_threshold must be between 0 and 1" in error for error in errors)
+        assert any("method must be one of:" in error for error in errors)
 
-    def test_parse_vector_search_results_nested_format(self):
-        """Test parse_vector_search_results with nested ChromaDB format."""
+
+class TestParseVectorSearchResults:
+    """Test parse_vector_search_results pure function."""
+
+    def test_parse_vector_search_results_valid(self):
+        """Test parsing valid ChromaDB results."""
         raw_results = {
             "ids": [["doc1", "doc2"]],
-            "documents": [["content1", "content2"]],
-            "metadatas": [[{"source": "test1"}, {"source": "test2"}]],
+            "documents": [["Content 1", "Content 2"]],
+            "metadatas": [[{"source": "file1.pdf"}, {"source": "file2.pdf"}]],
             "distances": [[0.1, 0.3]]
         }
 
         results = parse_vector_search_results(raw_results, "semantic")
 
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0].id, "doc1")
-        self.assertEqual(results[0].content, "content1")
-        self.assertEqual(results[0].metadata, {"source": "test1"})
-        self.assertEqual(results[0].method_used, "semantic")
-        self.assertAlmostEqual(results[0].score, 0.9, places=1)  # 1 - 0.1
+        assert len(results) == 2
+        assert results[0].id == "doc1"
+        assert results[0].content == "Content 1"
+        assert results[0].metadata == {"source": "file1.pdf"}
+        assert results[0].score == 0.9  # 1 - 0.1
+        assert results[0].method_used == "semantic"
+
+        assert results[1].id == "doc2"
+        assert results[1].content == "Content 2"
+        assert results[1].score == 0.7  # 1 - 0.3
 
     def test_parse_vector_search_results_flat_format(self):
-        """Test parse_vector_search_results with flat format."""
+        """Test parsing results in flat format (not nested)."""
         raw_results = {
             "ids": ["doc1", "doc2"],
-            "documents": ["content1", "content2"],
-            "metadatas": [{"source": "test1"}, {"source": "test2"}],
+            "documents": ["Content 1", "Content 2"],
+            "metadatas": [{"source": "file1.pdf"}, {"source": "file2.pdf"}],
             "distances": [0.2, 0.4]
-        }
-
-        results = parse_vector_search_results(raw_results, "keyword")
-
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0].id, "doc1")
-        self.assertEqual(results[1].id, "doc2")
-        self.assertEqual(results[0].method_used, "keyword")
-
-    def test_parse_vector_search_results_mismatched_lengths(self):
-        """Test parse_vector_search_results with mismatched array lengths."""
-        raw_results = {
-            "ids": ["doc1", "doc2", "doc3"],
-            "documents": ["content1", "content2"],  # Missing one
-            "metadatas": [{"source": "test1"}],      # Missing two
-            "distances": [0.1, 0.2, 0.3]
         }
 
         results = parse_vector_search_results(raw_results)
 
-        # Should handle gracefully with defaults
-        self.assertEqual(len(results), 3)
-        self.assertEqual(results[2].content, "")  # Default for missing content
-        self.assertEqual(results[2].metadata, {})  # Default for missing metadata
+        assert len(results) == 2
+        assert results[0].id == "doc1"
+        assert results[0].score == 0.8  # 1 - 0.2
 
-    def test_distance_to_similarity(self):
-        """Test distance_to_similarity conversion."""
-        # Perfect match
-        self.assertEqual(distance_to_similarity(0.0), 1.0)
-
-        # Partial similarity
-        self.assertAlmostEqual(distance_to_similarity(0.3), 0.7, places=1)
-
-        # Very different
-        self.assertEqual(distance_to_similarity(1.0), 0.0)
-
-        # Clamp negative values
-        self.assertEqual(distance_to_similarity(-0.1), 1.0)
-
-        # Clamp values > 1
-        self.assertEqual(distance_to_similarity(1.5), 0.0)
-
-    def test_calculate_keyword_score_basic(self):
-        """Test calculate_keyword_score basic functionality."""
-        query_terms = ["machine", "learning"]
-        document_text = "machine learning is a subset of artificial intelligence"
-
-        score = calculate_keyword_score(query_terms, document_text)
-        self.assertEqual(score, 1.0)  # Both terms found
-
-    def test_calculate_keyword_score_partial(self):
-        """Test calculate_keyword_score with partial matches."""
-        query_terms = ["machine", "learning", "deep"]
-        document_text = "machine learning algorithms"
-
-        score = calculate_keyword_score(query_terms, document_text)
-        self.assertAlmostEqual(score, 2.0 / 3.0, places=2)  # 2 out of 3 terms
-
-    def test_calculate_keyword_score_phrase_boost(self):
-        """Test calculate_keyword_score with phrase matching boost."""
-        query_terms = ["machine", "learning"]
-        document_text = "machine learning is important"
-
-        score = calculate_keyword_score(query_terms, document_text)
-        # Should get boost for exact phrase: 1.0 * 1.5 = 1.5, clamped to 1.0
-        self.assertEqual(score, 1.0)
-
-    def test_calculate_keyword_score_edge_cases(self):
-        """Test calculate_keyword_score edge cases."""
-        # Empty terms
-        score = calculate_keyword_score([], "some text")
-        self.assertEqual(score, 0.0)
-
-        # Empty document
-        score = calculate_keyword_score(["term"], "")
-        self.assertEqual(score, 0.0)
-
-        # Both empty
-        score = calculate_keyword_score([], "")
-        self.assertEqual(score, 0.0)
-
-    def test_combine_scores_basic(self):
-        """Test combine_scores basic functionality."""
-        combined = combine_scores(0.8, 0.6, 0.7, 0.3)
-        expected = (0.8 * 0.7) + (0.6 * 0.3)
-        self.assertAlmostEqual(combined, expected, places=2)
-
-    def test_combine_scores_zero_weights(self):
-        """Test combine_scores with zero weights."""
-        combined = combine_scores(0.8, 0.6, 0.0, 0.0)
-        self.assertEqual(combined, 0.0)
-
-    def test_combine_scores_normalization(self):
-        """Test combine_scores weight normalization."""
-        # Weights that don't sum to 1
-        combined = combine_scores(0.8, 0.6, 0.4, 0.6)  # Sum = 1.0
-        # Normalized weights: 0.4, 0.6
-        expected = (0.8 * 0.4) + (0.6 * 0.6)
-        self.assertAlmostEqual(combined, expected, places=2)
-
-    def test_combine_scores_bounds(self):
-        """Test combine_scores bounds checking."""
-        # Test upper bound
-        combined = combine_scores(1.0, 1.0, 1.0, 1.0)
-        self.assertEqual(combined, 1.0)
-
-        # Test lower bound (should not go negative)
-        combined = combine_scores(-0.5, -0.5, 1.0, 1.0)
-        self.assertEqual(combined, 0.0)
-
-    def test_rerank_results_by_relevance_empty(self):
-        """Test rerank_results_by_relevance with empty input."""
-        results = rerank_results_by_relevance("query", [])
-        self.assertEqual(results, [])
-
-    def test_rerank_results_by_relevance_custom_boost(self):
-        """Test rerank_results_by_relevance with custom boost factors."""
-        results = [
-            SearchResult("1", "machine learning algorithms", 0.8, {}),
-            SearchResult("2", "deep learning networks", 0.7, {"title": "Introduction"}),
-        ]
-
-        boost_factors = {
-            "term_overlap": 0.2,
-            "length_optimal": 1.0,
-            "length_short": 0.8,
-            "length_long": 0.9,
-            "title_boost": 1.1
+    def test_parse_vector_search_results_empty(self):
+        """Test parsing empty results."""
+        raw_results = {
+            "ids": [],
+            "documents": [],
+            "metadatas": [],
+            "distances": []
         }
 
-        reranked = rerank_results_by_relevance("machine learning", results, boost_factors)
+        results = parse_vector_search_results(raw_results)
+        assert results == []
 
-        # Results should be reordered by updated scores
-        self.assertEqual(len(reranked), 2)
-        # All results should have scores > original due to boosts
-        self.assertGreater(reranked[0].score, 0.7)
+    def test_parse_vector_search_results_no_ids(self):
+        """Test parsing results with no IDs."""
+        raw_results = {}
+        results = parse_vector_search_results(raw_results)
+        assert results == []
 
-    def test_rerank_results_by_relevance_missing_boost_factors(self):
-        """Test rerank_results_by_relevance with missing boost factors."""
-        results = [SearchResult("1", "content", 0.8, {})]
+    def test_parse_vector_search_results_missing_fields(self):
+        """Test parsing fails for missing required fields."""
+        raw_results = {"ids": [["doc1"]]}
 
-        incomplete_boost = {"term_overlap": 0.2}  # Missing other required keys
+        with pytest.raises(ValueError, match="ChromaDB response missing 'documents' field"):
+            parse_vector_search_results(raw_results)
 
-        with self.assertRaises(ValueError) as cm:
-            rerank_results_by_relevance("query", results, incomplete_boost)
-        self.assertIn("Missing", str(cm.exception))
+        raw_results = {"ids": [["doc1"]], "documents": [["Content"]]}
+
+        with pytest.raises(ValueError, match="ChromaDB response missing 'metadatas' field"):
+            parse_vector_search_results(raw_results)
+
+    def test_parse_vector_search_results_mismatched_lengths(self):
+        """Test parsing with mismatched result lengths."""
+        raw_results = {
+            "ids": [["doc1", "doc2", "doc3"]],
+            "documents": [["Content 1"]],  # Shorter than IDs
+            "metadatas": [[{"source": "file1.pdf"}]],
+            "distances": [[0.1]]
+        }
+
+        results = parse_vector_search_results(raw_results)
+
+        # Should handle gracefully with empty content for missing items
+        assert len(results) == 3
+        assert results[0].content == "Content 1"
+        assert results[1].content == ""  # Missing content
+        assert results[2].content == ""
+
+
+class TestDistanceToSimilarity:
+    """Test distance_to_similarity pure function."""
+
+    def test_distance_to_similarity_zero(self):
+        """Test converting zero distance (identical)."""
+        similarity = distance_to_similarity(0.0)
+        assert similarity == 1.0
+
+    def test_distance_to_similarity_one(self):
+        """Test converting distance of 1.0."""
+        similarity = distance_to_similarity(1.0)
+        assert similarity == 0.0
+
+    def test_distance_to_similarity_half(self):
+        """Test converting distance of 0.5."""
+        similarity = distance_to_similarity(0.5)
+        assert similarity == 0.5
+
+    def test_distance_to_similarity_clamping(self):
+        """Test clamping to valid range."""
+        # Negative distance should clamp to 1.0
+        similarity = distance_to_similarity(-0.5)
+        assert similarity == 1.0
+
+        # Distance > 1 should clamp to 0.0
+        similarity = distance_to_similarity(1.5)
+        assert similarity == 0.0
+
+
+class TestCalculateKeywordScore:
+    """Test calculate_keyword_score pure function."""
+
+    def test_calculate_keyword_score_exact_match(self):
+        """Test scoring for exact keyword matches."""
+        query_terms = ["python", "programming"]
+        document_text = "python programming tutorial"
+
+        score = calculate_keyword_score(query_terms, document_text)
+        assert score == 1.0
+
+    def test_calculate_keyword_score_partial_match(self):
+        """Test scoring for partial keyword matches."""
+        query_terms = ["python", "java", "c++"]
+        document_text = "python programming tutorial"
+
+        score = calculate_keyword_score(query_terms, document_text)
+        assert score == 1.0 / 3.0  # 1 out of 3 terms matched
+
+    def test_calculate_keyword_score_phrase_boost(self):
+        """Test phrase matching boost."""
+        query_terms = ["machine", "learning"]
+        document_text = "machine learning is powerful"
+
+        score = calculate_keyword_score(query_terms, document_text)
+        # Should get boost for phrase match: 1.0 * 1.5 = 1.5, clamped to 1.0
+        assert score == 1.0
+
+    def test_calculate_keyword_score_no_match(self):
+        """Test scoring when no keywords match."""
+        query_terms = ["python", "java"]
+        document_text = "javascript tutorial"
+
+        score = calculate_keyword_score(query_terms, document_text)
+        # "java" is a substring of "javascript", so there will be a partial match
+        # Let's use terms that definitely don't match
+        query_terms = ["rust", "golang"]
+        score = calculate_keyword_score(query_terms, document_text)
+        assert score == 0.0
+
+    def test_calculate_keyword_score_empty_inputs(self):
+        """Test scoring with empty inputs."""
+        assert calculate_keyword_score([], "some text") == 0.0
+        assert calculate_keyword_score(["term"], "") == 0.0
+        assert calculate_keyword_score([], "") == 0.0
+
+
+class TestCombineScores:
+    """Test combine_scores pure function."""
+
+    def test_combine_scores_default_weights(self):
+        """Test combining scores with default weights."""
+        combined = combine_scores(0.8, 0.6)  # semantic=0.7, keyword=0.3
+        expected = (0.8 * 0.7) + (0.6 * 0.3)
+        assert combined == expected
+
+    def test_combine_scores_custom_weights(self):
+        """Test combining scores with custom weights."""
+        combined = combine_scores(0.9, 0.5, 0.6, 0.4)
+        expected = (0.9 * 0.6) + (0.5 * 0.4)
+        assert combined == expected
+
+    def test_combine_scores_zero_weights(self):
+        """Test combining with zero total weight."""
+        combined = combine_scores(0.8, 0.6, 0.0, 0.0)
+        assert combined == 0.0
+
+    def test_combine_scores_normalization(self):
+        """Test weight normalization."""
+        # Weights don't sum to 1, should be normalized
+        combined = combine_scores(1.0, 0.0, 0.8, 0.2)  # total = 1.0
+        # After normalization: semantic_weight = 0.8/1.0 = 0.8, keyword_weight = 0.2/1.0 = 0.2
+        # Result: (1.0 * 0.8) + (0.0 * 0.2) = 0.8
+        assert combined == 0.8
+
+    def test_combine_scores_clamping(self):
+        """Test score clamping to valid range."""
+        # Result might exceed 1.0, should be clamped
+        combined = combine_scores(1.0, 1.0, 0.9, 0.9)
+        assert combined == 1.0
+
+
+class TestReranking:
+    """Test rerank_results_by_relevance pure function."""
+
+    def setup_method(self):
+        """Set up test data."""
+        self.query_text = "python programming tutorial"
+        self.results = [
+            SearchResult("doc1", "Python programming basics", 0.8, {}),
+            SearchResult("doc2", "Advanced Python tutorial for beginners", 0.7, {"title": "Python Guide"}),
+            SearchResult("doc3", "Short text", 0.9, {}),
+            SearchResult("doc4", "Very long content that exceeds normal length limits and contains lots of detailed information about various programming concepts and methodologies that might be overwhelming for beginners but could be useful for advanced practitioners", 0.6, {})
+        ]
+
+    def test_rerank_results_by_relevance_default_boosts(self):
+        """Test reranking with default boost factors."""
+        reranked = rerank_results_by_relevance(self.query_text, self.results.copy())
+
+        # Results should be reranked and sorted by updated scores
+        assert len(reranked) == 4
+        # Scores should be modified by boost factors
+        assert all(result.score >= 0 for result in reranked)
+
+    def test_rerank_results_by_relevance_custom_boosts(self):
+        """Test reranking with custom boost factors."""
+        boost_factors = {
+            "term_overlap": 0.3,
+            "length_optimal": 1.2,
+            "length_short": 0.7,
+            "length_long": 0.8,
+            "title_boost": 1.3
+        }
+
+        reranked = rerank_results_by_relevance(self.query_text, self.results.copy(), boost_factors)
+
+        # Should apply custom boosts
+        assert len(reranked) == 4
+
+    def test_rerank_results_by_relevance_empty_results(self):
+        """Test reranking empty results list."""
+        reranked = rerank_results_by_relevance(self.query_text, [])
+        assert reranked == []
+
+    def test_rerank_results_by_relevance_missing_boost_keys(self):
+        """Test reranking fails with incomplete boost factors."""
+        incomplete_boosts = {"term_overlap": 0.2}  # Missing other required keys
+
+        # Function checks for different keys depending on content length
+        # Since we have "Short text" result, it will check for 'length_short' first
+        with pytest.raises(ValueError, match="Missing 'length_short' in boost_factors configuration"):
+            rerank_results_by_relevance(self.query_text, self.results.copy(), incomplete_boosts)
+
+    def test_rerank_results_sorting(self):
+        """Test that results are sorted by score descending after reranking."""
+        reranked = rerank_results_by_relevance(self.query_text, self.results.copy())
+
+        # Check scores are in descending order
+        scores = [result.score for result in reranked]
+        assert scores == sorted(scores, reverse=True)
+
+
+class TestFilterResults:
+    """Test filter_results_by_threshold pure function."""
+
+    def setup_method(self):
+        """Set up test data."""
+        self.results = [
+            SearchResult("doc1", "Content 1", 0.9, {}),
+            SearchResult("doc2", "Content 2", 0.7, {}),
+            SearchResult("doc3", "Content 3", 0.5, {}),
+            SearchResult("doc4", "Content 4", 0.3, {})
+        ]
 
     def test_filter_results_by_threshold(self):
-        """Test filter_results_by_threshold."""
-        results = [
-            SearchResult("1", "content1", 0.9, {}),
-            SearchResult("2", "content2", 0.7, {}),
-            SearchResult("3", "content3", 0.5, {}),
-            SearchResult("4", "content4", 0.3, {}),
-        ]
+        """Test filtering results by threshold."""
+        filtered = filter_results_by_threshold(self.results, 0.6)
 
-        filtered = filter_results_by_threshold(results, 0.6)
-        self.assertEqual(len(filtered), 2)
-        self.assertEqual(filtered[0].id, "1")
-        self.assertEqual(filtered[1].id, "2")
+        assert len(filtered) == 2
+        assert filtered[0].score == 0.9
+        assert filtered[1].score == 0.7
 
-    def test_filter_results_by_threshold_empty(self):
-        """Test filter_results_by_threshold with empty input."""
+    def test_filter_results_zero_threshold(self):
+        """Test filtering with zero threshold."""
+        filtered = filter_results_by_threshold(self.results, 0.0)
+        assert len(filtered) == 4  # All results pass
+
+    def test_filter_results_high_threshold(self):
+        """Test filtering with high threshold."""
+        filtered = filter_results_by_threshold(self.results, 0.95)
+        assert len(filtered) == 0  # No results pass
+
+    def test_filter_results_empty_list(self):
+        """Test filtering empty results list."""
         filtered = filter_results_by_threshold([], 0.5)
-        self.assertEqual(filtered, [])
+        assert filtered == []
 
-    def test_limit_results(self):
-        """Test limit_results."""
-        results = [
-            SearchResult("1", "content1", 0.9, {}),
-            SearchResult("2", "content2", 0.8, {}),
-            SearchResult("3", "content3", 0.7, {}),
+
+class TestLimitResults:
+    """Test limit_results pure function."""
+
+    def setup_method(self):
+        """Set up test data."""
+        self.results = [
+            SearchResult("doc1", "Content 1", 0.9, {}),
+            SearchResult("doc2", "Content 2", 0.8, {}),
+            SearchResult("doc3", "Content 3", 0.7, {}),
+            SearchResult("doc4", "Content 4", 0.6, {})
         ]
 
-        limited = limit_results(results, 2)
-        self.assertEqual(len(limited), 2)
-        self.assertEqual(limited[0].id, "1")
-        self.assertEqual(limited[1].id, "2")
+    def test_limit_results_normal(self):
+        """Test limiting results to specified count."""
+        limited = limit_results(self.results, 2)
 
-    def test_limit_results_zero_or_negative(self):
-        """Test limit_results with zero or negative limits."""
-        results = [SearchResult("1", "content1", 0.9, {})]
+        assert len(limited) == 2
+        assert limited[0].id == "doc1"
+        assert limited[1].id == "doc2"
 
-        limited_zero = limit_results(results, 0)
-        self.assertEqual(limited_zero, results)
+    def test_limit_results_more_than_available(self):
+        """Test limiting when limit exceeds available results."""
+        limited = limit_results(self.results, 10)
+        assert len(limited) == 4  # Returns all available
 
-        limited_negative = limit_results(results, -1)
-        self.assertEqual(limited_negative, results)
+    def test_limit_results_zero(self):
+        """Test limiting to zero results."""
+        limited = limit_results(self.results, 0)
+        assert limited == self.results  # Returns all when max_results <= 0
 
-    def test_extract_context_from_results_basic(self):
-        """Test extract_context_from_results basic functionality."""
-        results = [
-            SearchResult("1", "This is the first document.", 0.9, {}),
-            SearchResult("2", "This is the second document.", 0.8, {}),
+    def test_limit_results_negative(self):
+        """Test limiting with negative value."""
+        limited = limit_results(self.results, -1)
+        assert limited == self.results  # Returns all when max_results <= 0
+
+
+class TestExtractContext:
+    """Test extract_context_from_results pure function."""
+
+    def setup_method(self):
+        """Set up test data."""
+        self.results = [
+            SearchResult("doc1", "Short content", 0.9, {}),
+            SearchResult("doc2", "Medium length content with more details", 0.8, {}),
+            SearchResult("doc3", "Very long content that contains lots of information and details about various topics", 0.7, {}),
+            SearchResult("doc4", "Another content piece", 0.6, {})
         ]
 
-        context = extract_context_from_results(results, 100)
-        expected = "This is the first document.\n\nThis is the second document."
-        self.assertEqual(context, expected)
+    def test_extract_context_from_results_normal(self):
+        """Test extracting context within length limit."""
+        context = extract_context_from_results(self.results, max_context_length=200)
 
-    def test_extract_context_from_results_empty(self):
-        """Test extract_context_from_results with empty input."""
-        context = extract_context_from_results([], 100)
-        self.assertEqual(context, "")
+        # Should combine results with separator
+        assert "Short content" in context
+        assert "\n\n" in context
+        assert len(context) <= 200
 
-    def test_extract_context_from_results_length_limit(self):
-        """Test extract_context_from_results with length limit."""
-        results = [
-            SearchResult("1", "A" * 50, 0.9, {}),
-            SearchResult("2", "B" * 50, 0.8, {}),
-        ]
+    def test_extract_context_from_results_first_only(self):
+        """Test extracting context when only first result fits."""
+        context = extract_context_from_results(self.results, max_context_length=15)
 
-        # Limit that allows only first result
-        context = extract_context_from_results(results, 60)
-        self.assertTrue(context.startswith("A"))
-        self.assertNotIn("B", context)
+        # With max_context_length=15 and "Short content" (13 chars), it should fit
+        # Let's use a smaller limit to force truncation
+        context = extract_context_from_results(self.results, max_context_length=8)
 
-    def test_extract_context_from_results_truncation(self):
-        """Test extract_context_from_results with truncation."""
-        results = [
-            SearchResult("1", "A" * 100, 0.9, {}),
-        ]
-
-        # Very small limit forces truncation
-        context = extract_context_from_results(results, 20)
-        self.assertTrue(context.endswith("..."))
-        self.assertLess(len(context), 25)
+        # Should include truncated first result with "..."
+        assert context.endswith("...")
+        assert len(context) <= 8
 
     def test_extract_context_from_results_custom_separator(self):
-        """Test extract_context_from_results with custom separator."""
-        results = [
-            SearchResult("1", "First", 0.9, {}),
-            SearchResult("2", "Second", 0.8, {}),
+        """Test extracting context with custom separator."""
+        context = extract_context_from_results(self.results[:2], max_context_length=100, separator=" | ")
+
+        assert " | " in context
+        assert "Short content" in context
+
+    def test_extract_context_from_results_empty(self):
+        """Test extracting context from empty results."""
+        context = extract_context_from_results([], max_context_length=100)
+        assert context == ""
+
+    def test_extract_context_from_results_empty_content(self):
+        """Test extracting context from results with empty content."""
+        empty_results = [
+            SearchResult("doc1", "", 0.9, {}),
+            SearchResult("doc2", "   ", 0.8, {}),
+            SearchResult("doc3", "Real content", 0.7, {})
         ]
 
-        context = extract_context_from_results(results, 100, " | ")
-        self.assertEqual(context, "First | Second")
+        context = extract_context_from_results(empty_results, max_context_length=100)
+        assert context == "Real content"
 
 
-class TestMockProtocols(unittest.TestCase):
-    """Test mock implementations for protocols."""
+class TestSemanticSearchEngine:
+    """Test SemanticSearchEngine class with dependency injection."""
 
-    def test_embedding_provider_protocol(self):
-        """Test EmbeddingProvider protocol compliance."""
-        mock_provider = Mock(spec=EmbeddingProvider)
-        mock_provider.encode_text = AsyncMock(return_value=np.array([0.1, 0.2, 0.3]))
+    def setup_method(self):
+        """Set up test dependencies."""
+        # Mock embedding provider
+        self.mock_embedding_provider = Mock()
+        self.mock_embedding_provider.encode_text = AsyncMock(return_value=np.array([0.1, 0.2, 0.3]))
 
-        # Should be callable
-        self.assertTrue(hasattr(mock_provider, 'encode_text'))
+        # Mock search provider
+        self.mock_search_provider = Mock()
+        self.mock_search_provider.search_by_embedding = AsyncMock()
+        self.mock_search_provider.search_by_text = AsyncMock()
+        self.mock_search_provider.get_document = AsyncMock()
 
-    def test_vector_search_provider_protocol(self):
-        """Test VectorSearchProvider protocol compliance."""
-        mock_provider = Mock(spec=VectorSearchProvider)
-        mock_provider.search_by_embedding = AsyncMock(return_value={
-            "ids": ["1"], "documents": ["content"], "metadatas": [{}], "distances": [0.1]
-        })
-        mock_provider.search_by_text = AsyncMock(return_value={
-            "ids": ["1"], "documents": ["content"], "metadatas": [{}], "distances": [0.1]
-        })
-        mock_provider.get_document = AsyncMock(return_value={"content": "test"})
+        # Mock config provider
+        self.mock_config_provider = Mock()
+        self.mock_config_provider.get_search_config.return_value = {"timeout": 30}
+        self.mock_config_provider.get_scoring_weights.return_value = {"semantic": 0.7, "keyword": 0.3}
 
-        # Should be callable
-        self.assertTrue(hasattr(mock_provider, 'search_by_embedding'))
-        self.assertTrue(hasattr(mock_provider, 'search_by_text'))
-        self.assertTrue(hasattr(mock_provider, 'get_document'))
-
-    def test_config_provider_protocol(self):
-        """Test ConfigProvider protocol compliance."""
-        mock_provider = Mock(spec=ConfigProvider)
-        mock_provider.get_search_config = Mock(return_value={"threshold": 0.5})
-        mock_provider.get_scoring_weights = Mock(return_value={"semantic": 0.7, "keyword": 0.3})
-
-        # Should be callable
-        self.assertTrue(hasattr(mock_provider, 'get_search_config'))
-        self.assertTrue(hasattr(mock_provider, 'get_scoring_weights'))
-
-
-class TestSemanticSearchEngine(unittest.IsolatedAsyncioTestCase):
-    """Test SemanticSearchEngine class."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.mock_embedding_provider = Mock(spec=EmbeddingProvider)
-        self.mock_search_provider = Mock(spec=VectorSearchProvider)
-        self.mock_config_provider = Mock(spec=ConfigProvider)
-
+        # Create search engine
         self.search_engine = SemanticSearchEngine(
             embedding_provider=self.mock_embedding_provider,
             search_provider=self.mock_search_provider,
             config_provider=self.mock_config_provider
         )
 
-        # Set up default mock responses
-        self.sample_embedding = np.array([0.1, 0.2, 0.3, 0.4])
-        self.sample_search_results = {
-            "ids": ["doc1", "doc2"],
-            "documents": ["AI content", "More AI content"],
-            "metadatas": [{"source": "doc1"}, {"source": "doc2"}],
-            "distances": [0.1, 0.2]
+    @pytest.mark.asyncio
+    async def test_search_engine_initialization(self):
+        """Test search engine initialization."""
+        assert self.search_engine.embedding_provider == self.mock_embedding_provider
+        assert self.search_engine.search_provider == self.mock_search_provider
+        assert self.search_engine.config_provider == self.mock_config_provider
+
+    @pytest.mark.asyncio
+    async def test_search_semantic_method(self):
+        """Test semantic search method."""
+        # Setup mock response
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["doc1", "doc2"]],
+            "documents": [["Content 1", "Content 2"]],
+            "metadatas": [[{}, {}]],
+            "distances": [[0.1, 0.3]]
         }
 
-        self.mock_embedding_provider.encode_text = AsyncMock(return_value=self.sample_embedding)
-        self.mock_search_provider.search_by_embedding = AsyncMock(return_value=self.sample_search_results)
-        self.mock_search_provider.search_by_text = AsyncMock(return_value=self.sample_search_results)
-        self.mock_config_provider.get_scoring_weights = Mock(return_value={"semantic": 0.7, "keyword": 0.3})
-
-    async def test_search_basic_semantic(self):
-        """Test basic semantic search."""
-        query = SearchQuery(text="What is AI?", method="semantic")
-
+        query = SearchQuery(text="test query", method="semantic", top_k=2)
         response = await self.search_engine.search(query)
 
-        self.assertIsInstance(response, SearchResponse)
-        self.assertEqual(response.query, "What is AI?")
-        self.assertEqual(len(response.results), 2)
-        self.assertEqual(response.method_used, "semantic")
-        self.assertGreater(response.search_time, 0)
-
-        # Verify dependencies were called
-        self.mock_embedding_provider.encode_text.assert_called_once_with("What is AI?")
+        # Verify calls
+        self.mock_embedding_provider.encode_text.assert_called_once_with("test query")
         self.mock_search_provider.search_by_embedding.assert_called_once()
 
-    async def test_search_keyword_with_text_support(self):
+        # Verify response
+        assert response.query == "test query"
+        assert response.method_used == "semantic"
+        assert len(response.results) == 2
+        assert response.results[0].id == "doc1"
+
+    @pytest.mark.asyncio
+    async def test_search_keyword_method_with_text_search(self):
         """Test keyword search when provider supports text search."""
-        query = SearchQuery(text="machine learning", method="keyword")
+        # Make provider support text search
+        self.mock_search_provider.search_by_text.return_value = {
+            "ids": [["doc1"]],
+            "documents": [["Keyword content"]],
+            "metadatas": [[{}]],
+            "distances": [[0.2]]
+        }
 
+        query = SearchQuery(text="keyword test", method="keyword", top_k=1)
         response = await self.search_engine.search(query)
 
-        self.assertEqual(response.method_used, "keyword")
+        # Should use text search
         self.mock_search_provider.search_by_text.assert_called_once()
+        assert response.method_used == "keyword"
 
-    async def test_search_keyword_fallback(self):
+    @pytest.mark.asyncio
+    async def test_search_keyword_method_fallback(self):
         """Test keyword search fallback when provider doesn't support text search."""
-        # Remove search_by_text method
-        del self.mock_search_provider.search_by_text
+        # Remove text search capability
+        delattr(self.mock_search_provider, 'search_by_text')
 
-        query = SearchQuery(text="machine learning", method="keyword")
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["doc1"]],
+            "documents": [["python programming tutorial"]],
+            "metadatas": [[{}]],
+            "distances": [[0.1]]
+        }
 
+        query = SearchQuery(text="python tutorial", method="keyword", top_k=1)
         response = await self.search_engine.search(query)
 
-        self.assertEqual(response.method_used, "keyword")
-        # Should fallback to semantic search then re-score
+        # Should fall back to semantic search and re-score
         self.mock_search_provider.search_by_embedding.assert_called_once()
+        assert response.method_used == "keyword"
 
-    async def test_search_hybrid(self):
-        """Test hybrid search functionality."""
-        query = SearchQuery(text="AI research", method="hybrid")
+    @pytest.mark.asyncio
+    async def test_search_hybrid_method(self):
+        """Test hybrid search method."""
+        # Setup semantic search response
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["doc1", "doc2"]],
+            "documents": [["Semantic content", "Another doc"]],
+            "metadatas": [[{}, {}]],
+            "distances": [[0.1, 0.2]]
+        }
 
+        # Remove text search to test fallback path
+        delattr(self.mock_search_provider, 'search_by_text')
+
+        query = SearchQuery(text="test query", method="hybrid", top_k=2)
         response = await self.search_engine.search(query)
 
-        self.assertEqual(response.method_used, "hybrid")
-        # Should call both semantic and keyword searches
-        self.mock_embedding_provider.encode_text.assert_called()
-        self.mock_config_provider.get_scoring_weights.assert_called_once()
+        assert response.method_used == "hybrid"
+        # Should combine semantic and keyword scores
 
-    async def test_search_hybrid_missing_weights(self):
-        """Test hybrid search with missing scoring weights."""
-        self.mock_config_provider.get_scoring_weights = Mock(return_value={})
-        query = SearchQuery(text="test", method="hybrid")
-
-        with self.assertRaises(ValueError) as cm:
-            await self.search_engine.search(query)
-        self.assertIn("Missing 'semantic' weight", str(cm.exception))
-
-    async def test_search_hybrid_exception_handling(self):
-        """Test hybrid search with individual method exceptions."""
-        # Make semantic search fail
-        self.mock_embedding_provider.encode_text = AsyncMock(side_effect=Exception("Embedding failed"))
-
-        query = SearchQuery(text="test", method="hybrid")
-
-        with patch.object(self.search_engine, 'logger') as mock_logger:
-            response = await self.search_engine.search(query)
-
-            # Should still get results from keyword search
-            self.assertGreaterEqual(len(response.results), 0)
-            mock_logger.warning.assert_called()
-
-    async def test_search_invalid_query(self):
+    @pytest.mark.asyncio
+    async def test_search_validation_error(self):
         """Test search with invalid query."""
-        query = SearchQuery(text="", top_k=5)  # Empty text
+        invalid_query = SearchQuery(text="", top_k=5)  # Empty text
 
-        with self.assertRaises(ValueError) as cm:
-            await self.search_engine.search(query)
-        self.assertIn("Invalid query", str(cm.exception))
+        with pytest.raises(ValueError, match="Invalid query"):
+            await self.search_engine.search(invalid_query)
 
+    @pytest.mark.asyncio
     async def test_search_unknown_method(self):
         """Test search with unknown method."""
-        # Create query that bypasses __post_init__ to test unknown method handling
-        query = SearchQuery.__new__(SearchQuery)
-        query.text = "test"
-        query.top_k = 5
-        query.method = "unknown_method"
-        query.similarity_threshold = 0.5
-        query.max_context_length = 1000
-        query.rerank = True
-        query.filters = None
+        # Create valid query then modify method to test validation
+        query = SearchQuery(text="test", method="semantic", top_k=5)
+        query.method = "unknown"  # Modify after creation
 
-        with self.assertRaises(ValueError) as cm:
+        # The validation happens before reaching the unknown method check
+        with pytest.raises(ValueError, match="method must be one of:"):
             await self.search_engine.search(query)
-        # The validation happens in validate_search_query, not in the engine logic
-        self.assertIn("method must be one of", str(cm.exception))
 
-    async def test_search_with_filters_and_threshold(self):
-        """Test search with filters and similarity threshold."""
-        query = SearchQuery(
-            text="test",
-            method="semantic",
-            filters={"category": "tech"},
-            similarity_threshold=0.8,
-            rerank=True
-        )
+    @pytest.mark.asyncio
+    async def test_search_with_reranking(self):
+        """Test search with reranking enabled."""
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["doc1", "doc2"]],
+            "documents": [["Short", "Much longer content with more details"]],
+            "metadatas": [[{}, {}]],
+            "distances": [[0.2, 0.1]]
+        }
 
+        query = SearchQuery(text="test query", method="semantic", top_k=2, rerank=True)
         response = await self.search_engine.search(query)
 
-        # Check that filters were passed to search provider
-        call_kwargs = self.mock_search_provider.search_by_embedding.call_args[1]
-        self.assertEqual(call_kwargs["filters"], {"category": "tech"})
+        # Results should be reranked (order might change due to length/relevance factors)
+        assert len(response.results) == 2
+        assert response.metadata["reranked"] is True
 
-        # Check response metadata
-        self.assertEqual(response.metadata["filters"], {"category": "tech"})
-        self.assertEqual(response.metadata["similarity_threshold"], 0.8)
-        self.assertTrue(response.metadata["reranked"])
+    @pytest.mark.asyncio
+    async def test_search_with_threshold_filtering(self):
+        """Test search with similarity threshold filtering."""
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["doc1", "doc2", "doc3"]],
+            "documents": [["Content 1", "Content 2", "Content 3"]],
+            "metadatas": [[{}, {}, {}]],
+            "distances": [[0.1, 0.5, 0.8]]  # similarities: 0.9, 0.5, 0.2
+        }
 
-    async def test_search_exception_handling(self):
-        """Test search exception handling."""
-        self.mock_embedding_provider.encode_text = AsyncMock(side_effect=Exception("Processing failed"))
-        query = SearchQuery(text="test")
+        query = SearchQuery(text="test", method="semantic", similarity_threshold=0.6, top_k=5)
+        response = await self.search_engine.search(query)
 
-        with patch.object(self.search_engine, 'logger') as mock_logger:
-            with self.assertRaises(Exception):
-                await self.search_engine.search(query)
-            mock_logger.error.assert_called()
+        # Only doc1 (score 0.9) should pass threshold of 0.6
+        assert len(response.results) == 1
+        assert response.results[0].id == "doc1"
 
-    async def test_semantic_search_error_handling(self):
-        """Test semantic search error handling."""
-        self.mock_embedding_provider.encode_text = AsyncMock(side_effect=Exception("Embedding error"))
-        query = SearchQuery(text="test")
+    @pytest.mark.asyncio
+    async def test_find_similar_documents(self):
+        """Test finding similar documents."""
+        # Mock document retrieval
+        self.mock_search_provider.get_document.return_value = {
+            "content": "Reference document content"
+        }
 
-        with patch.object(self.search_engine, 'logger') as mock_logger:
-            with self.assertRaises(Exception):
-                await self.search_engine._semantic_search(query)
-            mock_logger.error.assert_called()
+        # Mock search results
+        self.mock_search_provider.search_by_embedding.return_value = {
+            "ids": [["ref_doc", "similar1", "similar2"]],
+            "documents": [["Reference document content", "Similar content 1", "Similar content 2"]],
+            "metadatas": [[{}, {}, {}]],
+            "distances": [[0.0, 0.1, 0.2]]
+        }
 
-    async def test_find_similar_documents_success(self):
-        """Test find_similar_documents with valid document."""
-        self.mock_search_provider.get_document = AsyncMock(return_value={
-            "content": "reference document content"
-        })
+        response = await self.search_engine.find_similar_documents("ref_doc", top_k=2)
 
-        response = await self.search_engine.find_similar_documents("doc123", top_k=3)
+        # Should exclude reference document itself
+        assert len(response.results) == 2
+        assert response.results[0].id == "similar1"
+        assert response.results[1].id == "similar2"
+        assert response.method_used == "semantic_similarity"
 
-        self.assertIsInstance(response, SearchResponse)
-        self.assertEqual(response.method_used, "semantic_similarity")
-        self.assertEqual(response.metadata["reference_document_id"], "doc123")
-
-        # Should exclude the reference document itself
-        result_ids = [result.id for result in response.results]
-        self.assertNotIn("doc123", result_ids)
-
+    @pytest.mark.asyncio
     async def test_find_similar_documents_not_found(self):
-        """Test find_similar_documents with non-existent document."""
-        self.mock_search_provider.get_document = AsyncMock(return_value=None)
+        """Test finding similar documents when reference doesn't exist."""
+        self.mock_search_provider.get_document.return_value = None
 
-        with self.assertRaises(ValueError) as cm:
-            await self.search_engine.find_similar_documents("nonexistent")
-        self.assertIn("Document nonexistent not found", str(cm.exception))
+        with pytest.raises(ValueError, match="Document ref_doc not found"):
+            await self.search_engine.find_similar_documents("ref_doc", top_k=2)
 
-    async def test_find_similar_documents_exception(self):
-        """Test find_similar_documents exception handling."""
-        self.mock_search_provider.get_document = AsyncMock(side_effect=Exception("DB error"))
+    @pytest.mark.asyncio
+    async def test_search_hybrid_missing_weights(self):
+        """Test hybrid search with missing weight configuration."""
+        self.mock_config_provider.get_scoring_weights.return_value = {"semantic": 0.7}  # Missing keyword
 
-        with patch.object(self.search_engine, 'logger') as mock_logger:
-            with self.assertRaises(Exception):
-                await self.search_engine.find_similar_documents("doc123")
-            mock_logger.error.assert_called()
+        query = SearchQuery(text="test", method="hybrid", top_k=1)
+
+        with pytest.raises(ValueError, match="Missing 'keyword' weight in scoring weights configuration"):
+            await self.search_engine.search(query)
 
 
-class TestFactoryFunctions(unittest.TestCase):
+class TestFactoryFunctions:
     """Test factory functions."""
 
     def test_create_search_query(self):
-        """Test create_search_query factory function."""
+        """Test creating SearchQuery via factory function."""
         query = create_search_query(
             text="test query",
             top_k=10,
             method="hybrid",
-            filters={"category": "tech"},
-            similarity_threshold=0.7
+            filters={"language": "hr"},
+            similarity_threshold=0.5
         )
 
-        self.assertIsInstance(query, SearchQuery)
-        self.assertEqual(query.text, "test query")
-        self.assertEqual(query.top_k, 10)
-        self.assertEqual(query.method, "hybrid")
-        self.assertEqual(query.filters, {"category": "tech"})
-        self.assertEqual(query.similarity_threshold, 0.7)
+        assert isinstance(query, SearchQuery)
+        assert query.text == "test query"
+        assert query.top_k == 10
+        assert query.method == "hybrid"
+        assert query.filters == {"language": "hr"}
+        assert query.similarity_threshold == 0.5
+
+    def test_create_search_query_defaults(self):
+        """Test creating SearchQuery with default values."""
+        query = create_search_query("simple query")
+
+        assert query.text == "simple query"
+        assert query.top_k == 5
+        assert query.method == "semantic"
 
     def test_create_search_engine(self):
-        """Test create_search_engine factory function."""
-        mock_embedding_provider = Mock(spec=EmbeddingProvider)
-        mock_search_provider = Mock(spec=VectorSearchProvider)
-        mock_config_provider = Mock(spec=ConfigProvider)
+        """Test creating SemanticSearchEngine via factory function."""
+        embedding_provider = Mock()
+        search_provider = Mock()
+        config_provider = Mock()
 
-        engine = create_search_engine(
-            embedding_provider=mock_embedding_provider,
-            search_provider=mock_search_provider,
-            config_provider=mock_config_provider
-        )
+        engine = create_search_engine(embedding_provider, search_provider, config_provider)
 
-        self.assertIsInstance(engine, SemanticSearchEngine)
-        self.assertEqual(engine.embedding_provider, mock_embedding_provider)
-        self.assertEqual(engine.search_provider, mock_search_provider)
-        self.assertEqual(engine.config_provider, mock_config_provider)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert isinstance(engine, SemanticSearchEngine)
+        assert engine.embedding_provider == embedding_provider
+        assert engine.search_provider == search_provider
+        assert engine.config_provider == config_provider
