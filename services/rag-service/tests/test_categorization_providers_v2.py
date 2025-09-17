@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from typing import Any
 
 from src.retrieval.categorization_providers import (
-    ProductionConfigProvider,
+    ConfigProvider,
     MockConfigProvider,
     NoOpLoggerProvider,
     MockLoggerProvider,
@@ -20,12 +20,12 @@ from src.retrieval.categorization_providers import (
 )
 
 
-class TestProductionConfigProvider(unittest.TestCase):
+class TestConfigProvider(unittest.TestCase):
     """Test production configuration provider functionality."""
 
     def test_init_imports_config_loader(self):
         """Test initialization properly imports config_loader."""
-        provider = ProductionConfigProvider()
+        provider = ConfigProvider()
         # Verify that _config_loader is set and has the expected method
         self.assertTrue(hasattr(provider._config_loader, 'get_language_specific_config'))
 
@@ -37,7 +37,7 @@ class TestProductionConfigProvider(unittest.TestCase):
             "patterns": {"general": ["test"]}
         }
 
-        provider = ProductionConfigProvider()
+        provider = ConfigProvider()
 
         # Mock the config loader after initialization
         mock_config_loader = MagicMock()
@@ -64,7 +64,7 @@ class TestProductionConfigProvider(unittest.TestCase):
                 return en_config
             return {}
 
-        provider = ProductionConfigProvider()
+        provider = ConfigProvider()
 
         # Mock the config loader after initialization
         mock_config_loader = MagicMock()
@@ -77,7 +77,7 @@ class TestProductionConfigProvider(unittest.TestCase):
 
     def test_get_categorization_config_handles_exceptions(self):
         """Test that exceptions from config_loader are propagated."""
-        provider = ProductionConfigProvider()
+        provider = ConfigProvider()
 
         # Mock the config loader after initialization
         mock_config_loader = MagicMock()
@@ -399,7 +399,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
         self.assertIsInstance(provider, MockConfigProvider)
 
-    @patch('src.retrieval.categorization_providers.ProductionConfigProvider')
+    @patch('src.retrieval.categorization_providers.ConfigProvider')
     def test_create_config_provider_production_mode(self, mock_production_class):
         """Test create_config_provider with production mode."""
         mock_instance = MagicMock()
@@ -412,7 +412,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
     def test_create_config_provider_default_is_production(self):
         """Test create_config_provider defaults to production mode."""
-        with patch('src.retrieval.categorization_providers.ProductionConfigProvider') as mock_production:
+        with patch('src.retrieval.categorization_providers.ConfigProvider') as mock_production:
             mock_instance = MagicMock()
             mock_production.return_value = mock_instance
 

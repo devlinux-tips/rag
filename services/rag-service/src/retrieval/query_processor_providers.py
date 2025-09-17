@@ -341,7 +341,4 @@ def create_query_processor(language: str = "hr"):
 
     config, language_provider, config_provider = create_providers(language)
 
-    return MultilingualQueryProcessor(
-        config=config,
-        language_data_provider=language_provider
-    )
+    return MultilingualQueryProcessor(config=config, language_data_provider=language_provider)

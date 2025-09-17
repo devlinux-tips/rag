@@ -9,33 +9,33 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.preprocessing.cleaners_providers import (
+    ConfigProvider,
+    EnvironmentProvider,
+    LoggerProvider,
     MockConfigProvider,
     MockEnvironmentProvider,
     MockLoggerProvider,
-    ProductionConfigProvider,
-    ProductionEnvironmentProvider,
-    ProductionLoggerProvider,
     create_config_provider,
     create_environment_provider,
     create_logger_provider,
     create_minimal_test_providers,
     create_multilingual_test_providers,
-    create_production_providers,
+    create_providers,
     create_test_providers,
 )
 
 
-class TestProductionConfigProvider(unittest.TestCase):
+class TestConfigProvider(unittest.TestCase):
     """Test production configuration provider."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = ProductionConfigProvider()
+        self.provider = ConfigProvider()
 
     def test_provider_creation(self):
         """Test provider can be created."""
-        provider = ProductionConfigProvider()
-        self.assertIsInstance(provider, ProductionConfigProvider)
+        provider = ConfigProvider()
+        self.assertIsInstance(provider, ConfigProvider)
 
     def test_provider_attributes(self):
         """Test provider has no attributes by default (stateless)."""
@@ -128,32 +128,32 @@ class TestProductionConfigProvider(unittest.TestCase):
 
     def test_provider_immutability(self):
         """Test provider has no mutable state."""
-        provider1 = ProductionConfigProvider()
-        provider2 = ProductionConfigProvider()
+        provider1 = ConfigProvider()
+        provider2 = ConfigProvider()
 
         # Both instances should be functionally identical
         self.assertEqual(type(provider1), type(provider2))
         self.assertEqual(provider1.__dict__, provider2.__dict__)
 
 
-class TestProductionLoggerProvider(unittest.TestCase):
+class TestLoggerProvider(unittest.TestCase):
     """Test production logger provider."""
 
     def test_provider_creation_default_name(self):
         """Test provider creation with default logger name."""
-        provider = ProductionLoggerProvider()
-        self.assertIsInstance(provider, ProductionLoggerProvider)
+        provider = LoggerProvider()
+        self.assertIsInstance(provider, LoggerProvider)
         self.assertEqual(provider.logger.name, "src.preprocessing.cleaners_providers")
 
     def test_provider_creation_custom_name(self):
         """Test provider creation with custom logger name."""
         custom_name = "test.cleaner.logger"
-        provider = ProductionLoggerProvider(custom_name)
+        provider = LoggerProvider(custom_name)
         self.assertEqual(provider.logger.name, custom_name)
 
     def test_provider_creation_none_name(self):
         """Test provider creation with None name uses module name."""
-        provider = ProductionLoggerProvider(None)
+        provider = LoggerProvider(None)
         self.assertEqual(provider.logger.name, "src.preprocessing.cleaners_providers")
 
     @patch("logging.getLogger")
@@ -162,7 +162,7 @@ class TestProductionLoggerProvider(unittest.TestCase):
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         provider.debug("Test debug message")
 
         mock_logger.debug.assert_called_once_with("Test debug message")
@@ -173,7 +173,7 @@ class TestProductionLoggerProvider(unittest.TestCase):
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         provider.info("Test info message")
 
         mock_logger.info.assert_called_once_with("Test info message")
@@ -184,24 +184,24 @@ class TestProductionLoggerProvider(unittest.TestCase):
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         provider.error("Test error message")
 
         mock_logger.error.assert_called_once_with("Test error message")
 
     def test_logger_persistence(self):
         """Test that logger is stored in provider."""
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         self.assertTrue(hasattr(provider, "logger"))
         self.assertEqual(provider.logger.name, "test")
 
 
-class TestProductionEnvironmentProvider(unittest.TestCase):
+class TestEnvironmentProvider(unittest.TestCase):
     """Test production environment provider."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = ProductionEnvironmentProvider()
+        self.provider = EnvironmentProvider()
         # Store original values to restore after tests
         self.original_env = os.environ.copy()
 
@@ -213,8 +213,8 @@ class TestProductionEnvironmentProvider(unittest.TestCase):
 
     def test_provider_creation(self):
         """Test provider can be created."""
-        provider = ProductionEnvironmentProvider()
-        self.assertIsInstance(provider, ProductionEnvironmentProvider)
+        provider = EnvironmentProvider()
+        self.assertIsInstance(provider, EnvironmentProvider)
 
     def test_provider_attributes(self):
         """Test provider has no attributes by default (stateless)."""
@@ -569,7 +569,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_config_provider_production(self):
         """Test creating production config provider."""
         provider = create_config_provider()
-        self.assertIsInstance(provider, ProductionConfigProvider)
+        self.assertIsInstance(provider, ConfigProvider)
 
     def test_create_config_provider_mock_empty(self):
         """Test creating mock config provider with empty data."""
@@ -591,7 +591,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_logger_provider_production(self):
         """Test creating production logger provider."""
         provider = create_logger_provider()
-        self.assertIsInstance(provider, ProductionLoggerProvider)
+        self.assertIsInstance(provider, LoggerProvider)
 
     def test_create_logger_provider_production_with_name(self):
         """Test creating production logger provider with name."""
@@ -607,7 +607,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_environment_provider_production(self):
         """Test creating production environment provider."""
         provider = create_environment_provider()
-        self.assertIsInstance(provider, ProductionEnvironmentProvider)
+        self.assertIsInstance(provider, EnvironmentProvider)
 
     def test_create_environment_provider_mock(self):
         """Test creating mock environment provider."""
@@ -652,25 +652,25 @@ class TestConvenienceBuilders(unittest.TestCase):
     def test_create_test_providers_production_logging(self):
         """Test creating test providers with production logging."""
         _, logger_provider, _ = create_test_providers(mock_logging=False)
-        self.assertIsInstance(logger_provider, ProductionLoggerProvider)
+        self.assertIsInstance(logger_provider, LoggerProvider)
 
     def test_create_test_providers_production_environment(self):
         """Test creating test providers with production environment."""
         _, _, environment_provider = create_test_providers(mock_environment=False)
-        self.assertIsInstance(environment_provider, ProductionEnvironmentProvider)
+        self.assertIsInstance(environment_provider, EnvironmentProvider)
 
-    def test_create_production_providers(self):
+    def test_create_providers(self):
         """Test creating production providers."""
-        config_provider, logger_provider, environment_provider = create_production_providers()
+        config_provider, logger_provider, environment_provider = create_providers()
 
-        self.assertIsInstance(config_provider, ProductionConfigProvider)
-        self.assertIsInstance(logger_provider, ProductionLoggerProvider)
-        self.assertIsInstance(environment_provider, ProductionEnvironmentProvider)
+        self.assertIsInstance(config_provider, ConfigProvider)
+        self.assertIsInstance(logger_provider, LoggerProvider)
+        self.assertIsInstance(environment_provider, EnvironmentProvider)
 
-    def test_create_production_providers_custom_logger_name(self):
+    def test_create_providers_custom_logger_name(self):
         """Test creating production providers with custom logger name."""
         logger_name = "custom.production.logger"
-        _, logger_provider, _ = create_production_providers(logger_name)
+        _, logger_provider, _ = create_providers(logger_name)
 
         self.assertEqual(logger_provider.logger.name, logger_name)
 
@@ -721,7 +721,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_config_provider_interface(self):
         """Test that config providers have consistent interface."""
-        production = ProductionConfigProvider()
+        production = ConfigProvider()
         mock = MockConfigProvider()
 
         # Both should have required methods
@@ -741,7 +741,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_logger_provider_interface(self):
         """Test that logger providers have consistent interface."""
-        production = ProductionLoggerProvider()
+        production = LoggerProvider()
         mock = MockLoggerProvider()
 
         # Both should have logging methods
@@ -755,7 +755,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_environment_provider_interface(self):
         """Test that environment providers have consistent interface."""
-        production = ProductionEnvironmentProvider()
+        production = EnvironmentProvider()
         mock = MockEnvironmentProvider()
 
         # Both should have environment methods

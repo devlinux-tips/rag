@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from ..utils.logging_config import setup_logging, get_component_logger, log_workflow_step
+
 
 # Pure data structures
 @dataclass
@@ -1283,13 +1285,11 @@ def create_mock_cli(should_fail: bool = False, output_writer: OutputWriterProtoc
 
 # Main entry point
 async def main():
-    """Main CLI entry point using dependency injection."""
-    import logging
-
-    # Parse arguments
     args = parse_cli_arguments(sys.argv[1:])
+    
+    logger = setup_logging(level=args.log_level, include_debug=args.log_level.upper() == "DEBUG")
+    log_workflow_step(logger, "CLI_STARTUP", "STARTED", command=args.command, language=args.language)
 
-    # Setup production dependencies
     class StandardOutputWriter:
         def write(self, text: str) -> None:
             sys.stdout.write(text)
@@ -1299,8 +1299,7 @@ async def main():
 
     class StandardLogger:
         def __init__(self):
-            logging.basicConfig(level=getattr(logging, args.log_level))
-            self.logger = logging.getLogger(__name__)
+            self.logger = get_component_logger("cli")
 
         def info(self, message: str) -> None:
             self.logger.info(message)
@@ -1312,14 +1311,12 @@ async def main():
             self.logger.exception(message)
 
     def real_rag_factory(language: str, tenant_context=None):
-        """Create real RAG system using complete production pipeline."""
-        print(f"🚀 Creating real RAG system for language: {language}")
+        logger.info(f"RAG_FACTORY: Creating system for language={language}")
 
         try:
             from ..models.multitenant_models import Tenant, User
             from ..utils.factories import create_complete_rag_system
 
-            # Create proper tenant and user objects if context provided
             tenant_obj = None
             user_obj = None
             if tenant_context:
@@ -1336,21 +1333,19 @@ async def main():
                     full_name=tenant_context.user_full_name,
                 )
 
-            # Create RAG system using complete factory with real components
             rag_system = create_complete_rag_system(
                 language=language,
                 tenant=tenant_obj,
                 user=user_obj
             )
 
-            print(f"✅ RAG system created successfully for {language}")
+            logger.info(f"RAG_FACTORY: System created successfully for {language}")
             return rag_system
 
         except Exception as e:
-            print(f"❌ Failed to create complete RAG system: {e}")
+            logger.error(f"RAG_FACTORY: Failed to create system for {language}: {e}")
             raise e
 
-    # Create real folder manager with production providers
     from ..utils.folder_manager import TenantFolderManager
     from ..utils.folder_manager_providers import (
         ProductionConfigProvider,
@@ -1364,7 +1359,6 @@ async def main():
         logger_provider=StandardLoggerProvider()
     )
 
-    # Vector database storage implementation for CLI status commands
     class VectorDatabaseStorage:
         def __init__(self):
             self._vector_db = None
@@ -1374,7 +1368,6 @@ async def main():
                 from ..vectordb.storage_factories import create_vector_database
                 from ..utils.config_loader import get_paths_config
                 paths_config = get_paths_config()
-                # Use proper path template for tenant-specific database
                 db_path_template = paths_config["chromadb_path_template"]
                 data_base_dir = paths_config["data_base_dir"]
                 db_path = db_path_template.format(data_base_dir=data_base_dir, tenant_slug="development")
@@ -1385,16 +1378,15 @@ async def main():
                 self._ensure_initialized()
                 return self._vector_db.list_collections()
             except Exception:
-                return []  # Return empty list if no collections exist yet
+                return []
 
         def get_document_count(self, collection_name: str) -> int:
             try:
                 self._ensure_initialized()
                 return self._vector_db.get_collection_size(collection_name)
             except Exception:
-                return 0  # Return 0 if collection doesn't exist
+                return 0
 
-    # TOML configuration loader implementation
     class TomlConfigLoader:
         def get_shared_config(self) -> dict[str, Any]:
             from ..utils.config_loader import get_shared_config
@@ -1415,6 +1407,7 @@ async def main():
     )
 
     await cli.execute_command(args)
+    log_workflow_step(logger, "CLI_STARTUP", "COMPLETED")
 
 
 def cli_main():

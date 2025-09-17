@@ -212,16 +212,14 @@ class QueryProcessor:
             from ..utils.config_loader import load_config
             from ..utils.config_protocol import get_config_provider
 
-            main_config = load_config('config')
+            main_config = load_config("config")
             config_provider = get_config_provider()
 
             # Create the processor with proper config provider for filter configuration
             self._processor = create_query_processor(
-                main_config=main_config,
-                language=language,
-                config_provider=config_provider
+                main_config=main_config, language=language, config_provider=config_provider
             )
-        except (ImportError, TypeError, Exception) as e:
+        except (ImportError, TypeError, Exception):
             # Fallback to direct instantiation - may need config
             try:
                 from .query_processor_providers import create_default_config
@@ -232,6 +230,7 @@ class QueryProcessor:
                 filter_config = {}
                 try:
                     from ..utils.config_loader import load_config
+
                     language_config = load_config(language)
                     if "topic_filters" in language_config:
                         filter_config = language_config["topic_filters"]
@@ -330,16 +329,11 @@ class SearchEngineAdapter:
 
                 metadata = metadatas[i] if i < len(metadatas) else {}
 
-                results.append({
-                    "content": doc,
-                    "metadata": metadata,
-                    "similarity_score": similarity
-                })
+                results.append({"content": doc, "metadata": metadata, "similarity_score": similarity})
 
         # Convert to our SearchResult format
         adapted_results = []
         for result in results:
-
             # Results are already in dict format from our conversion above
             content = result.get("content", "")
             metadata = result.get("metadata", {})
@@ -453,7 +447,7 @@ def create_hierarchical_retriever(
     """
     # Import the actual HierarchicalRetriever class
     from .hierarchical_retriever import HierarchicalRetriever
-    
+
     # Create components
     query_processor = QueryProcessor(language)
     categorizer = Categorizer(language)

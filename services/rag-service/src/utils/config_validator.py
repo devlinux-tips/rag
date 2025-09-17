@@ -377,7 +377,9 @@ class ConfigValidator:
     }
 
     @classmethod
-    def validate_startup_config(cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None) -> None:
+    def validate_startup_config(
+        cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None
+    ) -> None:
         """
         PHASE 1: Validate configuration at system startup.
 
@@ -487,7 +489,9 @@ class ConfigValidator:
         )
 
     @classmethod
-    def _validate_cross_config_consistency(cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None) -> None:
+    def _validate_cross_config_consistency(
+        cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None
+    ) -> None:
         """
         Validate consistency across configuration files.
 
@@ -514,7 +518,7 @@ class ConfigValidator:
                 raise ConfigurationError(
                     f"Current language '{current_language}' config file not found. Expected: config/{current_language}.toml"
                 )
-                
+
             # For single language validation, only validate the current language config
             lang_config = language_configs[current_language]
             config_lang_code = lang_config["language"]["code"]
@@ -524,7 +528,7 @@ class ConfigValidator:
                     f"filename says '{current_language}' but config says '{config_lang_code}'"
                 )
             return  # Exit early for single language validation
-        
+
         # Full validation when current_language is None
         # Validate supported languages match available language configs
         supported_languages = main_config["languages"]["supported"]

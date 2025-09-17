@@ -12,10 +12,10 @@ from src.retrieval.categorization import CategoryType
 from src.generation.enhanced_prompt_templates_providers import (
     MockConfigProvider,
     MockLoggerProvider,
-    ProductionConfigProvider,
+    ConfigProvider,
     StandardLoggerProvider,
     create_mock_setup,
-    create_production_setup,
+    create_prompt_builder,
     create_test_config,
     create_minimal_config,
     create_invalid_config,
@@ -303,16 +303,16 @@ class TestMockLoggerProvider(unittest.TestCase):
         self.assertEqual(len(result["error"]), 1)
 
 
-class TestProductionConfigProvider(unittest.TestCase):
+class TestConfigProvider(unittest.TestCase):
     """Test production configuration provider implementation."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = ProductionConfigProvider()
+        self.provider = ConfigProvider()
 
     def test_initialization(self):
         """Test provider initialization."""
-        provider = ProductionConfigProvider()
+        provider = ConfigProvider()
         self.assertEqual(provider._config_cache, {})
 
     @patch('src.utils.config_loader.get_language_specific_config')
@@ -588,26 +588,26 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertEqual(config.language, "en")
 
     @patch('src.generation.enhanced_prompt_templates_providers.StandardLoggerProvider')
-    def test_create_production_setup_default(self, mock_logger_class):
+    def test_create_prompt_builder_default(self, mock_logger_class):
         """Test creating production setup with defaults."""
         mock_logger = Mock()
         mock_logger_class.return_value = mock_logger
 
-        config_provider, logger_provider = create_production_setup()
+        config_provider, logger_provider = create_prompt_builder()
 
-        self.assertIsInstance(config_provider, ProductionConfigProvider)
+        self.assertIsInstance(config_provider, ConfigProvider)
         mock_logger_class.assert_called_once_with('src.generation.enhanced_prompt_templates_providers')
         self.assertEqual(logger_provider, mock_logger)
 
     @patch('src.generation.enhanced_prompt_templates_providers.StandardLoggerProvider')
-    def test_create_production_setup_custom_logger(self, mock_logger_class):
+    def test_create_prompt_builder_custom_logger(self, mock_logger_class):
         """Test creating production setup with custom logger name."""
         mock_logger = Mock()
         mock_logger_class.return_value = mock_logger
 
-        config_provider, logger_provider = create_production_setup("custom_logger")
+        config_provider, logger_provider = create_prompt_builder("custom_logger")
 
-        self.assertIsInstance(config_provider, ProductionConfigProvider)
+        self.assertIsInstance(config_provider, ConfigProvider)
         mock_logger_class.assert_called_once_with("custom_logger")
 
 
@@ -718,7 +718,7 @@ class TestIntegrationHelpers(unittest.TestCase):
     """Test integration helper functions."""
 
     @patch('src.generation.enhanced_prompt_templates.create_enhanced_prompt_builder')
-    @patch('src.generation.enhanced_prompt_templates_providers.create_production_setup')
+    @patch('src.generation.enhanced_prompt_templates_providers.create_prompt_builder')
     def test_create_development_prompt_builder(self, mock_create_setup, mock_create_builder):
         """Test creating development prompt builder."""
         mock_config_provider = Mock()

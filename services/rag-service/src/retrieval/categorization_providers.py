@@ -21,6 +21,7 @@ class ProductionConfigProvider:
         """Get categorization configuration for specified language."""
         # Use the main config provider to get properly merged categorization config
         from ..utils.config_protocol import get_config_provider
+
         main_provider = get_config_provider()
         return main_provider.get_categorization_config(language)
 

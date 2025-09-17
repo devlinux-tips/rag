@@ -216,7 +216,7 @@ def build_category_prompt(
     # Get templates for the category
     if category not in templates:
         # Handle both enum and string categories
-        category_display = getattr(category, 'value', category)
+        category_display = getattr(category, "value", category)
         raise KeyError(f"No templates found for category: {category_display}")
 
     category_templates = templates[category]
@@ -224,7 +224,7 @@ def build_category_prompt(
     # Get system prompt template
     if PromptType.SYSTEM not in category_templates:
         # Handle both enum and string categories
-        category_display = getattr(category, 'value', category)
+        category_display = getattr(category, "value", category)
         raise KeyError(f"No system template found for category: {category_display}")
 
     system_template = category_templates[PromptType.SYSTEM]
@@ -238,7 +238,7 @@ def build_category_prompt(
     # Get user prompt template
     if PromptType.USER not in category_templates:
         # Handle both enum and string categories
-        category_display = getattr(category, 'value', category)
+        category_display = getattr(category, "value", category)
         raise KeyError(f"No user template found for category: {category_display}")
 
     user_template = category_templates[PromptType.USER]

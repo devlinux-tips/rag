@@ -10,11 +10,11 @@ from src.retrieval.query_processor_providers import (
     ConfigProvider,
     MockConfigProvider,
     MockLanguageDataProvider,
-    ProductionLanguageDataProvider,
+    LanguageDataProvider,
     create_default_config,
     create_mock_language_provider,
-    create_production_language_provider,
-    create_production_providers,
+    create_language_provider,
+    create_providers,
     create_test_providers,
 )
 from src.retrieval.query_processor import QueryProcessingConfig
@@ -197,13 +197,13 @@ class TestMockLanguageDataProvider(unittest.TestCase):
         self.assertIn("Mock morphological patterns not configured for language: missing", str(context.exception))
 
 
-class TestProductionLanguageDataProvider(unittest.TestCase):
+class TestLanguageDataProvider(unittest.TestCase):
     """Test production language data provider."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.mock_config_provider = MockConfigProvider()
-        self.provider = ProductionLanguageDataProvider(self.mock_config_provider)
+        self.provider = LanguageDataProvider(self.mock_config_provider)
 
     def test_initialization(self):
         """Test provider initializes correctly."""
@@ -412,13 +412,13 @@ class TestFactoryFunctions(unittest.TestCase):
 
         self.assertIn("Mock configuration not found: config", str(context.exception))
 
-    def test_create_production_language_provider(self):
+    def test_create_language_provider(self):
         """Test creating production language provider."""
         mock_config_provider = MockConfigProvider()
 
-        provider = create_production_language_provider(mock_config_provider)
+        provider = create_language_provider(mock_config_provider)
 
-        self.assertIsInstance(provider, ProductionLanguageDataProvider)
+        self.assertIsInstance(provider, LanguageDataProvider)
         self.assertIs(provider.config_provider, mock_config_provider)
 
     def test_create_mock_language_provider_default_croatian(self):
@@ -546,7 +546,7 @@ class TestCreateProductionProviders(unittest.TestCase):
 
     @patch('src.utils.config_protocol.get_config_provider')
     @patch('src.retrieval.query_processor_providers.QueryProcessingConfig.from_validated_config')
-    def test_create_production_providers_success(self, mock_config_method, mock_get_provider):
+    def test_create_providers_success(self, mock_config_method, mock_get_provider):
         """Test successful production provider creation."""
         # Setup mocks
         mock_real_provider = MagicMock()
@@ -571,11 +571,11 @@ class TestCreateProductionProviders(unittest.TestCase):
         }
 
         # Test function
-        config, language_provider, config_provider = create_production_providers("hr")
+        config, language_provider, config_provider = create_providers("hr")
 
         # Verify results
         self.assertIs(config, mock_config)
-        self.assertIsInstance(language_provider, ProductionLanguageDataProvider)
+        self.assertIsInstance(language_provider, LanguageDataProvider)
         self.assertIs(config_provider, mock_real_provider)
         self.assertIs(language_provider.config_provider, mock_real_provider)
 
@@ -584,7 +584,7 @@ class TestCreateProductionProviders(unittest.TestCase):
         mock_real_provider.load_config.assert_called_once_with("config")
 
     @patch('src.utils.config_protocol.get_config_provider')
-    def test_create_production_providers_import_error(self, mock_get_provider):
+    def test_create_providers_import_error(self, mock_get_provider):
         """Test production provider creation handles import errors gracefully."""
         # This test verifies the import is attempted - the actual failure handling
         # depends on the real get_config_provider implementation
@@ -592,7 +592,7 @@ class TestCreateProductionProviders(unittest.TestCase):
 
         # Should not raise during import
         try:
-            create_production_providers("en")
+            create_providers("en")
         except Exception:
             # If it fails, it should be due to config issues, not import issues
             pass

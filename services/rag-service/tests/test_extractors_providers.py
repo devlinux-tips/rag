@@ -11,28 +11,28 @@ from src.preprocessing.extractors_providers import (
     MockConfigProvider,
     MockFileSystemProvider,
     MockLoggerProvider,
-    ProductionConfigProvider,
-    ProductionFileSystemProvider,
-    ProductionLoggerProvider,
+    ConfigProvider,
+    FileSystemProvider,
+    LoggerProvider,
     create_config_provider,
     create_file_system_provider,
     create_logger_provider,
-    create_production_providers,
+    create_providers,
     create_test_providers,
 )
 
 
-class TestProductionConfigProvider(unittest.TestCase):
+class TestConfigProvider(unittest.TestCase):
     """Test production configuration provider."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = ProductionConfigProvider()
+        self.provider = ConfigProvider()
 
     def test_provider_creation(self):
         """Test provider can be created."""
-        provider = ProductionConfigProvider()
-        self.assertIsInstance(provider, ProductionConfigProvider)
+        provider = ConfigProvider()
+        self.assertIsInstance(provider, ConfigProvider)
 
     def test_provider_attributes(self):
         """Test provider has no attributes by default (stateless)."""
@@ -64,25 +64,25 @@ class TestProductionConfigProvider(unittest.TestCase):
 
     def test_provider_immutability(self):
         """Test provider has no mutable state."""
-        provider1 = ProductionConfigProvider()
-        provider2 = ProductionConfigProvider()
+        provider1 = ConfigProvider()
+        provider2 = ConfigProvider()
 
         # Both instances should be functionally identical
         self.assertEqual(type(provider1), type(provider2))
         self.assertEqual(provider1.__dict__, provider2.__dict__)
 
 
-class TestProductionFileSystemProvider(unittest.TestCase):
+class TestFileSystemProvider(unittest.TestCase):
     """Test production file system provider."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = ProductionFileSystemProvider()
+        self.provider = FileSystemProvider()
 
     def test_provider_creation(self):
         """Test provider can be created."""
-        provider = ProductionFileSystemProvider()
-        self.assertIsInstance(provider, ProductionFileSystemProvider)
+        provider = FileSystemProvider()
+        self.assertIsInstance(provider, FileSystemProvider)
 
     def test_provider_attributes(self):
         """Test provider has no attributes by default (stateless)."""
@@ -155,24 +155,24 @@ class TestProductionFileSystemProvider(unittest.TestCase):
             self.provider.open_text(test_file, "invalid-encoding")
 
 
-class TestProductionLoggerProvider(unittest.TestCase):
+class TestLoggerProvider(unittest.TestCase):
     """Test production logger provider."""
 
     def test_provider_creation_default_name(self):
         """Test provider creation with default logger name."""
-        provider = ProductionLoggerProvider()
-        self.assertIsInstance(provider, ProductionLoggerProvider)
+        provider = LoggerProvider()
+        self.assertIsInstance(provider, LoggerProvider)
         self.assertEqual(provider.logger.name, "src.preprocessing.extractors_providers")
 
     def test_provider_creation_custom_name(self):
         """Test provider creation with custom logger name."""
         custom_name = "test.extractor.logger"
-        provider = ProductionLoggerProvider(custom_name)
+        provider = LoggerProvider(custom_name)
         self.assertEqual(provider.logger.name, custom_name)
 
     def test_provider_creation_none_name(self):
         """Test provider creation with None name uses module name."""
-        provider = ProductionLoggerProvider(None)
+        provider = LoggerProvider(None)
         self.assertEqual(provider.logger.name, "src.preprocessing.extractors_providers")
 
     @patch("logging.getLogger")
@@ -181,7 +181,7 @@ class TestProductionLoggerProvider(unittest.TestCase):
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         provider.info("Test info message")
 
         mock_logger.info.assert_called_once_with("Test info message")
@@ -192,14 +192,14 @@ class TestProductionLoggerProvider(unittest.TestCase):
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         provider.error("Test error message")
 
         mock_logger.error.assert_called_once_with("Test error message")
 
     def test_logger_persistence(self):
         """Test that logger is stored in provider."""
-        provider = ProductionLoggerProvider("test")
+        provider = LoggerProvider("test")
         self.assertTrue(hasattr(provider, "logger"))
         self.assertEqual(provider.logger.name, "test")
 
@@ -457,7 +457,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_config_provider_production(self):
         """Test creating production config provider."""
         provider = create_config_provider()
-        self.assertIsInstance(provider, ProductionConfigProvider)
+        self.assertIsInstance(provider, ConfigProvider)
 
     def test_create_config_provider_mock(self):
         """Test creating mock config provider."""
@@ -469,7 +469,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_file_system_provider_production(self):
         """Test creating production file system provider."""
         provider = create_file_system_provider()
-        self.assertIsInstance(provider, ProductionFileSystemProvider)
+        self.assertIsInstance(provider, FileSystemProvider)
 
     def test_create_file_system_provider_mock(self):
         """Test creating mock file system provider."""
@@ -481,7 +481,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_create_logger_provider_production(self):
         """Test creating production logger provider."""
         provider = create_logger_provider()
-        self.assertIsInstance(provider, ProductionLoggerProvider)
+        self.assertIsInstance(provider, LoggerProvider)
 
     def test_create_logger_provider_production_with_name(self):
         """Test creating production logger provider with name."""
@@ -504,7 +504,7 @@ class TestConvenienceBuilders(unittest.TestCase):
 
         self.assertIsInstance(config_provider, MockConfigProvider)
         # When files=None, creates production provider (as per implementation)
-        self.assertIsInstance(fs_provider, ProductionFileSystemProvider)
+        self.assertIsInstance(fs_provider, FileSystemProvider)
         self.assertIsInstance(logger_provider, MockLoggerProvider)
 
     def test_create_test_providers_custom_config(self):
@@ -526,7 +526,7 @@ class TestConvenienceBuilders(unittest.TestCase):
         """Test creating test providers with production logging."""
         config_provider, fs_provider, logger_provider = create_test_providers(mock_logging=False)
 
-        self.assertIsInstance(logger_provider, ProductionLoggerProvider)
+        self.assertIsInstance(logger_provider, LoggerProvider)
 
     def test_create_test_providers_default_config_content(self):
         """Test that default config has expected content."""
@@ -536,18 +536,18 @@ class TestConvenienceBuilders(unittest.TestCase):
         expected_keys = {"supported_formats", "text_encodings", "max_file_size_mb", "enable_logging"}
         self.assertTrue(expected_keys.issubset(config.keys()))
 
-    def test_create_production_providers(self):
+    def test_create_providers(self):
         """Test creating production providers."""
-        config_provider, fs_provider, logger_provider = create_production_providers()
+        config_provider, fs_provider, logger_provider = create_providers()
 
-        self.assertIsInstance(config_provider, ProductionConfigProvider)
-        self.assertIsInstance(fs_provider, ProductionFileSystemProvider)
-        self.assertIsInstance(logger_provider, ProductionLoggerProvider)
+        self.assertIsInstance(config_provider, ConfigProvider)
+        self.assertIsInstance(fs_provider, FileSystemProvider)
+        self.assertIsInstance(logger_provider, LoggerProvider)
 
-    def test_create_production_providers_custom_logger_name(self):
+    def test_create_providers_custom_logger_name(self):
         """Test creating production providers with custom logger name."""
         logger_name = "custom.production.logger"
-        config_provider, fs_provider, logger_provider = create_production_providers(logger_name)
+        config_provider, fs_provider, logger_provider = create_providers(logger_name)
 
         self.assertEqual(logger_provider.logger.name, logger_name)
 
@@ -567,7 +567,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_config_provider_interface(self):
         """Test that config providers have consistent interface."""
-        production = ProductionConfigProvider()
+        production = ConfigProvider()
         mock = MockConfigProvider({})
 
         # Both should have get_extraction_config method
@@ -578,7 +578,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_file_system_provider_interface(self):
         """Test that file system providers have consistent interface."""
-        production = ProductionFileSystemProvider()
+        production = FileSystemProvider()
         mock = MockFileSystemProvider()
 
         # Both should have required methods
@@ -592,7 +592,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_logger_provider_interface(self):
         """Test that logger providers have consistent interface."""
-        production = ProductionLoggerProvider()
+        production = LoggerProvider()
         mock = MockLoggerProvider()
 
         # Both should have logging methods

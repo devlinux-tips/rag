@@ -227,7 +227,7 @@ class ProductionConfigProvider:
             from ..utils.config_loader import get_paths_config, load_config
 
             paths_config = get_paths_config()
-            main_config = load_config('config')
+            main_config = load_config("config")
             storage_config = main_config["storage"]
 
             return FolderConfig(

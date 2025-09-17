@@ -30,7 +30,7 @@ from src.retrieval.query_processor import (
     MultilingualQueryProcessor,
 
     # Production implementation
-    ProductionLanguageDataProvider,
+    LanguageDataProvider,
 
     # Factory function
     create_query_processor,
@@ -709,8 +709,8 @@ class TestMultilingualQueryProcessor:
 
 
 # Test Production Language Data Provider
-class TestProductionLanguageDataProvider:
-    """Test ProductionLanguageDataProvider class."""
+class TestLanguageDataProvider:
+    """Test LanguageDataProvider class."""
 
     @pytest.fixture
     def mock_config_provider(self):
@@ -729,13 +729,13 @@ class TestProductionLanguageDataProvider:
 
     def test_init(self, mock_config_provider):
         """Test initialization."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
         assert provider.config_provider == mock_config_provider
         assert provider._cache == {}
 
     def test_get_stop_words_success(self, mock_config_provider):
         """Test successful stop words retrieval."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         stop_words = provider.get_stop_words("en")
 
@@ -746,7 +746,7 @@ class TestProductionLanguageDataProvider:
     def test_get_stop_words_error_fallback(self, mock_config_provider):
         """Test stop words retrieval with error fallback."""
         mock_config_provider.get_language_config.side_effect = KeyError("Missing config")
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         stop_words = provider.get_stop_words("en")
 
@@ -755,7 +755,7 @@ class TestProductionLanguageDataProvider:
 
     def test_get_question_patterns_success(self, mock_config_provider):
         """Test successful question patterns retrieval."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         patterns = provider.get_question_patterns("en")
 
@@ -765,7 +765,7 @@ class TestProductionLanguageDataProvider:
 
     def test_get_synonym_groups_success(self, mock_config_provider):
         """Test successful synonym groups retrieval."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         synonyms = provider.get_synonym_groups("en")
 
@@ -775,7 +775,7 @@ class TestProductionLanguageDataProvider:
 
     def test_get_morphological_patterns_success(self, mock_config_provider):
         """Test successful morphological patterns retrieval."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         patterns = provider.get_morphological_patterns("en")
 
@@ -784,7 +784,7 @@ class TestProductionLanguageDataProvider:
 
     def test_caching_behavior(self, mock_config_provider):
         """Test that results are cached properly."""
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         # First calls should hit config provider
         stop_words1 = provider.get_stop_words("en")
@@ -799,7 +799,7 @@ class TestProductionLanguageDataProvider:
         # Make config provider raise an exception
         mock_config_provider.get_language_config.side_effect = KeyError("Missing config")
 
-        provider = ProductionLanguageDataProvider(mock_config_provider)
+        provider = LanguageDataProvider(mock_config_provider)
 
         # Should fallback to empty dict when config provider fails
         synonyms = provider.get_synonym_groups("en")
@@ -856,7 +856,7 @@ class TestCreateQueryProcessor:
 
         assert isinstance(processor, MultilingualQueryProcessor)
         assert processor.config.language == "hr"
-        assert isinstance(processor.language_data_provider, ProductionLanguageDataProvider)
+        assert isinstance(processor.language_data_provider, LanguageDataProvider)
 
     def test_create_with_config_provider_error(self, main_config):
         """Test factory with config provider error handling."""

@@ -29,8 +29,8 @@ class SentenceTransformerLoader:
             # Filter out parameters not supported by SentenceTransformer
             # Extract only supported parameters for SentenceTransformer init
             supported_params = {}
-            if 'trust_remote_code' in kwargs:
-                supported_params['trust_remote_code'] = kwargs['trust_remote_code']
+            if "trust_remote_code" in kwargs:
+                supported_params["trust_remote_code"] = kwargs["trust_remote_code"]
 
             # Load model with only supported configuration
             model = SentenceTransformer(model_name, cache_folder=cache_dir, device=device, **supported_params)

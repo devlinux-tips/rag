@@ -878,7 +878,7 @@ class TestCreateDocumentChunker:
                 chunker = create_document_chunker(config_provider=mock_config_provider, language="en")
 
                 assert isinstance(chunker, DocumentChunker)
-                assert chunker.language_patterns == {"sentence_endings": ".!?…"}
+                assert chunker.language_patterns == {"patterns": {"sentence_endings": ".!?…"}}
 
     def test_create_with_config_provider_error(self):
         """Test factory with config provider error handling."""

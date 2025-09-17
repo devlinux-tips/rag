@@ -60,7 +60,7 @@ class RAGConfig(BaseSettings):
 
             # Get validated config through provider
             config_provider = get_config_provider()
-            main_config = config_provider.load_config('config')  # Get full structured config
+            main_config = config_provider.load_config("config")  # Get full structured config
 
             # Get language-specific config for embeddings
             language_config = config_provider.get_language_config(language)

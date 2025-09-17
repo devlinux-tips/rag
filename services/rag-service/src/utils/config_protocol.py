@@ -110,27 +110,27 @@ class ProductionConfigProvider:
 
     def get_cleaning_config(self) -> dict[str, Any]:
         """Get general cleaning configuration from main config."""
-        main_config = self._config_loader.load_config('config')
-        if 'cleaning' not in main_config:
+        main_config = self._config_loader.load_config("config")
+        if "cleaning" not in main_config:
             raise KeyError("Missing 'cleaning' section in main configuration")
-        return cast(dict[str, Any], main_config['cleaning'])
+        return cast(dict[str, Any], main_config["cleaning"])
 
     def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get document cleaning configuration for specified language."""
         language_config = self.get_language_config(language)
-        if 'document_cleaning' not in language_config:
+        if "document_cleaning" not in language_config:
             raise KeyError(f"Missing 'document_cleaning' section in {language} configuration")
-        return cast(dict[str, Any], language_config['document_cleaning'])
+        return cast(dict[str, Any], language_config["document_cleaning"])
 
     def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get chunking configuration for specified language, merged with main config."""
         # Get base chunking config from main config
-        main_config = self._config_loader.load_config('config')
-        base_chunking = main_config.get('chunking', {})
+        main_config = self._config_loader.load_config("config")
+        base_chunking = main_config.get("chunking", {})
 
         # Get language-specific chunking config
         language_config = self.get_language_config(language)
-        lang_chunking = language_config.get('chunking', {})
+        lang_chunking = language_config.get("chunking", {})
 
         # Merge configs (language-specific overrides main config)
         merged_config = {**base_chunking, **lang_chunking}
@@ -139,27 +139,27 @@ class ProductionConfigProvider:
     def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get shared configuration for specified language."""
         language_config = self.get_language_config(language)
-        if 'shared' not in language_config:
+        if "shared" not in language_config:
             raise KeyError(f"Missing 'shared' section in {language} configuration")
-        return cast(dict[str, Any], language_config['shared'])
+        return cast(dict[str, Any], language_config["shared"])
 
     def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
         language_config = self.get_language_config(language)
 
         # Get shared categorization data
-        shared_config = language_config.get('shared', {})
-        shared_categorization = shared_config.get('categorization', {})
-        shared_patterns = shared_config.get('patterns', {})
+        shared_config = language_config.get("shared", {})
+        shared_categorization = shared_config.get("categorization", {})
+        shared_patterns = shared_config.get("patterns", {})
 
         # Get language-specific categorization data
-        categorization_config = language_config.get('categorization', {})
+        categorization_config = language_config.get("categorization", {})
 
         # Merge shared and language-specific data
         merged_config = {
             **shared_categorization,  # Shared categories, cultural_keywords, complexity_thresholds
             **categorization_config,  # Language-specific indicators (overrides shared)
-            'patterns': shared_patterns  # Shared patterns
+            "patterns": shared_patterns,  # Shared patterns
         }
 
         return cast(dict[str, Any], merged_config)
@@ -167,17 +167,17 @@ class ProductionConfigProvider:
     def get_parsing_config(self, language: str) -> dict[str, Any]:
         """Get parsing configuration for specified language."""
         language_config = self.get_language_config(language)
-        if 'response_parsing' not in language_config:
+        if "response_parsing" not in language_config:
             raise KeyError(f"Missing 'response_parsing' section in {language} configuration")
-        return cast(dict[str, Any], language_config['response_parsing'])
+        return cast(dict[str, Any], language_config["response_parsing"])
 
     def get_prompt_config(self, language: str) -> Any:
         """Get prompt configuration for specified language."""
         language_config = self.get_language_config(language)
-        if 'prompts' not in language_config:
+        if "prompts" not in language_config:
             raise KeyError(f"Missing 'prompts' section in {language} configuration")
 
-        prompts_config = language_config['prompts']
+        prompts_config = language_config["prompts"]
 
         # Import PromptConfig at runtime to avoid circular dependencies
         from ..generation.enhanced_prompt_templates import PromptConfig
@@ -187,7 +187,7 @@ class ProductionConfigProvider:
             category_templates={},  # Empty for now since not in config
             messages={k: v for k, v in prompts_config.items() if isinstance(v, str)},
             formatting={},
-            language=language
+            language=language,
         )
 
 
@@ -248,7 +248,12 @@ class MockConfigProvider:
 
     def get_cleaning_config(self) -> dict[str, Any]:
         """Get mock cleaning configuration."""
-        return {"multiple_whitespace": True, "multiple_linebreaks": True, "min_meaningful_words": 3, "min_word_char_ratio": 0.7}
+        return {
+            "multiple_whitespace": True,
+            "multiple_linebreaks": True,
+            "min_meaningful_words": 3,
+            "min_word_char_ratio": 0.7,
+        }
 
     def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get mock document cleaning configuration."""
@@ -256,7 +261,12 @@ class MockConfigProvider:
 
     def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get mock chunking configuration."""
-        return {"sentence_endings": [".", "!", "?"], "abbreviations": [], "min_sentence_length": 10, "sentence_ending_pattern": "[.!?]+"}
+        return {
+            "sentence_endings": [".", "!", "?"],
+            "abbreviations": [],
+            "min_sentence_length": 10,
+            "sentence_ending_pattern": "[.!?]+",
+        }
 
     def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get mock shared language configuration."""
@@ -269,7 +279,7 @@ class MockConfigProvider:
             "patterns": {"general": [".*"], "cultural": ["culture.*"], "technical": ["tech.*"]},
             "cultural_keywords": ["culture", "traditional"],
             "complexity_thresholds": {"simple": 0.3, "medium": 0.6, "complex": 0.8},
-            "retrieval_strategies": {"general": "semantic", "cultural": "semantic", "technical": "dense"}
+            "retrieval_strategies": {"general": "semantic", "cultural": "semantic", "technical": "dense"},
         }
 
     def get_parsing_config(self, language: str) -> dict[str, Any]:
@@ -285,7 +295,7 @@ class MockConfigProvider:
             "require_source_grounding": True,
             "confidence_threshold": 0.7,
             "response_format": "markdown",
-            "include_metadata": True
+            "include_metadata": True,
         }
 
     def get_prompt_config(self, language: str) -> Any:
@@ -298,10 +308,10 @@ class MockConfigProvider:
             messages={
                 "system_base": "You are an AI assistant.",
                 "context_intro": "Based on the following context:",
-                "answer_intro": "Answer:"
+                "answer_intro": "Answer:",
             },
             formatting={},
-            language=language
+            language=language,
         )
 
 

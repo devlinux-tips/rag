@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from ..preprocessing.cleaners import detect_language_content_with_config, preserve_text_encoding
+from ..preprocessing.cleaners import detect_language_content_with_config
 from ..utils.config_loader import ConfigError
 
 
@@ -454,7 +454,9 @@ class MultilingualOllamaClient:
         # Step 3: Build and enhance prompt
         base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
 
-        enhanced_prompt = enhance_prompt_with_formality(base_prompt, formal_prompts, getattr(self.config, 'prefer_formal_style', False))
+        enhanced_prompt = enhance_prompt_with_formality(
+            base_prompt, formal_prompts, getattr(self.config, "prefer_formal_style", False)
+        )
 
         # Step 4: Create API request
         ollama_request = create_ollama_request(enhanced_prompt, self.config)
@@ -484,7 +486,7 @@ class MultilingualOllamaClient:
             "language": request.language,
             "context_length": len(" ".join(request.context)),
             "streaming": self.config.stream,
-            "formal_style": getattr(self.config, 'prefer_formal_style', False),
+            "formal_style": getattr(self.config, "prefer_formal_style", False),
         }
         if request.metadata:
             metadata.update(request.metadata)

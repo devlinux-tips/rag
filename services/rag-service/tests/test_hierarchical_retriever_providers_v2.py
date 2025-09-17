@@ -16,12 +16,12 @@ from src.retrieval.hierarchical_retriever_providers import (
     MockSearchEngine,
     MockReranker,
     MockLoggerProvider,
-    ProductionQueryProcessor,
-    ProductionCategorizer,
-    ProductionSearchEngineAdapter,
-    ProductionRerankerAdapter,
+    QueryProcessor,
+    Categorizer,
+    SearchEngineAdapter,
+    RerankerAdapter,
     create_mock_setup,
-    create_production_setup,
+    create_hierarchical_retriever,
     create_test_config,
 )
 
@@ -472,7 +472,7 @@ class TestMockLoggerProvider(unittest.TestCase):
         self.assertEqual(result, [])
 
 
-class TestProductionQueryProcessor(unittest.TestCase):
+class TestQueryProcessor(unittest.TestCase):
     """Test production query processor wrapper."""
 
     @patch('src.retrieval.query_processor.create_query_processor')
@@ -481,7 +481,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
         mock_processor = Mock()
         mock_create.return_value = mock_processor
 
-        processor = ProductionQueryProcessor("hr")
+        processor = QueryProcessor("hr")
 
         mock_create.assert_called_once_with(main_config={}, language="hr")
         self.assertEqual(processor._processor, mock_processor)
@@ -497,7 +497,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
         mock_processor = Mock()
         mock_processor_class.return_value = mock_processor
 
-        processor = ProductionQueryProcessor("en")
+        processor = QueryProcessor("en")
 
         mock_create_config.assert_called_once_with(language="en")
         mock_processor_class.assert_called_once_with(config=mock_config)
@@ -516,7 +516,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
         mock_processor = Mock()
         mock_processor_class.return_value = mock_processor
 
-        processor = ProductionQueryProcessor("hr")
+        processor = QueryProcessor("hr")
 
         # Verify minimal config creation
         mock_config_class.assert_called_once()
@@ -539,7 +539,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
 
         with patch('src.retrieval.query_processor.create_query_processor') as mock_create:
             mock_create.return_value = mock_processor
-            processor = ProductionQueryProcessor()
+            processor = QueryProcessor()
 
             result = processor.process_query("test query", {"context": "test"})
 
@@ -557,7 +557,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
         mock_processor = Mock()
         with patch('src.retrieval.query_processor.create_query_processor') as mock_create:
             mock_create.return_value = mock_processor
-            processor = ProductionQueryProcessor()
+            processor = QueryProcessor()
             # Force processor to None to test error handling
             processor._processor = None
 
@@ -574,7 +574,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
 
         with patch('src.retrieval.query_processor.create_query_processor') as mock_create:
             mock_create.return_value = mock_processor
-            processor = ProductionQueryProcessor()
+            processor = QueryProcessor()
 
             result = processor.process_query("test query")
 
@@ -587,7 +587,7 @@ class TestProductionQueryProcessor(unittest.TestCase):
             self.assertEqual(result.metadata, {})
 
 
-class TestProductionCategorizer(unittest.TestCase):
+class TestCategorizer(unittest.TestCase):
     """Test production categorizer wrapper."""
 
     @patch('src.retrieval.categorization_providers.create_config_provider')
@@ -599,7 +599,7 @@ class TestProductionCategorizer(unittest.TestCase):
         mock_categorizer = Mock()
         mock_categorizer_class.return_value = mock_categorizer
 
-        categorizer = ProductionCategorizer("hr")
+        categorizer = Categorizer("hr")
 
         mock_create_provider.assert_called_once()
         mock_categorizer_class.assert_called_once_with("hr", mock_provider)
@@ -624,20 +624,20 @@ class TestProductionCategorizer(unittest.TestCase):
         )
         mock_categorizer.categorize_query.return_value = expected_result
 
-        categorizer = ProductionCategorizer("en")
+        categorizer = Categorizer("en")
         result = categorizer.categorize_query("api documentation", {"context": "test"})
 
         mock_categorizer.categorize_query.assert_called_once_with("api documentation")
         self.assertEqual(result, expected_result)
 
 
-class TestProductionSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
+class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
     """Test production search engine adapter."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.mock_search_engine = AsyncMock()
-        self.adapter = ProductionSearchEngineAdapter(self.mock_search_engine)
+        self.adapter = SearchEngineAdapter(self.mock_search_engine)
 
     async def test_search_with_search_result_objects(self):
         """Test search adaptation with SearchResult-like objects."""
@@ -708,13 +708,13 @@ class TestProductionSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(results), 0)
 
 
-class TestProductionRerankerAdapter(unittest.IsolatedAsyncioTestCase):
+class TestRerankerAdapter(unittest.IsolatedAsyncioTestCase):
     """Test production reranker adapter."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.mock_reranker = AsyncMock()
-        self.adapter = ProductionRerankerAdapter(self.mock_reranker, "hr")
+        self.adapter = RerankerAdapter(self.mock_reranker, "hr")
 
     async def test_rerank_delegation(self):
         """Test that rerank calls are properly delegated."""
@@ -747,7 +747,7 @@ class TestProductionRerankerAdapter(unittest.IsolatedAsyncioTestCase):
 
     def test_initialization_with_language(self):
         """Test adapter initialization with language."""
-        adapter = ProductionRerankerAdapter(self.mock_reranker, "en")
+        adapter = RerankerAdapter(self.mock_reranker, "en")
         self.assertEqual(adapter._reranker, self.mock_reranker)
         self.assertEqual(adapter.language, "en")
 
@@ -804,11 +804,11 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertIn("keyword", config.boost_weights)
         self.assertTrue(config.performance_tracking)
 
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionQueryProcessor')
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionCategorizer')
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionSearchEngineAdapter')
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionRerankerAdapter')
-    def test_create_production_setup_with_reranker(self, mock_reranker_class, mock_search_class, mock_cat_class, mock_query_class):
+    @patch('src.retrieval.hierarchical_retriever_providers.QueryProcessor')
+    @patch('src.retrieval.hierarchical_retriever_providers.Categorizer')
+    @patch('src.retrieval.hierarchical_retriever_providers.SearchEngineAdapter')
+    @patch('src.retrieval.hierarchical_retriever_providers.RerankerAdapter')
+    def test_create_hierarchical_retriever_with_reranker(self, mock_reranker_class, mock_search_class, mock_cat_class, mock_query_class):
         """Test creating production setup with reranker."""
         mock_search_engine = Mock()
         mock_reranker = Mock()
@@ -823,7 +823,7 @@ class TestFactoryFunctions(unittest.TestCase):
         mock_search_class.return_value = mock_search_adapter
         mock_reranker_class.return_value = mock_reranker_adapter
 
-        result = create_production_setup(mock_search_engine, "hr", mock_reranker, True)
+        result = create_hierarchical_retriever(mock_search_engine, "hr", mock_reranker, True)
 
         self.assertEqual(len(result), 6)
         query_processor, categorizer, search_engine, reranker, logger, config = result
@@ -838,14 +838,14 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertEqual(search_engine, mock_search_adapter)
         self.assertEqual(reranker, mock_reranker_adapter)
 
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionQueryProcessor')
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionCategorizer')
-    @patch('src.retrieval.hierarchical_retriever_providers.ProductionSearchEngineAdapter')
-    def test_create_production_setup_without_reranker(self, mock_search_class, mock_cat_class, mock_query_class):
+    @patch('src.retrieval.hierarchical_retriever_providers.QueryProcessor')
+    @patch('src.retrieval.hierarchical_retriever_providers.Categorizer')
+    @patch('src.retrieval.hierarchical_retriever_providers.SearchEngineAdapter')
+    def test_create_hierarchical_retriever_without_reranker(self, mock_search_class, mock_cat_class, mock_query_class):
         """Test creating production setup without reranker."""
         mock_search_engine = Mock()
 
-        result = create_production_setup(mock_search_engine, "en", None, False)
+        result = create_hierarchical_retriever(mock_search_engine, "en", None, False)
 
         query_processor, categorizer, search_engine, reranker, logger, config = result
 
