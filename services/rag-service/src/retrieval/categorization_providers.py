@@ -19,7 +19,10 @@ class ProductionConfigProvider:
 
     def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
-        return self._config_loader.get_language_specific_config("categorization", language)
+        # Use the main config provider to get properly merged categorization config
+        from ..utils.config_protocol import get_config_provider
+        main_provider = get_config_provider()
+        return main_provider.get_categorization_config(language)
 
 
 class MockConfigProvider:

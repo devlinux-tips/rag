@@ -17,6 +17,10 @@ chars_pattern = "[^\\w\\sčćžšđČĆŽŠĐ.,!?:;()-]"
 response_language = "croatian"
 preserve_diacritics = true
 
+# System response messages
+no_results_message = "Žao mi je, ne mogu pronaći odgovor na vaše pitanje u dostupnim dokumentima."
+error_message = "Žao mi je, dogodila se greška pri obradi pitanja"
+
 # Croatian question patterns (shared across retrieval and prompts)
 [shared.question_patterns]
 factual = ["tko", "što", "kada", "gdje", "koji", "koja", "koje", "koliko", "koliki"]
@@ -43,14 +47,76 @@ words = [
     "uz", "ve", "za", "ze"
 ]
 
+# Croatian synonym groups for query expansion (English keys with Croatian values)
+[shared.synonym_groups]
+# Technology and computing terms
+ai = ["umjetna inteligencija", "ai", "strojno učenje", "machine learning"]
+computer = ["kompjuter", "computer", "pc", "računalo"]
+software = ["software", "program", "aplikacija", "softver"]
+internet = ["web", "mreža", "online", "internet"]
+
+# Common Croatian synonyms
+fast = ["brzić", "brzo", "hitno", "brz"]
+big = ["veliki", "ogroman", "masivan", "velik"]
+good = ["odličan", "izvrsno", "super", "sjajan", "dobar"]
+important = ["značajan", "bitan", "ključan", "važan"]
+
 # Note: Diacritics detected automatically using Unicode properties
 # No language-specific character lists needed
+
+# Shared categorization data (used by multiple components)
+[shared.categorization]
+categories = ["cultural", "tourism", "technical", "legal", "business", "educational", "news", "faq", "general"]
+complexity_thresholds = {moderate = 0.3, complex = 0.6, analytical = 0.8}
+
+# Croatian cultural keywords organized by category
+[shared.categorization.cultural_keywords]
+cultural = ["kultura", "tradicija", "baština", "storia", "kulturni", "tradicionalni"]
+national = ["hrvati", "hrvatska", "croatian", "hrvatski", "domovina"]
+historical = ["historia", "povijest", "historijski", "povijesni"]
+heritage = ["baština", "naslijeđe", "spomenik", "muzej"]
+
+# Shared patterns (used by chunker and categorizer)
+[shared.patterns]
+cultural = [
+    "\\b(kultura|tradicija|baština|povijest|običaji)\\b",
+    "\\b(festival|umjetnost|muzika|književnost|identitet)\\b",
+    "\\b(spomenik|muzej|kulturni|nacionalni)\\b"
+]
+tourism = [
+    "\\b(turizam|putovanje|odmor|hotel|plaža)\\b",
+    "\\b(destinacija|rezervacija|booking|smještaj)\\b"
+]
+technical = [
+    "\\b(tehnologija|softver|sustav|algoritam)\\b",
+    "\\b(kod|programiranje|razvoj|api)\\b"
+]
+legal = [
+    "\\b(zakon|propis|sud|pravni|ugovor)\\b",
+    "\\b(advokat|tužba|presuda|krivični)\\b"
+]
+business = [
+    "\\b(poslovanje|tvrtka|ekonomija|profit)\\b",
+    "\\b(trgovina|tržište|korporacija|financije)\\b"
+]
+educational = [
+    "\\b(učenje|obrazovanje|škola|sveučilište)\\b",
+    "\\b(studij|ispit|diplomski|akademski)\\b"
+]
+news = [
+    "\\b(vijesti|događaji|trenutno|izvještaj)\\b",
+    "\\b(mediji|novinar|priopćenje|aktualnost)\\b"
+]
+faq = [
+    "\\b(često|pitanje|odgovor|uputa)\\b",
+    "\\b(kako|zašto|što|kada|gdje)\\b"
+]
 
 # ============================================================================
 # CATEGORIZATION CONFIGURATION
 # ============================================================================
 [categorization]
-# Category indicators for Croatian content
+# Category indicators for Croatian content (language-specific)
 cultural_indicators = ["kultura", "tradicija", "baština", "povijest", "običaji", "hrvatska", "hrvati"]
 tourism_indicators = ["turizam", "putovanje", "odmor", "hotel", "plaža", "destinacija"]
 technical_indicators = ["tehnologija", "softver", "sustav", "algoritam", "kod", "programiranje"]
@@ -60,48 +126,18 @@ educational_indicators = ["učenje", "obrazovanje", "škola", "sveučilište", "
 news_indicators = ["vijesti", "događaji", "trenutno", "izvještaj", "mediji"]
 faq_indicators = ["često", "pitanje", "odgovor", "kako", "zašto", "što"]
 
-# Pattern matching for Croatian queries
-[patterns]
-cultural = [
-    "\\b(kultura|tradicija|baština|povijest|običaji)\\b",
-    "\\b(festival|umjetnost|muzika|književnost|identitet)\\b",
-    "\\b(spomenik|muzej|kulturni|nacionalni)\\b"
-]
-tourism = [
-    "\\b(turizam|putovanje|odmor|hotel|smještaj)\\b",
-    "\\b(destinacija|atrakcija|plaža|restoran|karta)\\b",
-    "\\b(vodič|rezervacija|cijena|sezona|turist)\\b"
-]
-technical = [
-    "\\b(tehnologija|softver|programiranje|kod|algoritam)\\b",
-    "\\b(sustav|baza|API|okvir|razvoj)\\b",
-    "\\b(testiranje|implementacija|verzija|ažuriranje)\\b"
-]
-legal = [
-    "\\b(zakon|propis|sud|pravni|odvjetnik)\\b",
-    "\\b(ugovor|licenca|prekršaj|kazna|postupak)\\b",
-    "\\b(vlasništvo|autorsko|patent|intelektualno)\\b"
-]
-business = [
-    "\\b(poslovanje|tvrtka|ekonomija|profit|trgovina)\\b",
-    "\\b(tržište|prodaja|marketing|investicija|prihod)\\b",
-    "\\b(proračun|financije|porez|izvoz|uvoz)\\b"
-]
-faq = [
-    "\\b(često|pitanje|odgovor|kako|zašto|što)\\b",
-    "\\b(objašnjenje|uputa|pomoć|savjet|vodič)\\b",
-    "^(što|kako|zašto|gdje|kada|tko)\\s+"
-]
-educational = [
-    "\\b(učenje|obrazovanje|tečaj|škola|sveučilište)\\b",
-    "\\b(studij|ispit|diploma|certifikat|akademski)\\b",
-    "\\b(vodič|lekcija|vježba|zadatak)\\b"
-]
-news = [
-    "\\b(vijesti|događaji|aktualno|najnovije|izvještaj)\\b",
-    "\\b(članak|priča|intervju|objava)\\b",
-    "\\b(danas|jučer|nedavno|najnovije|sada)\\b"
-]
+# Retrieval strategies for different categories
+[categorization.retrieval_strategies]
+cultural = "cultural_aware"
+tourism = "hybrid"
+technical = "technical_precise"
+legal = "semantic_focused"
+business = "hybrid"
+educational = "semantic_focused"
+news = "hybrid"
+faq = "faq_optimized"
+general = "semantic_focused"
+default = "default"
 
 # Suggestions for Croatian users
 [suggestions]
@@ -177,7 +213,7 @@ word_char_pattern = "[a-zA-ZčćšžđĆČŠŽĐ]"
 
 # Locale settings for Croatian
 [text_processing.locale]
-primary = "hr_HR.UTF-8"
+primary = "C.UTF-8"  # Use available locale instead of hr_HR.UTF-8
 fallback = "C.UTF-8"
 
 # Text file encoding support for Croatian documents
@@ -220,6 +256,7 @@ header_footer_patterns = [
 fix_spaced_capitals = true       # Generic: Fix any spaced capital letters
 fix_spaced_punctuation = true    # Generic: Fix spaced punctuation marks
 fix_common_ocr_errors = true     # Generic: Fix rn->m, vv->w, etc.
+fix_spaced_diacritics = true     # Generic: Fix spaced diacritics like č ć š ž đ
 
 # ============================================================================
 # EMBEDDINGS & VECTOR DATABASE
@@ -261,6 +298,11 @@ boost_title_matches = true
 # Croatian synonyms for query expansion
 # Synonym expansion handled by BGE-M3 semantic similarity, not config hardcoding
 # Morphological analysis handled by CLASSLA library, not config hardcoding
+
+# Minimal morphology config for ranker compatibility
+[retrieval.morphology]
+enabled = false  # Handled by CLASSLA library
+patterns = []    # Empty as handled externally
 
 # ============================================================================
 # GENERATION & PROMPTS
@@ -318,6 +360,13 @@ comparison_context = "Podaci za usporedbu:\n{context}\n\n"
 
 # Note: Cultural context handled automatically by language-specific prompts
 
+# Category templates for enhanced prompt builder
+[prompts.general]
+system = """Ti si precizan i stručan asistent koji odgovara na hrvatskom jeziku koristeći isključivo dane podatke.
+Tvoja uloga je dati točne, relevatne i potpune odgovore na temelju konteksta.
+Ako informacije nisu dostupne u kontekstu, jasno reci da ne znaš."""
+user = "Pitanje: {query}\n\nKontekst:\n{context}\n\nDaj mi detaljan odgovor:"
+
 tourism_system = """Ti si turistički vodič za Hrvatsku koji odgovara na hrvatskom jeziku.
 Koristi kontekst da daš praktičan i informativan odgovor o hrvatskim odredištima.
 Fokusiraj se na korisne informacije za posjetitelje i ističi posebne značajke."""
@@ -360,26 +409,25 @@ confidence_threshold = 0.5
 no_answer_patterns = ["ne znam", "ne mogu", "nema podataka", "nisam siguran"]
 source_patterns = ["izvor:", "prema:", "dokumentu:", "prema dokumentu"]
 
+# Text cleaning configuration
+cleaning_prefixes = ["^(odgovor|answer):", "^(rezultat|result):", "^(tekst|text):"]
+
+# Language patterns for language detection (dict format)
+language_patterns = { hr = ["je", "su", "ima", "biti", "kao", "da", "se", "i", "u", "na", "sa", "za", "od", "do", "po"], en = ["is", "are", "the", "and", "of", "to", "in", "that", "have", "for"] }
+
 # Confidence indicators
 [response_parsing.confidence_indicators]
 high = ["jasno", "sigurno", "definitivno", "nedvojbeno"]
 medium = ["vjerojatno", "moguće", "čini se", "izgleda"]
 low = ["možda", "nije jasno", "teško reći", "ne mogu biti siguran"]
 
-# Display configuration
-[response_parsing.display]
+# Display settings (moved from nested section)
+[response_parsing.display_settings]
 no_answer_message = "Žao mi je, ne mogu pronaći odgovor na vaše pitanje u dostupnim dokumentima."
 high_confidence_label = "Visoka pouzdanost"
 medium_confidence_label = "Srednja pouzdanost"
 low_confidence_label = "Niska pouzdanost"
 sources_prefix = "Izvori"
-
-# Text cleaning configuration
-[response_parsing.cleaning]
-prefixes_to_remove = ["^(odgovor|answer):", "^(rezultat|result):", "^(tekst|text):"]
-
-# Language detection patterns
-# Language detection handled by langdetect library, not word lists
 
 # ============================================================================
 # PIPELINE CONFIGURATION

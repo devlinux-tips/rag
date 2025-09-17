@@ -603,16 +603,23 @@ class HierarchicalRetriever:
         filtered_results = filter_results_by_threshold(processed_results, similarity_threshold)[:max_results]
 
         # Step 6: Convert to dict format for compatibility
-        result_dicts = [
-            {
-                "content": result.content,
-                "metadata": {**result.metadata, "detected_category": categorization.category.value},
-                "similarity_score": result.similarity_score,
-                "final_score": result.final_score,
-                **result.boosts,  # Add boost scores
-            }
-            for result in filtered_results
-        ]
+        self._log_debug(f"🔧 Converting {len(filtered_results)} results to dict format...")
+        result_dicts = []
+        for i, result in enumerate(filtered_results):
+            self._log_debug(f"🔧 Result {i}: boosts type={type(result.boosts)}, value={result.boosts}")
+            try:
+                result_dict = {
+                    "content": result.content,
+                    "metadata": {**result.metadata, "detected_category": categorization.category.value},
+                    "similarity_score": result.similarity_score,
+                    "final_score": result.final_score,
+                    **result.boosts,  # Add boost scores
+                }
+                result_dicts.append(result_dict)
+            except Exception as e:
+                self._log_error(f"🚨 Error unpacking result {i} boosts: {e}")
+                self._log_error(f"🚨 Result boosts: type={type(result.boosts)}, value={result.boosts}")
+                raise
 
         # Step 7: Apply reranking if available
         if self._reranker and len(result_dicts) > 1:

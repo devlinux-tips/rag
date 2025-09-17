@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 # ================================
-# PRODUCTION PROVIDERS
+# STANDARD PROVIDERS
 # ================================
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real TOML files."""
+class ConfigProvider:
+    """Configuration provider using TOML files."""
 
     def get_extraction_config(self) -> dict[str, Any]:
         """Get extraction configuration from TOML files."""
@@ -22,8 +22,8 @@ class ProductionConfigProvider:
         return get_extraction_config()
 
 
-class ProductionFileSystemProvider:
-    """Production file system provider using real file operations."""
+class FileSystemProvider:
+    """File system provider using real file operations."""
 
     def file_exists(self, file_path: Path) -> bool:
         """Check if file exists."""
@@ -42,8 +42,8 @@ class ProductionFileSystemProvider:
         return file_path.read_text(encoding=encoding)
 
 
-class ProductionLoggerProvider:
-    """Production logger provider using actual Python logging."""
+class LoggerProvider:
+    """Logger provider using Python logging."""
 
     def __init__(self, logger_name: str | None = None):
         """Initialize with logger name."""
@@ -153,27 +153,27 @@ class MockLoggerProvider:
 
 
 def create_config_provider(mock_config: dict[str, Any] | None = None):
-    """Create configuration provider (production or mock)."""
+    """Create configuration provider (real or mock)."""
     if mock_config is not None:
         return MockConfigProvider(mock_config)
-    return ProductionConfigProvider()
+    return ConfigProvider()
 
 
 def create_file_system_provider(mock_files: dict[str, bytes] | None = None):
-    """Create file system provider (production or mock)."""
+    """Create file system provider (real or mock)."""
     if mock_files is not None:
         provider = MockFileSystemProvider()
         for file_path, content in mock_files.items():
             provider.add_file(file_path, content)
         return provider
-    return ProductionFileSystemProvider()
+    return FileSystemProvider()
 
 
 def create_logger_provider(logger_name: str | None = None, mock: bool = False):
-    """Create logger provider (production or mock)."""
+    """Create logger provider (real or mock)."""
     if mock:
         return MockLoggerProvider()
-    return ProductionLoggerProvider(logger_name)
+    return LoggerProvider(logger_name)
 
 
 # ================================
@@ -210,18 +210,18 @@ def create_test_providers(
     return config_provider, file_system_provider, logger_provider
 
 
-def create_production_providers(logger_name: str | None = None):
+def create_providers(logger_name: str | None = None):
     """
-    Create full set of production providers.
+    Create full set of providers.
 
     Args:
-        logger_name: Logger name for production logging
+        logger_name: Logger name for logging
 
     Returns:
         Tuple of (config_provider, file_system_provider, logger_provider)
     """
-    config_provider = ProductionConfigProvider()
-    file_system_provider = ProductionFileSystemProvider()
-    logger_provider = ProductionLoggerProvider(logger_name)
+    config_provider = ConfigProvider()
+    file_system_provider = FileSystemProvider()
+    logger_provider = LoggerProvider(logger_name)
 
     return config_provider, file_system_provider, logger_provider

@@ -1,6 +1,6 @@
 """
 Provider implementations for multilingual text cleaning dependency injection.
-Production and mock providers for configurable text cleaning operations.
+Standard and mock providers for configurable text cleaning operations.
 """
 
 import locale
@@ -9,12 +9,12 @@ import os
 from typing import Any, cast
 
 # ================================
-# PRODUCTION PROVIDERS
+# STANDARD PROVIDERS
 # ================================
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real TOML files."""
+class ConfigProvider:
+    """Standard provider using real TOML files."""
 
     def get_language_config(self, language: str) -> dict[str, Any]:
         """Get language-specific text processing configuration."""
@@ -56,8 +56,8 @@ class ProductionConfigProvider:
         return get_language_shared(language)
 
 
-class ProductionLoggerProvider:
-    """Production logger provider using actual Python logging."""
+class LoggerProvider:
+    """Standard provider using actual Python logging."""
 
     def __init__(self, logger_name: str | None = None):
         """Initialize with logger name."""
@@ -76,8 +76,8 @@ class ProductionLoggerProvider:
         self.logger.error(message)
 
 
-class ProductionEnvironmentProvider:
-    """Production environment provider using real system operations."""
+class EnvironmentProvider:
+    """Standard provider using real system operations."""
 
     def set_environment_variable(self, key: str, value: str) -> None:
         """Set environment variable."""
@@ -223,7 +223,7 @@ class MockEnvironmentProvider:
 
 
 def create_config_provider(mock_data: dict[str, Any] | None = None):
-    """Create configuration provider (production or mock)."""
+    """Create configuration provider (real or mock)."""
     if mock_data is not None:
         provider = MockConfigProvider()
 
@@ -249,21 +249,21 @@ def create_config_provider(mock_data: dict[str, Any] | None = None):
 
         return provider
 
-    return ProductionConfigProvider()
+    return ConfigProvider()
 
 
 def create_logger_provider(logger_name: str | None = None, mock: bool = False):
-    """Create logger provider (production or mock)."""
+    """Create logger provider (real or mock)."""
     if mock:
         return MockLoggerProvider()
-    return ProductionLoggerProvider(logger_name)
+    return LoggerProvider(logger_name)
 
 
 def create_environment_provider(mock: bool = False):
-    """Create environment provider (production or mock)."""
+    """Create environment provider (real or mock)."""
     if mock:
         return MockEnvironmentProvider()
-    return ProductionEnvironmentProvider()
+    return EnvironmentProvider()
 
 
 # ================================
@@ -341,19 +341,19 @@ def create_test_providers(
     return config_provider, logger_provider, environment_provider
 
 
-def create_production_providers(logger_name: str | None = None):
+def create_providers(logger_name: str | None = None):
     """
-    Create full set of production providers.
+    Create full set of providers.
 
     Args:
-        logger_name: Logger name for production logging
+        logger_name: Logger name for logging
 
     Returns:
         Tuple of (config_provider, logger_provider, environment_provider)
     """
-    config_provider = ProductionConfigProvider()
-    logger_provider = ProductionLoggerProvider(logger_name)
-    environment_provider = ProductionEnvironmentProvider()
+    config_provider = ConfigProvider()
+    logger_provider = LoggerProvider(logger_name)
+    environment_provider = EnvironmentProvider()
 
     return config_provider, logger_provider, environment_provider
 

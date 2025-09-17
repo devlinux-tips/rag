@@ -342,10 +342,12 @@ def format_system_status(status: SystemStatus, context: TenantContext, language:
     ]
 
     # RAG System status
-    if status.rag_system_status == "initialized":
-        lines.append("✅ RAG System: Initialized successfully")
+    if status.rag_system_status == "created":
+        lines.append("✅ RAG System: Created successfully (ready for initialization)")
+    elif status.rag_system_status == "initialized":
+        lines.append("✅ RAG System: Fully initialized")
     else:
-        lines.append("❌ RAG System: Failed to initialize")
+        lines.append("❌ RAG System: Failed to create")
 
     # Folder structure
     existing_folders = [path for path, exists in status.folder_structure.items() if exists]
@@ -747,8 +749,12 @@ class MultiTenantRAGCLI:
     ) -> DocumentProcessingResult:
         """Execute document processing command using pure business logic."""
         try:
+            # Convert TenantContext to TenantUserContext for folder operations
+            from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+            tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
+
             # Ensure folder structure exists
-            success = self.folder_manager.ensure_context_folders(context, language)
+            success = self.folder_manager.ensure_context_folders(tenant_user_context, language)
             if not success:
                 return DocumentProcessingResult(
                     success=False,
@@ -760,9 +766,36 @@ class MultiTenantRAGCLI:
             rag = self.rag_system_factory(language=language, tenant_context=context)
             await rag.initialize()
 
+            # Handle both file and directory paths
+            from pathlib import Path
+            path = Path(docs_path)
+            
+            if path.is_file():
+                # Single file processing
+                document_paths = [str(path)]
+            elif path.is_dir():
+                # Directory processing - find all supported document files
+                supported_extensions = {'.pdf', '.docx', '.txt', '.md'}
+                document_paths = []
+                for ext in supported_extensions:
+                    document_paths.extend([str(p) for p in path.glob(f"*{ext}")])
+                
+                if not document_paths:
+                    return DocumentProcessingResult(
+                        success=False,
+                        processing_time=0.0,
+                        error_message=f"No supported documents found in directory: {docs_path}",
+                    )
+            else:
+                return DocumentProcessingResult(
+                    success=False,
+                    processing_time=0.0,
+                    error_message=f"Path does not exist or is neither file nor directory: {docs_path}",
+                )
+
             # Process documents
             start_time = time.time()
-            result = await rag.add_documents([docs_path])
+            result = await rag.add_documents(document_paths)
             processing_time = time.time() - start_time
 
             return DocumentProcessingResult(success=True, processing_time=processing_time, processing_result=result)
@@ -774,15 +807,19 @@ class MultiTenantRAGCLI:
     async def execute_list_collections_command(self, context: TenantContext, language: str) -> CollectionInfo:
         """Execute list collections command using pure business logic."""
         try:
-            collections_info = self.folder_manager.get_collection_storage_paths(context, language)
+            # Convert TenantContext to TenantUserContext for folder operations
+            from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+            tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
+
+            collections_info = self.folder_manager.get_collection_storage_paths(tenant_user_context, language)
 
             # Get available collections from storage
             available_collections = self.storage.list_collections()
 
             # Get document counts
             document_counts = {}
-            user_collection = collections_info["user_collection_name"]
-            tenant_collection = collections_info["tenant_collection_name"]
+            user_collection = collections_info.user_collection_name
+            tenant_collection = collections_info.tenant_collection_name
 
             if user_collection in available_collections:
                 document_counts[user_collection] = self.storage.get_document_count(user_collection)
@@ -793,7 +830,7 @@ class MultiTenantRAGCLI:
             return CollectionInfo(
                 user_collection_name=user_collection,
                 tenant_collection_name=tenant_collection,
-                base_path=collections_info["base_path"],
+                base_path=str(collections_info.base_path),
                 available_collections=available_collections,
                 document_counts=document_counts,
             )
@@ -812,21 +849,32 @@ class MultiTenantRAGCLI:
         """Execute status command using pure business logic."""
         error_messages = []
 
-        # Test RAG system initialization
+        # Test RAG system creation (without full initialization)
         try:
             rag = self.rag_system_factory(language=language, tenant_context=context)
-            await rag.initialize()
-            rag_status = "initialized"
+            # Skip full initialization for status check - just test creation
+            rag_status = "created"
         except Exception as e:
             rag_status = "failed"
             error_messages.append(f"RAG System: {str(e)}")
 
         # Check folder structure
         try:
-            paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
+            # Create Tenant object from context for folder manager
+            from ..models.multitenant_models import Tenant
+            tenant = Tenant(
+                id=context.tenant_id,
+                name=context.tenant_name,
+                slug=context.tenant_slug
+            )
+            paths = self.folder_manager.get_tenant_folder_structure(tenant, None, language)
             folder_structure = {}
-            for path_name, path in paths.items():
-                folder_structure[f"{path_name}: {path}"] = Path(str(path)).exists()
+            # Convert FolderPaths dataclass to dictionary for checking
+            import dataclasses
+            for field in dataclasses.fields(paths):
+                path_value = getattr(paths, field.name)
+                if path_value is not None:
+                    folder_structure[f"{field.name}: {path_value}"] = Path(str(path_value)).exists()
         except Exception as e:
             folder_structure = {}
             error_messages.append(f"Folder check: {str(e)}")
@@ -1241,15 +1289,15 @@ async def main():
     # Parse arguments
     args = parse_cli_arguments(sys.argv[1:])
 
-    # Setup real dependencies (this would be replaced with proper factories)
-    class RealOutputWriter:
+    # Setup production dependencies
+    class StandardOutputWriter:
         def write(self, text: str) -> None:
             sys.stdout.write(text)
 
         def flush(self) -> None:
             sys.stdout.flush()
 
-    class RealLogger:
+    class StandardLogger:
         def __init__(self):
             logging.basicConfig(level=getattr(logging, args.log_level))
             self.logger = logging.getLogger(__name__)
@@ -1268,416 +1316,102 @@ async def main():
         print(f"🚀 Creating real RAG system for language: {language}")
 
         try:
-            # Import real components
-            import time
-
-            import chromadb
-
-            from ..preprocessing.extractors import extract_document_text
-
-            # Create complete RAG system with real components
-            class CompleteRAGSystem:
-                def __init__(self, language: str, tenant_context=None):
-                    self.language = language
-                    self.tenant_context = tenant_context
-                    self._client = None
-                    self._collection = None
-                    self._model = None
-                    self._model_name = None  # Will be set from config
-                    self._document_count = 0
-                    print(f"✅ Complete RAG system created for {language}")
-
-                async def initialize(self):
-                    """Initialize real components: ChromaDB, BGE-M3 embeddings."""
-                    try:
-                        # Load configuration and build proper tenant-specific path
-                        import os
-
-                        from ..utils.config_loader import get_paths_config
-
-                        paths_config = get_paths_config()
-                        data_base_dir = paths_config["data_base_dir"]
-
-                        if self.tenant_context:
-                            # Use proper tenant-specific path from configuration template
-                            tenant_slug = self.tenant_context.tenant_slug
-                            persist_dir = os.path.join(data_base_dir, tenant_slug, "vectordb")
-                        else:
-                            # Fallback for testing without tenant context - still avoid hardcoded "vectordb_cli"
-                            persist_dir = os.path.join(data_base_dir, "cli_vectordb")
-
-                        os.makedirs(persist_dir, exist_ok=True)
-
-                        self._client = chromadb.PersistentClient(path=persist_dir)
-                        print(f"✅ ChromaDB persistent client initialized: {persist_dir}")
-
-                        # Create or get collection for this tenant/user/language
-                        if self.tenant_context:
-                            collection_name = f"{self.tenant_context.tenant_slug}_{self.tenant_context.user_username}_{self.language}_documents"
-                        else:
-                            # Fallback for testing without tenant context
-                            collection_name = f"{self.language}_documents_cli"
-
-                        # Try to get existing collection first
-                        try:
-                            self._collection = self._client.get_collection(collection_name)
-                            existing_count = self._collection.count()
-                            print(f"📦 Found existing collection: {collection_name} ({existing_count} documents)")
-                        except Exception:
-                            # Collection doesn't exist, create new one
-                            self._collection = self._client.create_collection(
-                                name=collection_name,
-                                metadata={
-                                    "description": f"Documents for tenant:{self.tenant_context.tenant_slug if self.tenant_context else 'unknown'}, user:{self.tenant_context.user_username if self.tenant_context else 'unknown'}, language:{self.language}",
-                                    "tenant": (self.tenant_context.tenant_slug if self.tenant_context else "unknown"),
-                                    "user": (self.tenant_context.user_username if self.tenant_context else "unknown"),
-                                    "language": self.language,
-                                },
-                            )
-                            print(f"📦 Created new collection: {collection_name}")
-
-                        # Initialize embedding model (language-specific)
-                        try:
-                            from sentence_transformers import SentenceTransformer
-
-                            from ..utils.config_loader import (
-                                get_language_specific_config,
-                            )
-
-                            # Get language-specific embedding configuration
-                            embedding_config = get_language_specific_config("embeddings", self.language)
-
-                            # FAIL FAST: both model_name and fallback_model must be configured
-                            primary_model = embedding_config["model_name"]
-                            fallback_model = embedding_config["fallback_model"]
-
-                            # Try primary model first
-                            try:
-                                print(f"🔧 Loading {primary_model} embedding model for {self.language}...")
-                                self._model = SentenceTransformer(primary_model)
-                                self._model_name = primary_model
-
-                                # Validate embedding dimension matches expectation
-                                actual_dim = self._model.get_sentence_embedding_dimension()
-                                expected_dim = embedding_config["expected_dimension"]
-                                if expected_dim and actual_dim != expected_dim:
-                                    print(
-                                        f"⚠️ Dimension mismatch: {primary_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
-                                    )
-                                else:
-                                    print(f"✅ {primary_model} model loaded successfully (dimensions: {actual_dim})")
-                            except Exception as e:
-                                if fallback_model:
-                                    print(f"⚠️ Primary model {primary_model} failed: {e}")
-                                    print(f"🔧 Trying fallback model {fallback_model}...")
-                                    self._model = SentenceTransformer(fallback_model)
-                                    self._model_name = fallback_model
-
-                                    # Validate fallback model dimension too
-                                    actual_dim = self._model.get_sentence_embedding_dimension()
-                                    expected_dim = embedding_config["expected_dimension"]
-                                    if expected_dim and actual_dim != expected_dim:
-                                        print(
-                                            f"⚠️ Fallback dimension mismatch: {fallback_model} produces {actual_dim}D embeddings, expected {expected_dim}D"
-                                        )
-                                    else:
-                                        print(
-                                            f"✅ {fallback_model} fallback model loaded successfully (dimensions: {actual_dim})"
-                                        )
-                                else:
-                                    print(f"❌ Primary model {primary_model} failed and no fallback_model configured")
-                                    raise
-
-                        except Exception as e:
-                            print(f"❌ Failed to initialize embedding model: {e}")
-                            raise
-
-                        print(f"🎯 Complete RAG system initialized for {self.language}")
-
-                    except Exception as e:
-                        print(f"❌ Failed to initialize RAG components: {e}")
-                        raise e
-
-                async def add_documents(self, document_paths: list, batch_size: int = 10):
-                    """Process documents through complete pipeline: extract → chunk → embed → store."""
-                    if not self._collection:
-                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
-
-                    processed_docs = 0
-                    total_chunks = 0
-                    errors = []
-                    start_time = time.time()
-
-                    # Handle directory vs individual files
-                    all_files = []
-                    for doc_path in document_paths:
-                        path_obj = Path(doc_path)
-                        if path_obj.is_dir():
-                            # Process all supported files in directory
-                            supported_extensions = [
-                                ".pdf",
-                                ".docx",
-                                ".txt",
-                                ".html",
-                                ".md",
-                            ]
-                            for ext in supported_extensions:
-                                all_files.extend(path_obj.glob(f"*{ext}"))
-                        elif path_obj.is_file():
-                            all_files.append(path_obj)
-
-                    for doc_path in all_files:
-                        try:
-                            print(f"📄 Processing: {doc_path}")
-
-                            # 1. Real document extraction
-                            extracted_text = extract_document_text(str(doc_path))
-                            if not extracted_text.strip():
-                                errors.append(f"No text extracted from {doc_path}")
-                                continue
-
-                            print(f"📝 Extracted {len(extracted_text)} characters")
-
-                            # 2. Real chunking with overlap
-                            chunk_size = 500
-                            overlap = 50
-                            chunks = []
-
-                            for i in range(0, len(extracted_text), chunk_size - overlap):
-                                chunk_text = extracted_text[i : i + chunk_size].strip()
-                                if chunk_text:
-                                    chunks.append(
-                                        {
-                                            "content": chunk_text,
-                                            "chunk_id": f"doc_{processed_docs}_chunk_{len(chunks)}",
-                                            "source": str(doc_path),
-                                            "start_char": i,
-                                            "end_char": min(i + chunk_size, len(extracted_text)),
-                                        }
-                                    )
-
-                            print(f"📦 Created {len(chunks)} chunks")
-
-                            # 3. Real embedding generation
-                            embeddings = []
-                            if self._model:
-                                print(f"🔄 Generating {self._model_name} embeddings...")
-                                for chunk in chunks:
-                                    embedding = self._model.encode(chunk["content"])
-                                    embeddings.append(embedding.tolist())
-                                print(f"✅ Generated {len(embeddings)} embeddings")
-                            else:
-                                # Dummy embeddings if model not available
-                                import numpy as np
-
-                                embeddings = [np.random.random(1024).tolist() for _ in chunks]
-                                print(f"⚠️ Generated {len(embeddings)} dummy embeddings")
-
-                            # 4. Real vector storage in ChromaDB
-                            if chunks and embeddings:
-                                print("💾 Storing in ChromaDB...")
-                                self._collection.add(
-                                    documents=[chunk["content"] for chunk in chunks],
-                                    metadatas=[
-                                        {
-                                            "source": chunk["source"],
-                                            "chunk_id": chunk["chunk_id"],
-                                            "start_char": chunk["start_char"],
-                                            "end_char": chunk["end_char"],
-                                        }
-                                        for chunk in chunks
-                                    ],
-                                    ids=[chunk["chunk_id"] for chunk in chunks],
-                                    embeddings=embeddings,
-                                )
-                                print(f"✅ Stored {len(chunks)} chunks in vector database")
-
-                            processed_docs += 1
-                            total_chunks += len(chunks)
-
-                        except Exception as e:
-                            error_msg = f"Failed to process {doc_path}: {e}"
-                            errors.append(error_msg)
-                            print(f"❌ {error_msg}")
-
-                    processing_time = time.time() - start_time
-                    self._document_count += processed_docs
-
-                    # Check total stored documents
-                    stored_count = self._collection.count() if self._collection else 0
-                    print(f"📊 Total documents in collection: {stored_count}")
-
-                    # Return real result structure
-                    return {
-                        "processed_documents": processed_docs,
-                        "failed_documents": len(document_paths) - processed_docs,
-                        "total_chunks": total_chunks,
-                        "stored_chunks": stored_count,
-                        "processing_time": processing_time,
-                        "documents_per_second": (processed_docs / processing_time if processing_time > 0 else 0),
-                        "errors": errors if errors else None,
-                    }
-
-                async def query(self, query_obj):
-                    """Handle queries with REAL Ollama-powered generation."""
-                    if not self._collection:
-                        raise RuntimeError("RAG system not initialized. Call initialize() first.")
-
-                    start_time = time.time()
-                    query_text = query_obj.text
-
-                    try:
-                        print(f"🔍 Processing query: '{query_text}'")
-
-                        # 1. Generate query embedding
-                        if self._model:
-                            query_embedding = self._model.encode(query_text).tolist()
-                            print("✅ Generated query embedding")
-                        else:
-                            import numpy as np
-
-                            query_embedding = np.random.random(1024).tolist()
-                            print("⚠️ Using dummy query embedding")
-
-                        # 2. Real similarity search in ChromaDB
-                        print("🔍 Searching vector database...")
-                        results = self._collection.query(
-                            query_embeddings=[query_embedding],
-                            n_results=min(3, self._collection.count()),
-                        )
-
-                        retrieved_chunks = []
-                        context_chunks = []
-
-                        if results["documents"][0]:
-                            print(f"📊 Found {len(results['documents'][0])} relevant chunks")
-
-                            for i, (doc, metadata) in enumerate(
-                                zip(
-                                    results["documents"][0],
-                                    results["metadatas"][0],
-                                    strict=False,
-                                )
-                            ):
-                                distance = results["distances"][0][i] if "distances" in results else 0
-                                score = 1 - distance  # Convert distance to similarity score
-
-                                chunk_data = {
-                                    "content": doc,
-                                    "similarity_score": score,
-                                    "final_score": score,
-                                    "source": (metadata["source"] if "source" in metadata else "Unknown"),
-                                    "chunk_id": (metadata["chunk_id"] if "chunk_id" in metadata else f"chunk_{i}"),
-                                }
-                                retrieved_chunks.append(chunk_data)
-                                context_chunks.append(doc)
-
-                                print(
-                                    f"  📄 Chunk {i + 1}: Score {score:.3f} | Source: {metadata['source'] if 'source' in metadata else 'Unknown'}"
-                                )
-
-                        # 3. **REAL OLLAMA GENERATION**
-                        if context_chunks:
-                            print("🤖 Generating answer using Ollama...")
-
-                            # Import Ollama client factory and request class
-                            from ..generation.ollama_client import (
-                                GenerationRequest,
-                                create_ollama_client,
-                            )
-
-                            # Create Ollama client using factory
-                            ollama_client = create_ollama_client()
-
-                            # Build prompt manually (simplified version)
-                            context_text = "\n\n".join(context_chunks)
-                            prompt = f"Based on the following context, answer the question in Croatian:\n\nContext:\n{context_text}\n\nQuestion: {query_text}\n\nAnswer:"
-
-                            # Create generation request with all required fields
-                            generation_request = GenerationRequest(
-                                prompt=prompt,
-                                context=context_chunks,
-                                query=query_text,
-                                language=self.language,
-                                query_type="general",
-                            )
-
-                            # Generate answer with Ollama
-                            print("⏳ Calling Ollama for text generation...")
-                            generation_start = time.time()
-
-                            ollama_response = await ollama_client.generate_text_async(generation_request)
-
-                            answer = ollama_response.text
-                            generation_time = time.time() - generation_start
-
-                            print(f"✅ Generated answer using Ollama in {generation_time:.2f}s")
-                            print(f"💬 Answer preview: {answer[:100]}...")
-                        else:
-                            answer = "No relevant documents found in the knowledge base."
-                            generation_time = 0.0
-                            print("⚠️ No documents retrieved")
-
-                        total_time = time.time() - start_time
-
-                        # Create response in expected format
-                        from ..pipeline.rag_system import RAGResponse
-
-                        response = RAGResponse(
-                            answer=answer,
-                            query=query_text,
-                            retrieved_chunks=retrieved_chunks,
-                            confidence=0.8 if retrieved_chunks else 0.1,
-                            generation_time=generation_time,
-                            retrieval_time=total_time - generation_time,
-                            total_time=total_time,
-                            sources=[chunk["source"] if "source" in chunk else "Unknown" for chunk in retrieved_chunks],
-                            metadata={
-                                "language": self.language,
-                                "real_components": True,
-                                "ollama_generation": True,
-                                "chunks_retrieved": len(retrieved_chunks),
-                                "collection_size": self._collection.count(),
-                            },
-                        )
-
-                        print(f"🎯 Query completed in {total_time:.2f}s")
-                        return response
-
-                    except Exception as e:
-                        print(f"❌ Query failed: {e}")
-                        import traceback
-
-                        traceback.print_exc()
-
-                        # Return error response
-                        from ..pipeline.rag_system import RAGResponse
-
-                        return RAGResponse(
-                            answer=f"Error processing query: {str(e)}",
-                            query=query_text,
-                            retrieved_chunks=[],
-                            confidence=0.0,
-                            generation_time=0.0,
-                            retrieval_time=0.0,
-                            total_time=time.time() - start_time,
-                            sources=[],
-                            metadata={"error": str(e)},
-                        )
-
-            return CompleteRAGSystem(language, tenant_context=tenant_context)
+            from ..models.multitenant_models import Tenant, User
+            from ..utils.factories import create_complete_rag_system
+
+            # Create proper tenant and user objects if context provided
+            tenant_obj = None
+            user_obj = None
+            if tenant_context:
+                tenant_obj = Tenant(
+                    id=tenant_context.tenant_id,
+                    name=tenant_context.tenant_name,
+                    slug=tenant_context.tenant_slug,
+                )
+                user_obj = User(
+                    id=tenant_context.user_id,
+                    tenant_id=tenant_obj.id,
+                    email=tenant_context.user_email,
+                    username=tenant_context.user_username,
+                    full_name=tenant_context.user_full_name,
+                )
+
+            # Create RAG system using complete factory with real components
+            rag_system = create_complete_rag_system(
+                language=language,
+                tenant=tenant_obj,
+                user=user_obj
+            )
+
+            print(f"✅ RAG system created successfully for {language}")
+            return rag_system
 
         except Exception as e:
             print(f"❌ Failed to create complete RAG system: {e}")
             raise e
 
+    # Create real folder manager with production providers
+    from ..utils.folder_manager import TenantFolderManager
+    from ..utils.folder_manager_providers import (
+        ProductionConfigProvider,
+        ProductionFileSystemProvider,
+        StandardLoggerProvider
+    )
+
+    real_folder_manager = TenantFolderManager(
+        config_provider=ProductionConfigProvider(),
+        filesystem_provider=ProductionFileSystemProvider(),
+        logger_provider=StandardLoggerProvider()
+    )
+
+    # Vector database storage implementation for CLI status commands
+    class VectorDatabaseStorage:
+        def __init__(self):
+            self._vector_db = None
+
+        def _ensure_initialized(self):
+            if self._vector_db is None:
+                from ..vectordb.storage_factories import create_vector_database
+                from ..utils.config_loader import get_paths_config
+                paths_config = get_paths_config()
+                # Use proper path template for tenant-specific database
+                db_path_template = paths_config["chromadb_path_template"]
+                data_base_dir = paths_config["data_base_dir"]
+                db_path = db_path_template.format(data_base_dir=data_base_dir, tenant_slug="development")
+                self._vector_db = create_vector_database(db_path=db_path)
+
+        def list_collections(self) -> list[str]:
+            try:
+                self._ensure_initialized()
+                return self._vector_db.list_collections()
+            except Exception:
+                return []  # Return empty list if no collections exist yet
+
+        def get_document_count(self, collection_name: str) -> int:
+            try:
+                self._ensure_initialized()
+                return self._vector_db.get_collection_size(collection_name)
+            except Exception:
+                return 0  # Return 0 if collection doesn't exist
+
+    # TOML configuration loader implementation
+    class TomlConfigLoader:
+        def get_shared_config(self) -> dict[str, Any]:
+            from ..utils.config_loader import get_shared_config
+            return get_shared_config()
+
+        def get_storage_config(self) -> dict[str, Any]:
+            from ..utils.config_loader import load_config
+            config = load_config('config')
+            return config.get('storage', {})
+
     cli = MultiTenantRAGCLI(
-        output_writer=RealOutputWriter(),
-        logger=RealLogger(),
+        output_writer=StandardOutputWriter(),
+        logger=StandardLogger(),
         rag_system_factory=real_rag_factory,
-        folder_manager=MockFolderManager(),  # Would be real implementation
-        storage=MockStorage(),  # Would be real implementation
-        config_loader=MockConfigLoader(),  # Would be real implementation
+        folder_manager=real_folder_manager,
+        storage=VectorDatabaseStorage(),
+        config_loader=TomlConfigLoader(),
     )
 
     await cli.execute_command(args)

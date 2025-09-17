@@ -433,7 +433,9 @@ def clean_text_comprehensive(
 
     # Fix common OCR errors
     old_cleaned = cleaned
-    cleaned = fix_ocr_errors(cleaned, document_cleaning_config.ocr_corrections)
+    from ..utils.ocr_correction import apply_ocr_corrections
+    language_code = language_config.code if hasattr(language_config, 'code') else None
+    cleaned = apply_ocr_corrections(cleaned, document_cleaning_config.ocr_corrections, language_code)
     if cleaned != old_cleaned:
         operations.append("ocr_error_correction")
 

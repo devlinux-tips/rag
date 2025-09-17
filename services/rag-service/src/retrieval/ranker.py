@@ -645,8 +645,8 @@ class DocumentRanker:
 
     def _load_configuration(self) -> RankingConfig:
         """Load ranking configuration through provider with validated config."""
-        # Get shared config from provider - this should be pre-validated by ConfigValidator
-        main_config = self.config_provider.get_shared_config()
+        # Get full main config from provider to access ranking section
+        main_config = self.config_provider.load_config('config')
         return RankingConfig.from_validated_config(main_config)
 
     def rank_documents(

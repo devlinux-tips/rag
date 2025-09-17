@@ -224,22 +224,24 @@ class ProductionConfigProvider:
         """Load configuration from the real system."""
         try:
             # Import at runtime to avoid circular dependencies
-            from ..utils.config_loader import get_shared_config
+            from ..utils.config_loader import get_paths_config, load_config
 
-            config = get_shared_config()
+            paths_config = get_paths_config()
+            main_config = load_config('config')
+            storage_config = main_config["storage"]
 
             return FolderConfig(
-                data_base_dir=config["data_base_dir"],
-                models_base_dir=config["models_base_dir"],
-                system_dir=config["system_dir"],
-                tenant_root_template=config["tenant_root_template"],
-                user_documents_template=config["user_documents_template"],
-                tenant_shared_template=config["tenant_shared_template"],
-                user_processed_template=config["user_processed_template"],
-                tenant_processed_template=config["tenant_processed_template"],
-                chromadb_path_template=config["chromadb_path_template"],
-                models_path_template=config["models_path_template"],
-                collection_name_template=config["collection_name_template"],
+                data_base_dir=paths_config["data_base_dir"],
+                models_base_dir=paths_config["models_base_dir"],
+                system_dir=paths_config["system_dir"],
+                tenant_root_template=paths_config["tenant_root_template"],
+                user_documents_template=paths_config["user_documents_template"],
+                tenant_shared_template=paths_config["tenant_shared_template"],
+                user_processed_template=paths_config["user_processed_template"],
+                tenant_processed_template=paths_config["tenant_processed_template"],
+                chromadb_path_template=paths_config["chromadb_path_template"],
+                models_path_template=paths_config["models_path_template"],
+                collection_name_template=storage_config["collection_name_template"],
             )
         except Exception as e:
             raise RuntimeError(f"Failed to load folder configuration from system: {e}") from e

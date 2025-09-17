@@ -203,15 +203,15 @@ class ConfigValidator:
         "categorization.educational_indicators": list,
         "categorization.news_indicators": list,
         "categorization.faq_indicators": list,
-        # Patterns
-        "patterns.cultural": list,
-        "patterns.tourism": list,
-        "patterns.technical": list,
-        "patterns.legal": list,
-        "patterns.business": list,
-        "patterns.faq": list,
-        "patterns.educational": list,
-        "patterns.news": list,
+        # Shared patterns (moved to shared section)
+        "shared.patterns.cultural": list,
+        "shared.patterns.tourism": list,
+        "shared.patterns.technical": list,
+        "shared.patterns.legal": list,
+        "shared.patterns.business": list,
+        "shared.patterns.faq": list,
+        "shared.patterns.educational": list,
+        "shared.patterns.news": list,
         # Suggestions
         "suggestions.low_confidence": list,
         "suggestions.general_category": list,
@@ -301,12 +301,12 @@ class ConfigValidator:
         "prompts.comparison_system": str,
         "prompts.comparison_user": str,
         "prompts.comparison_context": str,
-        "prompts.tourism_system": str,
-        "prompts.tourism_user": str,
-        "prompts.tourism_context": str,
-        "prompts.business_system": str,
-        "prompts.business_user": str,
-        "prompts.business_context": str,
+        "prompts.general.tourism_system": str,
+        "prompts.general.tourism_user": str,
+        "prompts.general.tourism_context": str,
+        "prompts.general.business_system": str,
+        "prompts.general.business_user": str,
+        "prompts.general.business_context": str,
         # Prompt keywords
         "prompts.keywords.tourism": list,
         "prompts.keywords.comparison": list,
@@ -326,12 +326,13 @@ class ConfigValidator:
         "response_parsing.confidence_indicators.high": list,
         "response_parsing.confidence_indicators.medium": list,
         "response_parsing.confidence_indicators.low": list,
-        "response_parsing.display.no_answer_message": str,
-        "response_parsing.display.high_confidence_label": str,
-        "response_parsing.display.medium_confidence_label": str,
-        "response_parsing.display.low_confidence_label": str,
-        "response_parsing.display.sources_prefix": str,
-        "response_parsing.cleaning.prefixes_to_remove": list,
+        "response_parsing.cleaning_prefixes": list,
+        "response_parsing.language_patterns": dict,
+        "response_parsing.display_settings.no_answer_message": str,
+        "response_parsing.display_settings.high_confidence_label": str,
+        "response_parsing.display_settings.medium_confidence_label": str,
+        "response_parsing.display_settings.low_confidence_label": str,
+        "response_parsing.display_settings.sources_prefix": str,
         # Pipeline
         "pipeline.enable_morphological_expansion": bool,
         "pipeline.enable_synonym_expansion": bool,
@@ -376,17 +377,18 @@ class ConfigValidator:
     }
 
     @classmethod
-    def validate_startup_config(cls, main_config: dict, language_configs: dict[str, dict]) -> None:
+    def validate_startup_config(cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None) -> None:
         """
-        PHASE 1: Validate ALL configuration at system startup.
+        PHASE 1: Validate configuration at system startup.
 
-        This method performs comprehensive validation of both main config and all
-        language-specific configs. System will fail to start if ANY required key
-        is missing or has wrong type.
+        This method performs comprehensive validation of both main config and
+        language-specific configs for the current language only. System will fail to start
+        if ANY required key is missing or has wrong type.
 
         Args:
             main_config: Dictionary loaded from config/config.toml
             language_configs: Dictionary of {language_code: config_dict} from language files
+            current_language: Current language being used (optional, validates all if None)
 
         Raises:
             ConfigurationError: If any validation fails, with detailed error information
@@ -426,11 +428,12 @@ class ConfigValidator:
 
         logger.info(f"✅ All language configurations validated: {list(language_configs.keys())}")
 
-        # Cross-config consistency validation
-        cls._validate_cross_config_consistency(main_config, language_configs)
+        # Cross-config consistency validation (only for current language if specified)
+        cls._validate_cross_config_consistency(main_config, language_configs, current_language)
 
-        # Validate ranking features consistency between languages
-        cls._validate_ranking_features_consistency(language_configs)
+        # Validate ranking features consistency between languages (only if multiple languages being validated)
+        if current_language is None and len(language_configs) > 1:
+            cls._validate_ranking_features_consistency(language_configs)
 
         logger.info("🎯 Configuration validation completed successfully - all keys exist and are valid")
 
@@ -484,7 +487,7 @@ class ConfigValidator:
         )
 
     @classmethod
-    def _validate_cross_config_consistency(cls, main_config: dict, language_configs: dict[str, dict]) -> None:
+    def _validate_cross_config_consistency(cls, main_config: dict, language_configs: dict[str, dict], current_language: str | None = None) -> None:
         """
         Validate consistency across configuration files.
 
@@ -494,10 +497,35 @@ class ConfigValidator:
         Args:
             main_config: Main configuration dictionary
             language_configs: Language configuration dictionaries
+            current_language: Current language being used (if None, validates all languages)
 
         Raises:
             ConfigurationError: If cross-config inconsistencies found
         """
+        # If validating only current language, just check it exists
+        if current_language is not None:
+            supported_languages = main_config["languages"]["supported"]
+            if current_language not in supported_languages:
+                raise ConfigurationError(
+                    f"Current language '{current_language}' not declared in config.toml supported languages: {supported_languages}"
+                )
+
+            if current_language not in language_configs:
+                raise ConfigurationError(
+                    f"Current language '{current_language}' config file not found. Expected: config/{current_language}.toml"
+                )
+                
+            # For single language validation, only validate the current language config
+            lang_config = language_configs[current_language]
+            config_lang_code = lang_config["language"]["code"]
+            if config_lang_code != current_language:
+                raise ConfigurationError(
+                    f"Language code mismatch in {current_language}.toml: "
+                    f"filename says '{current_language}' but config says '{config_lang_code}'"
+                )
+            return  # Exit early for single language validation
+        
+        # Full validation when current_language is None
         # Validate supported languages match available language configs
         supported_languages = main_config["languages"]["supported"]
         available_languages = set(language_configs.keys())
@@ -520,7 +548,7 @@ class ConfigValidator:
                 f"Available config files: {list(available_languages)}"
             )
 
-        # Validate default language exists
+        # Validate default language exists (only in full validation)
         default_language = main_config["languages"]["default"]
         if default_language not in language_configs:
             raise ConfigurationError(

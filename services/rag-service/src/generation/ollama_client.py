@@ -202,7 +202,7 @@ def create_ollama_request(prompt: str, config: OllamaConfig) -> dict[str, Any]:
     return {
         "model": config.model,
         "prompt": prompt,
-        "stream": config.streaming,
+        "stream": config.stream,
         "options": {
             "temperature": config.temperature,
             "num_predict": config.max_tokens,
@@ -454,7 +454,7 @@ class MultilingualOllamaClient:
         # Step 3: Build and enhance prompt
         base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
 
-        enhanced_prompt = enhance_prompt_with_formality(base_prompt, formal_prompts, self.config.prefer_formal_style)
+        enhanced_prompt = enhance_prompt_with_formality(base_prompt, formal_prompts, getattr(self.config, 'prefer_formal_style', False))
 
         # Step 4: Create API request
         ollama_request = create_ollama_request(enhanced_prompt, self.config)
@@ -462,7 +462,7 @@ class MultilingualOllamaClient:
         # Step 5: Make API call (streaming or non-streaming)
         url = f"{self.config.base_url}/api/generate"
 
-        if self.config.streaming:
+        if self.config.stream:
             json_lines = await self.http_client.stream_post(url, ollama_request, self.config.timeout)
             generated_text = parse_streaming_response(json_lines)
         else:
@@ -470,8 +470,9 @@ class MultilingualOllamaClient:
             generated_text = parse_non_streaming_response(response.json())
 
         # Step 6: Apply text preservation if needed
-        if self.config.preserve_diacritics:
-            generated_text = preserve_text_encoding(generated_text)
+        # Apply text preservation if needed (this would be in language config, not Ollama config)
+        # if preserve_diacritics:
+        #     generated_text = preserve_text_encoding(generated_text)
 
         # Step 7: Calculate confidence
         confidence_settings = self.language_config_provider.get_confidence_settings(request.language)
@@ -482,8 +483,8 @@ class MultilingualOllamaClient:
             "query_type": request.query_type,
             "language": request.language,
             "context_length": len(" ".join(request.context)),
-            "streaming": self.config.streaming,
-            "formal_style": self.config.prefer_formal_style,
+            "streaming": self.config.stream,
+            "formal_style": getattr(self.config, 'prefer_formal_style', False),
         }
         if request.metadata:
             metadata.update(request.metadata)

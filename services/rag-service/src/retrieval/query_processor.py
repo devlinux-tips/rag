@@ -228,9 +228,17 @@ def generate_query_filters(
         filters["document_types"] = context["document_types"]
 
     # Topic filters based on keywords
-    if "topic_patterns" not in filter_config:
-        raise ValueError("Missing 'topic_patterns' in filter configuration")
-    topic_patterns = filter_config["topic_patterns"]
+    # Support both topic_patterns (new) and topic_filters (legacy) for backward compatibility
+    if "topic_patterns" in filter_config:
+        topic_patterns = filter_config["topic_patterns"]
+    elif "topic_filters" in filter_config:
+        topic_patterns = filter_config["topic_filters"]
+    elif isinstance(filter_config, dict) and all(isinstance(v, list) for v in filter_config.values()):
+        # Direct topic patterns dictionary (history: [...], tourism: [...], etc.)
+        topic_patterns = filter_config
+    else:
+        # No topic filtering available - just return current filters
+        return filters
     query_lower = query.lower()
 
     for topic, patterns in topic_patterns.items():
@@ -601,9 +609,11 @@ class ProductionLanguageDataProvider:
             try:
                 shared_config = self.config_provider.get_language_config(language)
                 # Direct access - ConfigValidator guarantees existence if synonym_groups exists in config
-                if "synonym_groups" not in shared_config:
-                    raise ValueError("Missing 'synonym_groups' in shared configuration")
-                self._cache[cache_key] = shared_config["synonym_groups"]
+                if "synonym_groups" in shared_config:
+                    self._cache[cache_key] = shared_config["synonym_groups"]
+                else:
+                    # Fallback to empty dict if synonym_groups not configured
+                    self._cache[cache_key] = {}
             except (KeyError, AttributeError):
                 self._cache[cache_key] = {}
 

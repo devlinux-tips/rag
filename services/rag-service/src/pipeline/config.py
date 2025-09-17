@@ -60,7 +60,7 @@ class RAGConfig(BaseSettings):
 
             # Get validated config through provider
             config_provider = get_config_provider()
-            main_config = config_provider.get_shared_config()
+            main_config = config_provider.load_config('config')  # Get full structured config
 
             # Get language-specific config for embeddings
             language_config = config_provider.get_language_config(language)
@@ -69,6 +69,27 @@ class RAGConfig(BaseSettings):
             shared_config = get_shared_config()
             system_config = get_system_config()
             paths_config = get_paths_config()
+
+            # Build compatible chroma config from storage and vectordb sections
+            storage_config = main_config["storage"]
+            vectordb_config = main_config["vectordb"]["factory"]
+
+            # Create a chroma section that matches ChromaConfig expectations
+            main_config["chroma"] = {
+                "db_path": "./data/vectordb",  # Default path, will be updated per tenant
+                "collection_name": f"{language}_documents",  # Default, will be updated per tenant
+                "distance_metric": storage_config["distance_metric"],
+                "chunk_size": vectordb_config["chunk_size"],
+                "ef_construction": 200,  # HNSW default
+                "m": 16,  # HNSW default
+                "persist": storage_config["persist"],
+                "allow_reset": storage_config["allow_reset"],
+            }
+
+            # Promote shared config values to root level for config models that expect them there
+            for key, value in shared_config.items():
+                if key not in main_config:  # Don't override existing sections
+                    main_config[key] = value
 
             # Create component configs using validated approach
             data = {

@@ -17,6 +17,10 @@ chars_pattern = "[^\\w\\s.,!?:;()-]"
 response_language = "english"
 preserve_diacritics = false
 
+# System response messages
+no_results_message = "I apologize, I cannot find an answer to your question in the available documents."
+error_message = "I apologize, an error occurred while processing your question"
+
 # English question patterns (shared across retrieval and prompts)
 [shared.question_patterns]
 factual = ["who", "what", "when", "where", "which", "whose", "whom", "how many", "how much"]
@@ -51,8 +55,70 @@ words = [
     "who", "with", "would", "you", "your", "yours", "yourself", "yourselves"
 ]
 
+# English synonym groups for query expansion (English keys with English values)
+[shared.synonym_groups]
+# Technology and computing terms
+ai = ["artificial intelligence", "ai", "machine learning", "ml", "deep learning"]
+computer = ["computer", "pc", "laptop", "desktop", "machine"]
+software = ["software", "program", "application", "app", "system"]
+internet = ["internet", "web", "online", "network", "worldwide web"]
+
+# Common English synonyms
+fast = ["fast", "quick", "rapid", "speedy", "swift"]
+big = ["big", "large", "huge", "massive", "enormous"]
+good = ["good", "excellent", "great", "outstanding", "superb"]
+important = ["important", "significant", "crucial", "essential", "vital"]
+
 # Note: Diacritics detected automatically using Unicode properties
 # No language-specific character lists needed
+
+# Shared categorization data (used by multiple components)
+[shared.categorization]
+categories = ["cultural", "tourism", "technical", "legal", "business", "educational", "news", "faq", "general"]
+complexity_thresholds = {moderate = 0.3, complex = 0.6, analytical = 0.8}
+
+# English cultural keywords organized by category
+[shared.categorization.cultural_keywords]
+cultural = ["culture", "tradition", "cultural", "traditional", "customs"]
+national = ["americans", "british", "western", "american", "english"]
+historical = ["history", "historical", "historic", "heritage", "legacy"]
+heritage = ["heritage", "monument", "museum", "artifact", "preservation"]
+
+# Shared patterns (used by chunker and categorizer)
+[shared.patterns]
+cultural = [
+    "\\b(culture|tradition|heritage|history|customs)\\b",
+    "\\b(festival|art|music|literature|identity)\\b",
+    "\\b(monument|museum|cultural|national)\\b"
+]
+tourism = [
+    "\\b(tourism|travel|vacation|hotel|beach)\\b",
+    "\\b(destination|reservation|booking|accommodation)\\b"
+]
+technical = [
+    "\\b(technology|software|system|algorithm)\\b",
+    "\\b(code|programming|development|api)\\b"
+]
+legal = [
+    "\\b(law|regulation|court|legal|contract)\\b",
+    "\\b(lawyer|lawsuit|verdict|criminal)\\b"
+]
+business = [
+    "\\b(business|company|economy|profit)\\b",
+    "\\b(commerce|market|corporation|finance)\\b"
+]
+educational = [
+    "\\b(learning|education|school|university)\\b",
+    "\\b(study|exam|degree|academic)\\b"
+]
+news = [
+    "\\b(news|events|current|report)\\b",
+    "\\b(media|journalist|announcement|current)\\b"
+]
+faq = [
+    "\\b(frequently|question|answer|guide)\\b",
+    "\\b(how|why|what|when|where)\\b"
+]
 
 # ============================================================================
 # CATEGORIZATION CONFIGURATION
@@ -68,48 +134,18 @@ educational_indicators = ["learning", "education", "school", "university", "stud
 news_indicators = ["news", "events", "current", "report", "media"]
 faq_indicators = ["frequently", "question", "answer", "how", "why", "what"]
 
-# Pattern matching for English queries
-[patterns]
-cultural = [
-    "\\b(culture|tradition|heritage|history|customs)\\b",
-    "\\b(festival|art|music|literature|identity)\\b",
-    "\\b(monument|museum|cultural|national)\\b"
-]
-tourism = [
-    "\\b(tourism|travel|vacation|hotel|accommodation)\\b",
-    "\\b(destination|attraction|beach|restaurant|ticket)\\b",
-    "\\b(guide|booking|price|season|tourist)\\b"
-]
-technical = [
-    "\\b(technology|software|programming|code|algorithm)\\b",
-    "\\b(system|database|API|framework|development)\\b",
-    "\\b(debugging|deployment|version|update|technical)\\b"
-]
-legal = [
-    "\\b(law|regulation|court|legal|lawyer)\\b",
-    "\\b(contract|license|violation|penalty|procedure)\\b",
-    "\\b(ownership|copyright|patent|intellectual)\\b"
-]
-business = [
-    "\\b(business|company|economy|profit|commerce)\\b",
-    "\\b(market|sales|marketing|investment|revenue)\\b",
-    "\\b(budget|finance|tax|export|import)\\b"
-]
-faq = [
-    "\\b(frequently|question|answer|how|why|what)\\b",
-    "\\b(explanation|instruction|help|advice|guide)\\b",
-    "^(what|how|why|where|when|who)\\s+"
-]
-educational = [
-    "\\b(learning|education|course|school|university)\\b",
-    "\\b(study|exam|degree|certificate|academic)\\b",
-    "\\b(tutorial|lesson|exercise|assignment)\\b"
-]
-news = [
-    "\\b(news|events|current|breaking|report)\\b",
-    "\\b(article|story|interview|announcement)\\b",
-    "\\b(today|yesterday|recently|latest|now)\\b"
-]
+# Retrieval strategies for different categories
+[categorization.retrieval_strategies]
+cultural = "cultural_aware"
+tourism = "hybrid"
+technical = "technical_precise"
+legal = "semantic_focused"
+business = "hybrid"
+educational = "semantic_focused"
+news = "hybrid"
+faq = "faq_optimized"
+general = "semantic_focused"
+default = "default"
 
 # Suggestions for English users
 [suggestions]
@@ -228,6 +264,7 @@ header_footer_patterns = [
 fix_spaced_capitals = true       # Generic: Fix any spaced capital letters
 fix_spaced_punctuation = true    # Generic: Fix spaced punctuation marks
 fix_common_ocr_errors = true     # Generic: Fix rn->m, vv->w, etc.
+fix_spaced_diacritics = false    # English doesn't have diacritics
 
 # ============================================================================
 # EMBEDDINGS & VECTOR DATABASE
@@ -269,6 +306,11 @@ boost_title_matches = true
 # English synonyms for query expansion
 # Synonym expansion handled by BGE-M3 semantic similarity, not config hardcoding
 # Morphological analysis handled by spaCy library, not config hardcoding
+
+# Minimal morphology config for ranker compatibility
+[retrieval.morphology]
+enabled = false  # Handled by spaCy library
+patterns = []    # Empty as handled externally
 
 # ============================================================================
 # GENERATION & PROMPTS
@@ -326,6 +368,13 @@ comparison_context = "Data for comparison:\n{context}\n\n"
 
 # Note: Cultural context handled automatically by language-specific prompts
 
+# Category templates for enhanced prompt builder
+[prompts.general]
+system = """You are a precise and expert assistant who responds in English using only the given data.
+Your role is to provide accurate, relevant and complete answers based on the context.
+If information is not available in the context, clearly state that you don't know."""
+user = "Question: {query}\n\nContext:\n{context}\n\nProvide a detailed answer:"
+
 business_system = """You are a business consultant who responds in English.
 Use the context to provide practical and informative answers about business matters.
 Focus on useful information for professionals and highlight key business insights."""
@@ -368,26 +417,25 @@ confidence_threshold = 0.5
 no_answer_patterns = ["don't know", "cannot", "no data", "not sure", "unclear"]
 source_patterns = ["source:", "according to:", "document:", "based on document"]
 
+# Text cleaning configuration
+cleaning_prefixes = ["^(answer|response):", "^(result|output):", "^(text|content):"]
+
+# Language patterns for language detection (dict format)
+language_patterns = { en = ["is", "are", "the", "and", "of", "to", "in", "that", "have", "for", "with", "on", "be", "at", "by"], hr = ["je", "su", "ima", "biti", "kao", "da", "se", "i", "u", "na"] }
+
 # Confidence indicators
 [response_parsing.confidence_indicators]
 high = ["clearly", "certainly", "definitely", "undoubtedly", "confirmed"]
 medium = ["likely", "probably", "appears", "seems", "indicates"]
 low = ["maybe", "possibly", "unclear", "hard to say", "cannot be certain"]
 
-# Display configuration
-[response_parsing.display]
+# Display settings (moved from nested section)
+[response_parsing.display_settings]
 no_answer_message = "I'm sorry, I cannot find an answer to your question in the available documents."
 high_confidence_label = "High confidence"
 medium_confidence_label = "Medium confidence"
 low_confidence_label = "Low confidence"
 sources_prefix = "Sources"
-
-# Text cleaning configuration
-[response_parsing.cleaning]
-prefixes_to_remove = ["^(answer|response):", "^(result|output):", "^(text|content):"]
-
-# Language detection patterns
-# Language detection handled by langdetect library, not word lists
 
 # ============================================================================
 # PIPELINE CONFIGURATION

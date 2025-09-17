@@ -461,6 +461,13 @@ def create_chromadb_database(
     return ChromaDBDatabase(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)
 
 
+def create_vector_database(
+    db_path: str, distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = False
+) -> VectorDatabase:
+    """Factory function to create vector database."""
+    return create_chromadb_database(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)
+
+
 def create_mock_database(
     db_path: str = "/tmp/mock_db", distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = True
 ) -> VectorDatabase:

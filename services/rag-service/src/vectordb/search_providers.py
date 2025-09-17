@@ -274,14 +274,16 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
 class ChromaDBSearchProvider(VectorSearchProvider):
     """Production search provider using ChromaDB."""
 
-    def __init__(self, collection):
+    def __init__(self, collection, embedding_provider=None):
         """
         Initialize ChromaDB search provider.
 
         Args:
             collection: ChromaDB collection instance
+            embedding_provider: Provider to generate embeddings for text queries
         """
         self.collection = collection
+        self.embedding_provider = embedding_provider
         self.logger = logging.getLogger(__name__)
 
     async def search_by_embedding(
@@ -319,25 +321,29 @@ class ChromaDBSearchProvider(VectorSearchProvider):
     async def search_by_text(
         self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
     ) -> dict[str, Any]:
-        """Search using query text (relies on ChromaDB's built-in embedding)."""
+        """Search using query text with proper embedding model."""
         try:
-            loop = asyncio.get_event_loop()
+            if self.embedding_provider:
+                # Use provided embedding provider to generate query embedding
+                query_embedding = await self.embedding_provider.encode_text(query_text)
+                return await self.search_by_embedding(query_embedding, top_k, filters, include_metadata)
+            else:
+                # Fallback to ChromaDB's built-in embedding (may cause dimension mismatch)
+                loop = asyncio.get_event_loop()
+                query_kwargs = {
+                    "query_texts": [query_text],
+                    "n_results": top_k,
+                    "include": (
+                        ["documents", "metadatas", "distances"] if include_metadata else ["documents", "distances"]
+                    ),
+                }
 
-            query_kwargs = {
-                "query_texts": [query_text],
-                "n_results": top_k,
-                "include": (
-                    ["documents", "metadatas", "distances"] if include_metadata else ["documents", "distances"]
-                ),
-            }
+                if filters:
+                    query_kwargs["where"] = filters
 
-            if filters:
-                query_kwargs["where"] = filters
-
-            results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
-
-            self.logger.debug(f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results")
-            return results
+                results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
+                self.logger.debug(f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results")
+                return results
 
         except Exception as e:
             self.logger.error(f"ChromaDB text search failed: {e}")
@@ -366,7 +372,7 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             return None
 
 
-class ProductionConfigProvider(ConfigProvider):
+class ConfigProvider(ConfigProvider):
     """Production configuration provider using config files."""
 
     def __init__(self, config_loader_func=None):
@@ -435,16 +441,16 @@ def create_mock_config_provider(custom_config: dict[str, Any] | None = None) -> 
     return MockConfigProvider(custom_config=custom_config)
 
 
-def create_production_embedding_provider(model_name: str = "BAAI/bge-m3", device: str = "cpu") -> EmbeddingProvider:
+def create_embedding_provider(model_name: str = "BAAI/bge-m3", device: str = "cpu") -> EmbeddingProvider:
     """Create production embedding provider."""
     return SentenceTransformerEmbeddingProvider(model_name=model_name, device=device)
 
 
-def create_chromadb_search_provider(collection) -> VectorSearchProvider:
-    """Create production ChromaDB search provider."""
-    return ChromaDBSearchProvider(collection)
+def create_vector_search_provider(collection, embedding_provider=None) -> VectorSearchProvider:
+    """Create vector search provider."""
+    return ChromaDBSearchProvider(collection, embedding_provider)
 
 
-def create_production_config_provider(config_loader_func=None) -> ConfigProvider:
+def create_config_provider(config_loader_func=None) -> ConfigProvider:
     """Create production configuration provider."""
-    return ProductionConfigProvider(config_loader_func=config_loader_func)
+    return ConfigProvider(config_loader_func=config_loader_func)

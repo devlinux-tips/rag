@@ -25,12 +25,12 @@ class ConfigProvider(Protocol):
 
 
 # ================================
-# PRODUCTION PROVIDERS
+# STANDARD PROVIDERS
 # ================================
 
 
-class ProductionLanguageDataProvider:
-    """Production language data provider using real configuration files."""
+class LanguageDataProvider:
+    """Language data provider using configuration files."""
 
     def __init__(self, config_provider: ConfigProvider):
         """Initialize with configuration provider."""
@@ -215,9 +215,9 @@ def create_default_config(language: str = "hr", config_provider: ConfigProvider 
     return QueryProcessingConfig.from_validated_config(main_config=config_dict, language=language)
 
 
-def create_production_language_provider(config_provider: ConfigProvider) -> ProductionLanguageDataProvider:
-    """Create production language data provider."""
-    return ProductionLanguageDataProvider(config_provider)
+def create_language_provider(config_provider: ConfigProvider) -> LanguageDataProvider:
+    """Create language data provider."""
+    return LanguageDataProvider(config_provider)
 
 
 def create_mock_language_provider(
@@ -311,9 +311,9 @@ def create_test_providers(
     return config, language_provider, config_provider
 
 
-def create_production_providers(language: str = "hr") -> tuple:
+def create_providers(language: str = "hr") -> tuple:
     """
-    Create production providers for query processing.
+    Create providers for query processing.
 
     Args:
         language: Language for providers
@@ -327,9 +327,21 @@ def create_production_providers(language: str = "hr") -> tuple:
     config_provider = get_config_provider()
 
     # Create language data provider
-    language_provider = create_production_language_provider(config_provider)
+    language_provider = create_language_provider(config_provider)
 
     # Create configuration
     config = create_default_config(language, config_provider)
 
     return config, language_provider, config_provider
+
+
+def create_query_processor(language: str = "hr"):
+    """Create query processor with all dependencies."""
+    from .query_processor import MultilingualQueryProcessor
+
+    config, language_provider, config_provider = create_providers(language)
+
+    return MultilingualQueryProcessor(
+        config=config,
+        language_data_provider=language_provider
+    )

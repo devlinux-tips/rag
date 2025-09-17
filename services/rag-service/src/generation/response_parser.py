@@ -491,7 +491,19 @@ class MultilingualResponseParser:
         self.logger = logging.getLogger(__name__)
 
         try:
-            self._config = config_provider.get_parsing_config(language)
+            config_dict = config_provider.get_parsing_config(language)
+            # Convert dict to ParsingConfig object - direct access, fail fast
+            if isinstance(config_dict, dict):
+                self._config = ParsingConfig(
+                    no_answer_patterns=config_dict["no_answer_patterns"],
+                    source_patterns=config_dict["source_patterns"],
+                    confidence_indicators=config_dict["confidence_indicators"],
+                    language_patterns=config_dict["language_patterns"],
+                    cleaning_prefixes=config_dict["cleaning_prefixes"],
+                    display_settings=config_dict["display_settings"],
+                )
+            else:
+                self._config = config_dict
             self.logger.debug(f"Initialized parser for language: {language}")
         except Exception as e:
             self.logger.error(f"Failed to initialize parser for {language}: {e}")

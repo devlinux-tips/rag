@@ -26,8 +26,14 @@ class SentenceTransformerLoader:
             # Create cache directory
             Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
-            # Load model with configuration
-            model = SentenceTransformer(model_name, cache_folder=cache_dir, device=device, **kwargs)
+            # Filter out parameters not supported by SentenceTransformer
+            # Extract only supported parameters for SentenceTransformer init
+            supported_params = {}
+            if 'trust_remote_code' in kwargs:
+                supported_params['trust_remote_code'] = kwargs['trust_remote_code']
+
+            # Load model with only supported configuration
+            model = SentenceTransformer(model_name, cache_folder=cache_dir, device=device, **supported_params)
 
             self.logger.info(f"Loaded model {model_name} on device {device}")
             return SentenceTransformerAdapter(model)

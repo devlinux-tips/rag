@@ -97,7 +97,7 @@ class DocumentProcessingResult:
 class DocumentExtractorProtocol(Protocol):
     """Protocol for document text extraction."""
 
-    def extract_text(self, file_path: Path) -> str: ...
+    def extract_text(self, file_path: Path) -> Any: ...
 
 
 class TextCleanerProtocol(Protocol):
@@ -119,7 +119,7 @@ class EmbeddingModelProtocol(Protocol):
 
     def encode_text(self, text: str) -> Any: ...
 
-    def load_model(self) -> None: ...
+    def initialize(self) -> None: ...
 
 
 class VectorStorageProtocol(Protocol):
@@ -378,13 +378,48 @@ def build_response_metadata(
     return metadata
 
 
-def create_error_response(query: RAGQuery, error: Exception, start_time: float) -> RAGResponse:
-    """Create error response in the appropriate language."""
-    error_msg = (
-        "I apologize, an error occurred while processing your question"
-        if query.language == "en"
-        else "Žao mi je, dogodila se greška pri obradi pitanja"
+def get_language_message(language: str, message_key: str) -> str:
+    """Get language-specific message from configuration."""
+    try:
+        from ..utils.config_loader import get_language_config
+        language_config = get_language_config(language)
+        message = language_config["shared"][message_key]
+        if not message:
+            raise ConfigurationError(f"Empty message for key '{message_key}' in language '{language}'")
+        return message
+    except KeyError:
+        raise ConfigurationError(f"Missing message key '{message_key}' in language '{language}' configuration")
+    except Exception as e:
+        raise ConfigurationError(f"Failed to load message '{message_key}' for language '{language}': {e}")
+
+
+def create_empty_response(query: RAGQuery, retrieval_time: float, start_time: float) -> RAGResponse:
+    """Create empty response when no documents found - configuration-driven multilingual."""
+    no_results_msg = get_language_message(query.language, "no_results_message")
+
+    total_time = time.time() - start_time
+    return RAGResponse(
+        answer=no_results_msg,
+        query=query.text,
+        retrieved_chunks=[],
+        confidence=0.0,
+        generation_time=0.0,
+        retrieval_time=retrieval_time,
+        total_time=total_time,
+        sources=[],
+        metadata={
+            "query": query.text,
+            "language": query.language,
+            "results_found": 0,
+            "category": "unknown",
+            "strategy": "none"
+        },
     )
+
+
+def create_error_response(query: RAGQuery, error: Exception, start_time: float) -> RAGResponse:
+    """Create error response in the appropriate language - configuration-driven."""
+    error_msg = get_language_message(query.language, "error_message")
 
     return RAGResponse(
         answer=f"{error_msg}: {str(error)}",
@@ -509,34 +544,26 @@ class RAGSystem:
         # Setup language environment
         self._text_cleaner.setup_language_environment()
 
-        # Load embedding model
-        self._embedding_model.load_model()
+        # Initialize embedding model
+        self._embedding_model.initialize()
 
-        # Create vector storage collection
-        self._vector_storage.create_collection()
+        # Vector storage collection is already created in factory
+        # No need to create it again here
 
         self._initialized = True
 
     async def _validate_configuration(self) -> None:
         """Validate configuration using ConfigValidator - minimal integration."""
-        try:
-            from ..utils.config_loader import get_language_config, load_config
-            from ..utils.config_validator import ConfigurationError, ConfigValidator
+        from ..utils.config_loader import get_language_config, load_config
+        from ..utils.config_validator import ConfigValidator
 
-            # Load current configs
-            main_config = load_config("config")
-            language_config = get_language_config(self.language)
+        # Load current configs
+        main_config = load_config("config")
+        language_config = get_language_config(self.language)
 
-            # Try ConfigValidator - log result but don't break system
-            ConfigValidator.validate_startup_config(main_config, {self.language: language_config})
-            logger.info("✅ ConfigValidator: All configuration keys validated successfully")
-        except ConfigurationError as e:
-            # Log warning but continue - development system
-            logger.warning(f"⚠️  ConfigValidator found missing keys (development mode): {e}")
-            logger.info("🔧 System will continue with current configuration")
-        except Exception as e:
-            # Any other error - log but don't break startup
-            logger.warning(f"Configuration validation failed: {e}")
+        # ConfigValidator - MUST pass or system crashes (fail-fast)
+        ConfigValidator.validate_startup_config(main_config, {self.language: language_config}, current_language=self.language)
+        logger.info("✅ ConfigValidator: All configuration keys validated successfully")
 
     async def add_documents(self, document_paths: list[str], batch_size: int = 10) -> DocumentProcessingResult:
         """Add documents to the RAG system using pure functions."""
@@ -559,7 +586,8 @@ class RAGSystem:
             for doc_path in batch:
                 try:
                     # Extract text
-                    extracted_text = self._document_extractor.extract_text(doc_path)
+                    extraction_result = self._document_extractor.extract_text(doc_path)
+                    extracted_text = extraction_result.text if hasattr(extraction_result, 'text') else str(extraction_result)
                     if not extracted_text.strip():
                         error_msg = f"No text extracted from {doc_path}"
                         errors.append(error_msg)
@@ -567,7 +595,8 @@ class RAGSystem:
                         continue
 
                     # Clean text
-                    cleaned_text = self._text_cleaner.clean_text(extracted_text)
+                    cleaning_result = self._text_cleaner.clean_text(extracted_text)
+                    cleaned_text = cleaning_result.text if hasattr(cleaning_result, 'text') else str(cleaning_result)
 
                     # Create chunks
                     chunks = self._chunker.chunk_document(cleaned_text, str(doc_path))
@@ -580,7 +609,8 @@ class RAGSystem:
                     # Process chunks
                     for chunk_idx, chunk in enumerate(chunks):
                         # Generate embedding
-                        embedding = self._embedding_model.encode_text(chunk.content)
+                        embedding_result = self._embedding_model.generate_embeddings([chunk.content])
+                        embedding = embedding_result.embeddings
 
                         # Ensure embedding is 1D for ChromaDB
                         if hasattr(embedding, "ndim") and embedding.ndim == 2:
@@ -589,8 +619,12 @@ class RAGSystem:
                         # Create metadata using pure function
                         metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
 
+                        # Create unique ID for chunk
+                        chunk_id = f"{doc_path.stem}_{chunk_idx}_{hash(chunk.content) % 1000000}"
+
                         # Store in vector database
-                        self._vector_storage.add_documents(
+                        self._vector_storage.add(
+                            ids=[chunk_id],
                             documents=[chunk.content],
                             metadatas=[metadata],
                             embeddings=[embedding.tolist() if hasattr(embedding, "tolist") else embedding],
@@ -600,9 +634,12 @@ class RAGSystem:
                     total_chunks += len(chunks)
 
                 except Exception as e:
-                    error_msg = f"Failed to process {doc_path}: {e}"
+                    import traceback
+                    stack_trace = traceback.format_exc()
+                    error_msg = f"Failed to process {doc_path}: {e}\nStack trace:\n{stack_trace}"
                     errors.append(error_msg)
                     failed_docs += 1
+                    logger.error(f"Document processing error: {error_msg}")
 
         processing_time = time.time() - start_time
         self._document_count += processed_docs
@@ -632,84 +669,119 @@ class RAGSystem:
             validated_query = validate_query(query)
             # Step 1: Hierarchical retrieval
             query_start = time.time()
+            logger.debug(f"Starting hierarchical retrieval for query: '{validated_query.text}'")
+
             hierarchical_results = await self._hierarchical_retriever.retrieve(
                 query=validated_query.text,
                 max_results=validated_query.max_results or 10,
                 context=validated_query.context_filters,
             )
+            logger.debug("Hierarchical retrieval completed successfully")
             retrieval_time = time.time() - query_start
 
             # Step 2: Generate response
             generation_start = time.time()
+            logger.debug(f"Processing hierarchical results: {type(hierarchical_results)}")
 
-            # Build prompts
-            context_chunks = [result["content"] for result in hierarchical_results.documents]
-            system_prompt, user_prompt = self._prompt_builder.build_prompt(
-                query=validated_query.text,
-                context_chunks=context_chunks,
-                category=getattr(hierarchical_results, "category", None),
-                max_context_length=2000,
-                include_source_attribution=True,
-            )
+            # Handle empty results gracefully
+            if not hierarchical_results or not hierarchical_results.documents:
+                logger.info("No documents found - returning no-context response")
+                return create_empty_response(validated_query, time.time() - query_start, start_time)
 
-            # Create generation request (this would be a protocol-defined structure)
-            generation_request = {
-                "prompt": user_prompt,
-                "context": context_chunks,
-                "query": validated_query.text,
-                "query_type": getattr(hierarchical_results.category, "value", "general"),
-                "language": validated_query.language,
-                "metadata": validated_query.metadata,
-            }
+            try:
+                # Build prompts
+                context_chunks = [result["content"] for result in hierarchical_results.documents]
 
-            # Generate response
-            generation_response = await self._generation_client.generate_text_async(generation_request)
-            generation_time = time.time() - generation_start
+                # Convert category string to CategoryType enum
+                from ..retrieval.categorization import CategoryType
+                category_str = getattr(hierarchical_results, "category", None)
+                if category_str is None:
+                    raise ValueError(f"No category found in hierarchical_results: {hierarchical_results}")
+                category = CategoryType(category_str)
 
-            # Step 3: Parse response
-            parsed_response = self._response_parser.parse_response(
-                generation_response.text, validated_query.text, context_chunks
-            )
+                # Use simple prompt approach instead of categorized templates for now
+                from ..utils.config_loader import get_language_specific_config
+                prompts_config = get_language_specific_config("prompts", self.language)
 
-            # Step 4: Build response using pure functions
-            total_time = time.time() - start_time
+                context_text = "\n\n".join(context_chunks) if context_chunks else "Nema dostupnih informacija."
 
-            # Extract sources
-            sources = extract_sources_from_chunks(hierarchical_results.documents) if return_sources else []
+                system_prompt = prompts_config.get("question_answering_system", prompts_config.get("base_system_prompt", "Ti si pomoćni asistent."))
+                user_prompt = prompts_config.get("question_answering_user", "Pitanje: {query}\n\nDaj mi detaljan odgovor:").format(
+                    query=validated_query.text,
+                    context=context_text
+                )
 
-            # Prepare chunk info
-            retrieved_chunks = [
-                prepare_chunk_info(result, return_debug_info) for result in hierarchical_results.documents
-            ]
+                # Create generation request - handle category safely
+                category_value = "general"
+                if hasattr(hierarchical_results, "category"):
+                    if hasattr(hierarchical_results.category, "value"):
+                        category_value = hierarchical_results.category.value
+                    elif isinstance(hierarchical_results.category, str):
+                        category_value = hierarchical_results.category
 
-            # Build metadata
-            response_metadata = build_response_metadata(
-                validated_query,
-                hierarchical_results,
-                generation_response,
-                parsed_response,
-                retrieval_time,
-                generation_time,
+                from ..generation.ollama_client import GenerationRequest
+                generation_request = GenerationRequest(
+                    prompt=user_prompt,
+                    context=context_chunks,
+                    query=validated_query.text,
+                    query_type=category_value,
+                    language=validated_query.language,
+                    metadata=validated_query.metadata,
+                )
+
+                # Generate response
+                generation_response = await self._generation_client.generate_text_async(generation_request)
+                generation_time = time.time() - generation_start
+
+                # Step 3: Parse response
+                parsed_response = self._response_parser.parse_response(
+                    generation_response.text, validated_query.text, context_chunks
+                )
+
+                # Step 4: Build response using pure functions
+                total_time = time.time() - start_time
+
+                # Extract sources
+                sources = extract_sources_from_chunks(hierarchical_results.documents) if return_sources else []
+
+                # Prepare chunk info
+                retrieved_chunks = [
+                    prepare_chunk_info(result, return_debug_info) for result in hierarchical_results.documents
+                ]
+
+                # Build metadata
+                response_metadata = build_response_metadata(
+                    validated_query,
+                    hierarchical_results,
+                    generation_response,
+                    parsed_response,
+                    retrieval_time,
+                    generation_time,
                 total_time,
                 return_debug_info,
                 system_prompt,
                 user_prompt,
             )
 
-            return RAGResponse(
-                answer=parsed_response.content,
-                query=validated_query.text,
-                retrieved_chunks=retrieved_chunks,
-                confidence=getattr(parsed_response, "confidence", 0.5),
-                generation_time=generation_time,
-                retrieval_time=retrieval_time,
-                total_time=total_time,
-                sources=sources,
-                metadata=response_metadata,
-            )
+                return RAGResponse(
+                    answer=parsed_response.content,
+                    query=validated_query.text,
+                    retrieved_chunks=retrieved_chunks,
+                    confidence=getattr(parsed_response, "confidence", 0.5),
+                    generation_time=generation_time,
+                    retrieval_time=retrieval_time,
+                    total_time=total_time,
+                    sources=sources,
+                    metadata=response_metadata,
+                )
+
+            except Exception as e:
+                logger.error(f"Error in generation/parsing pipeline: {e}", exc_info=True)
+                return create_error_response(validated_query, e, start_time)
 
         except Exception as e:
-            return create_error_response(query, e, start_time)
+            logger.error(f"Unexpected error in main query processing: {e}", exc_info=True)
+            return create_error_response(validated_query if 'validated_query' in locals() else query, e, start_time)
 
     async def health_check(self) -> SystemHealth:
         """Perform comprehensive health check using pure functions."""

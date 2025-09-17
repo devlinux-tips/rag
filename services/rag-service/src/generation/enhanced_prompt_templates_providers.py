@@ -1,6 +1,6 @@
 """
 Provider implementations for enhanced prompt templates dependency injection.
-Production and mock providers for configurable prompt template system.
+Standard and mock providers for configurable prompt template system.
 """
 
 import logging
@@ -126,15 +126,15 @@ class MockLoggerProvider:
 
 
 # ================================
-# PRODUCTION PROVIDERS
+# STANDARD PROVIDERS
 # ================================
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real config system."""
+class ConfigProvider:
+    """Configuration provider using config system."""
 
     def __init__(self):
-        """Initialize production config provider."""
+        """Initialize config provider."""
         self._config_cache: dict[str, PromptConfig] = {}
 
     def get_prompt_config(self, language: str) -> PromptConfig:
@@ -253,9 +253,9 @@ def create_mock_setup(
     return config_provider, logger_provider
 
 
-def create_production_setup(logger_name: str | None = None) -> tuple:
+def create_prompt_builder(logger_name: str | None = None) -> tuple:
     """
-    Create production setup with real components.
+    Create prompt builder with real components.
 
     Args:
         logger_name: Optional logger name override
@@ -263,7 +263,7 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
     Returns:
         Tuple of (config_provider, logger_provider)
     """
-    config_provider = ProductionConfigProvider()
+    config_provider = ConfigProvider()
     logger_provider = StandardLoggerProvider(logger_name or __name__)
 
     return config_provider, logger_provider
@@ -356,7 +356,7 @@ def create_development_prompt_builder():
     """Create prompt builder configured for development/testing."""
     from .enhanced_prompt_templates import create_enhanced_prompt_builder
 
-    config_provider, logger_provider = create_production_setup()
+    config_provider, logger_provider = create_prompt_builder()
     return create_enhanced_prompt_builder(
         language="hr", config_provider=config_provider, logger_provider=logger_provider
     )

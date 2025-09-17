@@ -237,7 +237,7 @@ def get_language_specific_config(section: str, language: str) -> dict[str, Any]:
     Get specific configuration section for specified language.
 
     Args:
-        section: Configuration section name (e.g., 'prompts', 'retrieval')
+        section: Configuration section name (e.g., 'prompts', 'retrieval', 'patterns')
         language: Language code ('hr' for Croatian, 'en' for English)
 
     Returns:
@@ -247,6 +247,14 @@ def get_language_specific_config(section: str, language: str) -> dict[str, Any]:
         ConfigError: If section not found in language configuration
     """
     config = get_language_config(language)
+
+    # Handle patterns section which is now in shared.patterns
+    if section == "patterns":
+        if "shared" in config and "patterns" in config["shared"]:
+            return cast(dict[str, Any], config["shared"]["patterns"])
+        else:
+            raise ConfigError(f"Patterns not found in shared section of {language}.toml")
+
     if section not in config:
         raise ConfigError(f"Section '{section}' not found in {language}.toml")
     return cast(dict[str, Any], config[section])

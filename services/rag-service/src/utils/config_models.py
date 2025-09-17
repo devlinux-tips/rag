@@ -97,6 +97,7 @@ class EmbeddingConfig:
     use_safetensors: bool
     trust_remote_code: bool
     torch_dtype: str
+    cache_dir: str
 
     @classmethod
     def from_validated_config(
@@ -122,6 +123,7 @@ class EmbeddingConfig:
             use_safetensors=embed_config["use_safetensors"],
             trust_remote_code=embed_config["trust_remote_code"],
             torch_dtype=embed_config["torch_dtype"],
+            cache_dir=main_config["shared"]["cache_dir"],
         )
 
 
@@ -547,18 +549,24 @@ class ChromaConfig:
     allow_reset: bool
 
     @classmethod
-    def from_validated_config(cls, main_config: dict) -> "ChromaConfig":
+    def from_validated_config(cls, main_config: dict, tenant_slug: str = "development") -> "ChromaConfig":
         """Create config from validated configuration."""
-        chroma_config = main_config["chroma"]  # Direct access - guaranteed by validation
+        storage_config = main_config["storage"]  # Direct access - guaranteed by validation
+
+        # Generate tenant-specific db_path from template
+        db_path_template = storage_config["db_path_template"]
+        data_base_dir = main_config["paths"]["data_base_dir"]
+        db_path = db_path_template.format(data_base_dir=data_base_dir, tenant_slug=tenant_slug)
+
         return cls(
-            db_path=chroma_config["db_path"],
-            collection_name=chroma_config["collection_name"],
-            distance_metric=chroma_config["distance_metric"],
-            chunk_size=chroma_config["chunk_size"],
-            ef_construction=chroma_config["ef_construction"],
-            m=chroma_config["m"],
-            persist=chroma_config["persist"],
-            allow_reset=chroma_config["allow_reset"],
+            db_path=db_path,
+            collection_name=storage_config.get("collection_name_template", "default_collection"),
+            distance_metric=storage_config["distance_metric"],
+            chunk_size=storage_config.get("chunk_size", 1000),
+            ef_construction=storage_config.get("ef_construction", 200),
+            m=storage_config.get("m", 16),
+            persist=storage_config["persist"],
+            allow_reset=storage_config["allow_reset"],
         )
 
 

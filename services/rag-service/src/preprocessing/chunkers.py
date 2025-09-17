@@ -647,10 +647,7 @@ def create_document_chunker(
     language_patterns = None
     if config_provider:
         try:
-            language_config = config_provider.get_language_specific_config("text_processing", language)
-            if "patterns" not in language_config:
-                raise ValueError("Missing 'patterns' in language configuration")
-            language_patterns = language_config["patterns"]
+            language_patterns = config_provider.get_language_specific_config("patterns", language)
         except (KeyError, AttributeError):
             pass
     elif config_dict and "language_specific" in config_dict:
