@@ -3,7 +3,7 @@
 # Works with both pip (Linux) and uv (macOS M4 Pro)
 
 [project]
-name = "croatian-rag"
+name = "multilang-rag"
 version = "0.1.0"
 description = "Croatian RAG system with multilingual support"
 authors = [
@@ -16,7 +16,7 @@ dependencies = [
     "chromadb>=0.4.0",
     
     # Document processing
-    "PyPDF2>=3.0.0",
+    "pypdf>=6.0.0",
     "python-docx>=0.8.11",
     
     # Web framework

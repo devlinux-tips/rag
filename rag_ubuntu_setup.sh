@@ -162,6 +162,7 @@ fi
 # Create basic project structure if not exists
 echo "📁 Checking project structure..."
 mkdir -p services/rag-service/data/vectordb
+mkdir -p services/rag-service/data/surrealdb
 mkdir -p services/web-api
 mkdir -p services/user-frontend
 mkdir -p docs
@@ -174,8 +175,19 @@ echo "📝 Creating development scripts..."
 # SurrealDB start script
 cat > scripts/start_surrealdb.sh << 'EOF'
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DATA_DIR="$PROJECT_ROOT/services/rag-service/data/surrealdb"
+
 echo "🗄️  Starting SurrealDB..."
-surreal start --log trace --user root --pass root file://data/surrealdb
+mkdir -p "$DATA_DIR"
+
+surreal start \
+  --log trace \
+  --user root \
+  --pass root \
+  --bind 127.0.0.1:8000 \
+  "surrealkv://$DATA_DIR/rag.db"
 EOF
 
 # RAG development server script

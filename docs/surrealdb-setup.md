@@ -35,6 +35,7 @@ The vector embeddings are stored separately in ChromaDB, while SurrealDB handles
 - **Disk Space**: 100MB for SurrealDB + space for your data
 - **Network**: Port 8000 (default) available
 - **Optional**: Docker and Docker Compose
+- **SurrealDB Version**: 2.3.9 or newer (scripts rely on updated CLI flags and the `surrealkv://` storage engine)
 
 ## Installation
 
@@ -79,7 +80,7 @@ brew install surrealdb/tap/surreal
 
 # Or manually
 docker run -p 8000:8000 surrealdb/surrealdb:latest start \
-  --user root --pass root file:///data/database.db
+  --user root --pass root surrealkv:///data/database.db
 ```
 
 #### Option 4: Manual Binary Download
@@ -123,8 +124,12 @@ Use the setup script for complete database initialization:
 
 **File-based (Development):**
 ```bash
-surreal start --user root --pass root --bind 0.0.0.0:8000 file://./data/surrealdb/rag.db
+mkdir -p services/rag-service/data/surrealdb
+surreal start --user root --pass root --bind 0.0.0.0:8000 \
+  surrealkv://./services/rag-service/data/surrealdb/rag.db
 ```
+
+> **Compatibility note:** SurrealDB builds prior to 2.3.9 expect the deprecated `file://` engine and positional query arguments. If you are pinned to an older binary (e.g., 2.3.7 on Ubuntu 24.04), keep the legacy scripts or adapt the commands until you can upgrade.
 
 **In-memory (Testing):**
 ```bash
@@ -650,7 +655,7 @@ surreal import --conn ws://127.0.0.1:8000 \
 
 ```bash
 # Enable debug logging
-surreal start --log debug --bind 0.0.0.0:8000 file://./debug.db
+surreal start --log debug --bind 0.0.0.0:8000 surrealkv://./debug.db
 
 # Monitor logs
 tail -f surrealdb.log | grep ERROR

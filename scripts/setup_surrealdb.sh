@@ -6,8 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SCHEMA_FILE="$PROJECT_ROOT/services/rag-service/schema/multitenant_schema.surql"
-DATA_DIR="$PROJECT_ROOT/data/surrealdb"
+SERVICE_ROOT="$PROJECT_ROOT/services/rag-service"
+SCHEMA_FILE="$SERVICE_ROOT/schema/multitenant_schema.surql"
+DATA_DIR="$SERVICE_ROOT/data/surrealdb"
 
 # Default connection settings
 DEFAULT_HOST="127.0.0.1"
@@ -157,6 +158,11 @@ validate_prerequisites() {
         exit 1
     fi
 
+    if ! command_exists python3; then
+        print_error "python3 is required for setup"
+        exit 1
+    fi
+
     # Check if schema file exists
     if [[ ! -f "$SCHEMA_FILE" ]]; then
         print_error "Schema file not found: $SCHEMA_FILE"
@@ -196,7 +202,7 @@ start_file_server() {
         --user "$USER" \
         --pass "$PASS" \
         --bind "0.0.0.0:$PORT" \
-        "file://$db_file" &
+        "surrealkv://$db_file" &
 
     local pid=$!
     echo "$pid" > "$pid_file"
@@ -210,7 +216,8 @@ start_file_server() {
             --pass "$PASS" \
             --ns "$NAMESPACE" \
             --db "$DATABASE" \
-            "INFO KV;" >/dev/null 2>&1; then
+            --hide-welcome \
+            --json <<<"INFO FOR KV;" >/dev/null 2>&1; then
             print_success "SurrealDB started successfully (PID: $pid)"
             return 0
         fi
@@ -250,7 +257,8 @@ start_docker_container() {
                 --pass "$PASS" \
                 --ns "$NAMESPACE" \
                 --db "$DATABASE" \
-                "INFO KV;" >/dev/null 2>&1; then
+                --hide-welcome \
+                --json <<<"INFO FOR KV;" >/dev/null 2>&1; then
                 print_success "Docker container is ready"
                 return 0
             fi
@@ -282,7 +290,8 @@ test_connection() {
         --pass "$PASS" \
         --ns "$NAMESPACE" \
         --db "$DATABASE" \
-        "INFO KV;" >/dev/null 2>&1; then
+        --hide-welcome \
+        --json <<<"INFO FOR KV;" >/dev/null 2>&1; then
         print_success "Database connection successful"
         return 0
     else
@@ -322,7 +331,7 @@ reset_database() {
             --pass "$PASS" \
             --ns "$NAMESPACE" \
             --db "$DATABASE" \
-            "REMOVE DATABASE $DATABASE;" || true
+            --hide-welcome <<<"REMOVE DATABASE $DATABASE;" || true
 
         print_success "Database reset completed"
     fi
@@ -339,13 +348,14 @@ load_schema() {
         conn_string="ws://$HOST:$PORT"
     fi
 
-    if surreal import \
+    if surreal sql \
         --conn "$conn_string" \
         --user "$USER" \
         --pass "$PASS" \
         --ns "$NAMESPACE" \
         --db "$DATABASE" \
-        "$SCHEMA_FILE"; then
+        --hide-welcome \
+        --multi <"$SCHEMA_FILE"; then
         print_success "Schema loaded successfully"
     else
         print_error "Failed to load schema"
@@ -371,10 +381,10 @@ verify_schema() {
         --pass "$PASS" \
         --ns "$NAMESPACE" \
         --db "$DATABASE" \
-        --pretty \
-        "INFO FOR DATABASE;" 2>/dev/null | grep -o 'TABLE [a-zA-Z_]*' | wc -l || echo "0")
+        --hide-welcome \
+        --json <<<"INFO FOR DATABASE;" 2>/dev/null | python3 -c 'import json,sys; data=json.load(sys.stdin); print(len(data[0].get("tables", {})))' 2>/dev/null || echo "0")
 
-    if [[ "$tables" -ge 6 ]]; then
+    if [[ "$tables" =~ ^[0-9]+$ ]] && [[ "$tables" -ge 6 ]]; then
         print_success "Schema verification successful ($tables tables found)"
 
         # Check if initial data exists
@@ -384,7 +394,8 @@ verify_schema() {
             --pass "$PASS" \
             --ns "$NAMESPACE" \
             --db "$DATABASE" \
-            "SELECT count() FROM tenant;" 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "0")
+            --hide-welcome \
+            --json <<<"SELECT count() AS count FROM tenant;" 2>/dev/null | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[0][0].get("count", 0) if data and data[0] else 0)' 2>/dev/null || echo "0")
 
         if [[ "$tenant_count" -gt 0 ]]; then
             print_success "Initial data found ($tenant_count tenants)"

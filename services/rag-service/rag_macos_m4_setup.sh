@@ -118,6 +118,9 @@ print_m4 "Using uv's parallel installation for M4 Pro speed..."
 print_status "Installing PyTorch with MPS (Apple Silicon GPU) support..."
 uv add torch torchvision torchaudio
 
+/Users/x/.local/
+  share/uv/python/cpython-3.13.7-macos-aarch64-none/bin/python3 -m venv .venv
+
 # Install the requirements
 if [ -f "requirements.txt" ]; then
     print_status "Installing from requirements.txt..."

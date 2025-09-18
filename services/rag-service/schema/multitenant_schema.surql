@@ -58,7 +58,7 @@ DEFINE FIELD updated_at ON TABLE user TYPE datetime DEFAULT time::now();
 
 -- User-Tenant relationship indexes
 DEFINE INDEX user_email_idx ON TABLE user COLUMNS email UNIQUE;
-DEFINE INDEX user_username_tenant_idx ON TABLE user COLUMNS [username, tenant_id] UNIQUE;
+DEFINE INDEX user_username_tenant_idx ON TABLE user COLUMNS username, tenant_id UNIQUE;
 DEFINE INDEX user_tenant_idx ON TABLE user COLUMNS tenant_id;
 DEFINE INDEX user_status_idx ON TABLE user COLUMNS status;
 
@@ -99,9 +99,9 @@ DEFINE FIELD updated_at ON TABLE document TYPE datetime DEFAULT time::now();
 -- Document indexes for efficient querying
 DEFINE INDEX document_tenant_idx ON TABLE document COLUMNS tenant_id;
 DEFINE INDEX document_user_idx ON TABLE document COLUMNS user_id;
-DEFINE INDEX document_scope_idx ON TABLE document COLUMNS [tenant_id, scope];
-DEFINE INDEX document_language_idx ON TABLE document COLUMNS [tenant_id, language];
-DEFINE FIELD document_status_idx ON TABLE document COLUMNS [tenant_id, status];
+DEFINE INDEX document_scope_idx ON TABLE document COLUMNS tenant_id, scope;
+DEFINE INDEX document_language_idx ON TABLE document COLUMNS tenant_id, language;
+DEFINE INDEX document_status_idx ON TABLE document COLUMNS tenant_id, status;
 DEFINE INDEX document_categories_idx ON TABLE document COLUMNS categories;
 DEFINE INDEX document_created_idx ON TABLE document COLUMNS created_at;
 DEFINE INDEX document_hash_idx ON TABLE document COLUMNS content_hash;
@@ -134,10 +134,10 @@ DEFINE FIELD created_at ON TABLE chunk TYPE datetime DEFAULT time::now();
 
 -- Chunk indexes for retrieval and management
 DEFINE INDEX chunk_document_idx ON TABLE chunk COLUMNS document_id;
-DEFINE INDEX chunk_tenant_scope_idx ON TABLE chunk COLUMNS [tenant_id, scope];
+DEFINE INDEX chunk_tenant_scope_idx ON TABLE chunk COLUMNS tenant_id, scope;
 DEFINE INDEX chunk_collection_idx ON TABLE chunk COLUMNS vector_collection;
 DEFINE INDEX chunk_categories_idx ON TABLE chunk COLUMNS categories;
-DEFINE INDEX chunk_language_idx ON TABLE chunk COLUMNS [tenant_id, language];
+DEFINE INDEX chunk_language_idx ON TABLE chunk COLUMNS tenant_id, language;
 
 -- ===============================================
 -- SEARCH QUERIES AND ANALYTICS
@@ -168,7 +168,7 @@ DEFINE FIELD created_at ON TABLE search_query TYPE datetime DEFAULT time::now();
 DEFINE INDEX search_tenant_idx ON TABLE search_query COLUMNS tenant_id;
 DEFINE INDEX search_user_idx ON TABLE search_query COLUMNS user_id;
 DEFINE INDEX search_category_idx ON TABLE search_query COLUMNS primary_category;
-DEFINE INDEX search_language_idx ON TABLE search_query COLUMNS [tenant_id, query_language];
+DEFINE INDEX search_language_idx ON TABLE search_query COLUMNS tenant_id, query_language;
 DEFINE INDEX search_created_idx ON TABLE search_query COLUMNS created_at;
 
 -- ===============================================
@@ -197,7 +197,7 @@ DEFINE FIELD updated_at ON TABLE categorization_template TYPE datetime DEFAULT t
 
 -- Template indexes
 DEFINE INDEX template_tenant_idx ON TABLE categorization_template COLUMNS tenant_id;
-DEFINE INDEX template_category_idx ON TABLE categorization_template COLUMNS [category, language];
+DEFINE INDEX template_category_idx ON TABLE categorization_template COLUMNS category, language;
 DEFINE INDEX template_system_idx ON TABLE categorization_template COLUMNS is_system_default;
 DEFINE INDEX template_active_idx ON TABLE categorization_template COLUMNS is_active;
 
@@ -220,7 +220,7 @@ DEFINE FIELD created_at ON TABLE system_config TYPE datetime DEFAULT time::now()
 DEFINE FIELD updated_at ON TABLE system_config TYPE datetime DEFAULT time::now();
 
 -- Config indexes
-DEFINE INDEX config_tenant_key_idx ON TABLE system_config COLUMNS [tenant_id, config_key] UNIQUE;
+DEFINE INDEX config_tenant_key_idx ON TABLE system_config COLUMNS tenant_id, config_key UNIQUE;
 DEFINE INDEX config_system_idx ON TABLE system_config COLUMNS is_system_config;
 
 -- ===============================================

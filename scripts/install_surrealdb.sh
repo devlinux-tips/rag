@@ -8,7 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SURREALDB_VERSION="2.1.0"
 INSTALL_DIR="/usr/local/bin"
-DATA_DIR="$PROJECT_ROOT/data/surrealdb"
+SERVICE_ROOT="$PROJECT_ROOT/services/rag-service"
+DATA_DIR="$SERVICE_ROOT/data/surrealdb"
 
 # Colors for output
 RED='\033[0;31m'
@@ -182,16 +183,16 @@ services:
       - --log=info
       - --user=root
       - --pass=root
-      - file:///data/database.db
+      - surrealkv:///data/database.db
     ports:
       - "8000:8000"
     volumes:
-      - ./data/surrealdb:/data
+      - ./services/rag-service/data/surrealdb:/data
     environment:
       - SURREAL_LOG=info
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "surreal", "sql", "--conn", "http://localhost:8000", "--user", "root", "--pass", "root", "--ns", "test", "--db", "test", "--pretty", "INFO DB;"]
+      test: ["CMD", "sh", "-c", "printf 'INFO FOR KV;' | surreal sql --conn http://localhost:8000 --user root --pass root --ns rag --db multitenant --hide-welcome --json >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
