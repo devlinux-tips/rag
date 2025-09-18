@@ -90,20 +90,36 @@ class ConfigLoader:
             config_path = self.config_dir / "config.toml"
 
         if not config_path.exists():
+            available_files = [f.name for f in self.config_dir.glob("*.toml")]
+            logger.error(
+                f"Configuration file not found: {config_path}",
+                extra={
+                    "config_name": config_name,
+                    "expected_path": str(config_path),
+                    "available_files": available_files,
+                },
+            )
             raise ConfigError(f"Configuration file not found: {config_path}")
 
         try:
             with open(config_path, "rb") as f:
                 config_data = tomllib.load(f)
 
-            # Cache the loaded configuration
             self._cache[config_name] = config_data
-            logger.info(f"Loaded configuration: {config_name} from {config_path}")
+            logger.info(f"Loaded configuration: {config_name} from {config_path}, sections: {list(config_data.keys())}")
             return config_data
 
         except tomllib.TOMLDecodeError as e:
+            logger.error(
+                f"Invalid TOML syntax in {config_path}: {e}",
+                extra={"config_path": str(config_path), "toml_error": str(e)},
+            )
             raise ConfigError(f"Invalid TOML in {config_path}: {e}") from e
         except Exception as e:
+            logger.error(
+                f"Failed to load {config_path}: {e}",
+                extra={"config_path": str(config_path), "error_type": type(e).__name__},
+            )
             raise ConfigError(f"Failed to load {config_path}: {e}") from e
 
     def get_section(self, config_name: str, section: str) -> dict[str, Any]:
@@ -583,3 +599,40 @@ def get_system_config() -> dict[str, Any]:
     """Get system configuration."""
     main_config = load_config("config")
     return cast(dict[str, Any], main_config["system"])
+
+
+def get_logging_config() -> dict[str, Any]:
+    """Get logging configuration with fallback defaults."""
+    try:
+        config = get_shared_config()
+        logging_config = config["logging"]
+
+        # Set sensible defaults
+        if "backends" not in logging_config:
+            logging_config["backends"] = ["console"]
+
+        if "level" not in logging_config:
+            logging_config["level"] = "INFO"
+
+        # Elasticsearch defaults
+        if "elasticsearch" not in logging_config:
+            logging_config["elasticsearch"] = {
+                "hosts": ["localhost:9200"],
+                "index_prefix": "rag-logs",
+                "timeout": 30,
+                "verify_certs": False,
+            }
+
+        return logging_config
+    except Exception:
+        # Fallback to console-only logging
+        return {
+            "backends": ["console"],
+            "level": "INFO",
+            "elasticsearch": {
+                "hosts": ["localhost:9200"],
+                "index_prefix": "rag-logs",
+                "timeout": 30,
+                "verify_certs": False,
+            },
+        }

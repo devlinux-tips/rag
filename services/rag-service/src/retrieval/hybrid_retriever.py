@@ -11,6 +11,13 @@ from typing import Any, Protocol
 import numpy as np
 
 from ..utils.config_models import HybridRetrievalConfig
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_performance_metric,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,11 @@ def normalize_text_for_bm25(text: str, stop_words: set, min_token_length: int = 
     Raises:
         ValueError: If inputs are invalid
     """
+    system_logger = get_system_logger()
+    system_logger.trace(
+        "bm25_normalizer", "normalize_text", f"Processing text[{len(text)}] with {len(stop_words)} stop words"
+    )
+
     if not isinstance(text, str):
         raise ValueError(f"Text must be string, got {type(text)}")
 
@@ -43,20 +55,22 @@ def normalize_text_for_bm25(text: str, stop_words: set, min_token_length: int = 
     if not isinstance(min_token_length, int) or min_token_length < 1:
         raise ValueError(f"Min token length must be positive integer, got {min_token_length}")
 
-    # Convert to lowercase
     processed_text = text.lower()
+    system_logger.trace("bm25_normalizer", "normalize_text", "Converted to lowercase")
 
-    # Remove punctuation, keep alphanumeric and Croatian diacritics
     processed_text = re.sub(r"[^\w\sčćšđžČĆŠĐŽ]", " ", processed_text)
+    system_logger.trace("bm25_normalizer", "normalize_text", "Removed punctuation")
 
-    # Split into tokens
     tokens = processed_text.split()
+    system_logger.trace("bm25_normalizer", "normalize_text", f"Split into {len(tokens)} tokens")
 
-    # Filter tokens
     filtered_tokens = [
         token for token in tokens if len(token) >= min_token_length and not token.isdigit() and token not in stop_words
     ]
 
+    log_data_transformation(
+        "bm25_normalizer", "filter_tokens", f"tokens[{len(tokens)}]", f"filtered[{len(filtered_tokens)}]"
+    )
     return filtered_tokens
 
 
@@ -416,20 +430,25 @@ class BM25Scorer:
             language: Language code
             config: Hybrid configuration
         """
+        system_logger = get_system_logger()
+        log_component_start("bm25_scorer", "init", language=language)
+
         self.stop_words_provider = stop_words_provider
         self.language = language
         self.config = config
         self.logger = logging.getLogger(__name__)
 
-        # Get stop words (fail-fast approach)
+        system_logger.debug("bm25_scorer", "init", f"Loading stop words for {language}")
         self.stop_words = stop_words_provider.get_stop_words(language)
+        system_logger.debug("bm25_scorer", "init", f"Loaded {len(self.stop_words)} stop words for {language}")
         self.logger.debug(f"Loaded {len(self.stop_words)} stop words for {language}")
 
-        # Initialize corpus data
         self.documents: list[str] = []
         self.tokenized_docs: list[list[str]] = []
         self.corpus_stats: dict[str, float] = {}
         self.is_indexed = False
+
+        log_component_end("bm25_scorer", "init", "BM25 scorer initialized", stop_words_count=len(self.stop_words))
 
     def index_documents(self, documents: list[str]) -> None:
         """
@@ -441,6 +460,9 @@ class BM25Scorer:
         Raises:
             ValueError: If documents is invalid
         """
+        system_logger = get_system_logger()
+        log_component_start("bm25_scorer", "index_documents", document_count=len(documents))
+
         if not isinstance(documents, list):
             raise ValueError(f"Documents must be list, got {type(documents)}")
 
@@ -450,18 +472,31 @@ class BM25Scorer:
         try:
             self.documents = documents
 
-            # Tokenize all documents
+            system_logger.debug("bm25_scorer", "index_documents", "Tokenizing all documents")
             self.tokenized_docs = [
                 normalize_text_for_bm25(doc, self.stop_words, self.config.min_token_length) for doc in documents
             ]
+            log_data_transformation(
+                "bm25_scorer", "tokenize_docs", f"documents[{len(documents)}]", f"tokenized[{len(self.tokenized_docs)}]"
+            )
 
-            # Calculate corpus statistics
+            system_logger.debug("bm25_scorer", "index_documents", "Calculating corpus statistics")
             self.corpus_stats = calculate_corpus_statistics(self.tokenized_docs)
+            log_performance_metric("bm25_scorer", "index_documents", "avgdl", self.corpus_stats["avgdl"])
+            log_performance_metric("bm25_scorer", "index_documents", "total_tokens", self.corpus_stats["total_tokens"])
 
             self.is_indexed = True
+            log_component_end(
+                "bm25_scorer",
+                "index_documents",
+                f"Indexed {len(documents)} documents",
+                avgdl=self.corpus_stats["avgdl"],
+                total_tokens=self.corpus_stats["total_tokens"],
+            )
             self.logger.debug(f"Indexed {len(documents)} documents for BM25")
 
         except Exception as e:
+            system_logger.error("bm25_scorer", "index_documents", f"Failed to index documents: {e}")
             self.logger.error(f"Failed to index documents: {e}")
             raise
 
@@ -567,6 +602,11 @@ class HybridRetriever:
         Raises:
             ValueError: If inputs are invalid or retriever not ready
         """
+        system_logger = get_system_logger()
+        log_component_start(
+            "hybrid_retriever", "retrieve", query_length=len(query), dense_results_count=len(dense_results), top_k=top_k
+        )
+
         if not isinstance(query, str):
             raise ValueError(f"Query must be string, got {type(query)}")
 
@@ -580,29 +620,29 @@ class HybridRetriever:
             raise ValueError("Retriever not ready. Call index_documents() first.")
 
         try:
-            # Get BM25 scores for all documents
+            system_logger.debug("hybrid_retriever", "retrieve", "Getting BM25 scores for query")
             bm25_scores = self.bm25_scorer.get_scores(query)
+            log_performance_metric("hybrid_retriever", "retrieve", "bm25_scores_count", len(bm25_scores))
 
-            # Normalize BM25 scores if requested
             if self.config.normalize_scores:
+                system_logger.debug("hybrid_retriever", "retrieve", "Normalizing BM25 scores")
                 bm25_scores = normalize_scores(bm25_scores)
 
-            # Create content to BM25 score mapping
             content_to_bm25 = {doc: score for doc, score in zip(self.documents, bm25_scores, strict=False)}
+            system_logger.debug(
+                "hybrid_retriever", "retrieve", f"Created content mapping for {len(content_to_bm25)} documents"
+            )
 
-            # Process dense results and combine with BM25
             hybrid_results = []
 
-            for dense_result in dense_results:
+            for i, dense_result in enumerate(dense_results):
                 content = dense_result.content
                 dense_score = dense_result.score
 
-                # Get BM25 score for this content
                 if content not in content_to_bm25:
                     raise ValueError(f"Content not indexed in BM25 scorer: {content[:100]}...")
                 bm25_score = content_to_bm25[content]
 
-                # Calculate hybrid score
                 hybrid_score = combine_hybrid_scores(
                     dense_scores=[dense_score],
                     sparse_scores=[bm25_score],
@@ -610,7 +650,12 @@ class HybridRetriever:
                     sparse_weight=self.config.sparse_weight,
                 )[0]
 
-                # Apply minimum score threshold
+                system_logger.trace(
+                    "hybrid_retriever",
+                    "retrieve",
+                    f"Result {i}: dense={dense_score:.4f}, sparse={bm25_score:.4f}, hybrid={hybrid_score:.4f}",
+                )
+
                 if hybrid_score >= self.config.min_score_threshold:
                     hybrid_results.append(
                         HybridResult(
@@ -622,18 +667,34 @@ class HybridRetriever:
                         )
                     )
 
-            # Rank by hybrid score
+            log_data_transformation(
+                "hybrid_retriever",
+                "score_combination",
+                f"dense_results[{len(dense_results)}]",
+                f"hybrid_results[{len(hybrid_results)}]",
+            )
+
             ranked_results = rank_results_by_score(
                 [{"result": r, "score": r.score} for r in hybrid_results], score_key="score", descending=True
             )
 
-            # Extract results and apply top_k limit
             final_results = [item["result"] for item in ranked_results[:top_k]]
+            log_data_transformation(
+                "hybrid_retriever", "apply_top_k", f"ranked[{len(ranked_results)}]", f"final[{len(final_results)}]"
+            )
 
+            log_component_end(
+                "hybrid_retriever",
+                "retrieve",
+                f"Retrieved {len(final_results)} hybrid results",
+                final_count=len(final_results),
+                threshold_filtered=len(hybrid_results),
+            )
             self.logger.debug(f"Retrieved {len(final_results)} hybrid results")
             return final_results
 
         except Exception as e:
+            system_logger.error("hybrid_retriever", "retrieve", f"Failed to perform hybrid retrieval: {e}")
             self.logger.error(f"Failed to perform hybrid retrieval: {e}")
             raise
 

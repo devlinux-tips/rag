@@ -10,11 +10,10 @@ Author: RAG System Architecture
 Status: Production Implementation
 """
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from .logging_factory import get_system_logger, log_component_end, log_decision_point, log_error_context
 
 
 class ConfigurationError(Exception):
@@ -135,6 +134,12 @@ class ConfigValidator:
         "ollama.num_predict": int,
         "ollama.repeat_penalty": (int, float),
         "ollama.seed": int,
+        "ollama.api_key": str,
+        "ollama.response_format": str,
+        "ollama.endpoints.health_check": str,
+        "ollama.endpoints.chat_completions": str,
+        "ollama.endpoints.models_list": str,
+        "ollama.endpoints.streaming_chat": str,
         # Processing configuration
         "processing.sentence_chunk_overlap": int,
         "processing.preserve_paragraphs": bool,
@@ -395,7 +400,9 @@ class ConfigValidator:
         Raises:
             ConfigurationError: If any validation fails, with detailed error information
         """
-        logger.info("🔍 Starting comprehensive configuration validation...")
+        get_system_logger().info(
+            "config_validator", "validate_all_configs", "🔍 Starting comprehensive configuration validation..."
+        )
 
         # Validate main configuration
         main_result = cls._validate_config_section(
@@ -403,7 +410,9 @@ class ConfigValidator:
         )
 
         if not main_result.is_valid:
-            logger.error(f"❌ Main configuration validation failed: {main_result}")
+            get_system_logger().error(
+                "config_validator", "validate_all_configs", f"❌ Main configuration validation failed: {main_result}"
+            )
             raise ConfigurationError(
                 f"Invalid main configuration in {main_result.config_file}:\n"
                 f"Missing keys: {main_result.missing_keys}\n"
@@ -411,16 +420,35 @@ class ConfigValidator:
                 f"Please ensure all required keys exist in config/config.toml"
             )
 
-        logger.info("✅ Main configuration validation passed")
+        get_system_logger().info("config_validator", "validate_all_configs", "✅ Main configuration validation passed")
 
-        # Validate each language configuration
         for lang_code, lang_config in language_configs.items():
+            get_system_logger().trace(
+                "config_validator",
+                "validate_language_config",
+                f"Validating {lang_code}: {len(cls.LANGUAGE_SCHEMA)} required keys",
+            )
             lang_result = cls._validate_config_section(
                 config=lang_config, schema=cls.LANGUAGE_SCHEMA, config_file=f"config/{lang_code}.toml"
             )
 
             if not lang_result.is_valid:
-                logger.error(f"❌ Language configuration validation failed: {lang_result}")
+                get_system_logger().error(
+                    "config_validator",
+                    "validate_all_configs",
+                    f"❌ Language configuration validation failed: {lang_result}",
+                )
+                log_error_context(
+                    "config_validator",
+                    "validate_language_config",
+                    ConfigurationError(f"Language {lang_code} validation failed"),
+                    {
+                        "language": lang_code,
+                        "missing_keys": lang_result.missing_keys,
+                        "invalid_types": lang_result.invalid_types,
+                        "config_file": lang_result.config_file,
+                    },
+                )
                 raise ConfigurationError(
                     f"Invalid language configuration in {lang_result.config_file}:\n"
                     f"Missing keys: {lang_result.missing_keys}\n"
@@ -428,16 +456,34 @@ class ConfigValidator:
                     f"Please ensure all required keys exist in config/{lang_code}.toml"
                 )
 
-        logger.info(f"✅ All language configurations validated: {list(language_configs.keys())}")
+        get_system_logger().info(
+            "config_validator",
+            "validate_all_configs",
+            f"✅ All language configurations validated: {list(language_configs.keys())}",
+        )
 
-        # Cross-config consistency validation (only for current language if specified)
+        get_system_logger().debug("config_validator", "cross_config_validation", "Starting consistency checks")
         cls._validate_cross_config_consistency(main_config, language_configs, current_language)
 
-        # Validate ranking features consistency between languages (only if multiple languages being validated)
         if current_language is None and len(language_configs) > 1:
+            get_system_logger().debug(
+                "config_validator",
+                "ranking_features_validation",
+                f"Validating consistency across {len(language_configs)} languages",
+            )
             cls._validate_ranking_features_consistency(language_configs)
 
-        logger.info("🎯 Configuration validation completed successfully - all keys exist and are valid")
+        log_component_end(
+            "config_validator",
+            "validate_startup_config",
+            f"Validation complete: {len(language_configs)} languages, all keys validated",
+            validated_languages=list(language_configs.keys()),
+        )
+        get_system_logger().info(
+            "config_validator",
+            "validate_all_configs",
+            "🎯 Configuration validation completed successfully - all keys exist and are valid",
+        )
 
     @classmethod
     def _validate_config_section(
@@ -506,28 +552,51 @@ class ConfigValidator:
         Raises:
             ConfigurationError: If cross-config inconsistencies found
         """
-        # If validating only current language, just check it exists
         if current_language is not None:
+            get_system_logger().trace(
+                "config_validator", "validate_current_language", f"Checking language: {current_language}"
+            )
             supported_languages = main_config["languages"]["supported"]
+
             if current_language not in supported_languages:
-                raise ConfigurationError(
-                    f"Current language '{current_language}' not declared in config.toml supported languages: {supported_languages}"
+                error_msg = f"Current language '{current_language}' not declared in config.toml supported languages: {supported_languages}"
+                log_error_context(
+                    "config_validator",
+                    "check_supported_language",
+                    ConfigurationError(error_msg),
+                    {"current_language": current_language, "supported_languages": supported_languages},
                 )
+                raise ConfigurationError(error_msg)
 
             if current_language not in language_configs:
-                raise ConfigurationError(
-                    f"Current language '{current_language}' config file not found. Expected: config/{current_language}.toml"
+                error_msg = f"Current language '{current_language}' config file not found. Expected: config/{current_language}.toml"
+                log_error_context(
+                    "config_validator",
+                    "check_language_config_exists",
+                    ConfigurationError(error_msg),
+                    {"current_language": current_language, "available_configs": list(language_configs.keys())},
                 )
+                raise ConfigurationError(error_msg)
 
-            # For single language validation, only validate the current language config
             lang_config = language_configs[current_language]
             config_lang_code = lang_config["language"]["code"]
             if config_lang_code != current_language:
-                raise ConfigurationError(
-                    f"Language code mismatch in {current_language}.toml: "
-                    f"filename says '{current_language}' but config says '{config_lang_code}'"
+                error_msg = f"Language code mismatch in {current_language}.toml: filename says '{current_language}' but config says '{config_lang_code}'"
+                log_error_context(
+                    "config_validator",
+                    "check_language_code_consistency",
+                    ConfigurationError(error_msg),
+                    {"filename_language": current_language, "config_language": config_lang_code},
                 )
-            return  # Exit early for single language validation
+                raise ConfigurationError(error_msg)
+
+            log_decision_point(
+                "config_validator",
+                "single_language_validation",
+                f"current_language={current_language}",
+                "skipping multi-language validation",
+            )
+            return
 
         # Full validation when current_language is None
         # Validate supported languages match available language configs

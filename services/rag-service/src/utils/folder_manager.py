@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ..models.multitenant_models import DocumentScope, Tenant, TenantUserContext, User
+from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
 
 # ================================
 # DATA CLASSES & CONFIGURATION
@@ -144,19 +145,34 @@ class LoggerProvider(Protocol):
 
 def render_path_template(template: str, **kwargs) -> str:
     """Pure function to render a path template with given parameters."""
-    return template.format(**kwargs)
+    logger = get_system_logger()
+    logger.trace("folder_template", "render_path_template", f"Rendering template: {template}", metadata=kwargs)
+
+    result = template.format(**kwargs)
+    logger.trace("folder_template", "render_path_template", f"Rendered result: {result}")
+    return result
 
 
 def build_template_params(
     tenant: Tenant, user: User | None = None, language: str | None = None, config: FolderConfig | None = None
 ) -> dict[str, str]:
     """Pure function to build template parameters for path rendering."""
+    logger = get_system_logger()
+    logger.trace(
+        "folder_template",
+        "build_template_params",
+        "Building template parameters",
+        metadata={"tenant_slug": tenant.slug, "user": user.username if user else None, "language": language},
+    )
+
     params = {"tenant_slug": tenant.slug, "language": language or "default"}
 
     if user:
+        logger.trace("folder_template", "build_template_params", f"Adding user parameter: {user.username}")
         params["user_id"] = user.username
 
     if config:
+        logger.trace("folder_template", "build_template_params", "Adding config-based parameters")
         params.update(
             {
                 "data_base_dir": config.data_base_dir,
@@ -165,6 +181,7 @@ def build_template_params(
             }
         )
 
+    logger.trace("folder_template", "build_template_params", f"Built parameters: {params}")
     return params
 
 
@@ -172,26 +189,42 @@ def calculate_folder_structure(
     tenant: Tenant, user: User | None, language: str | None, config: FolderConfig
 ) -> FolderPaths:
     """Pure function to calculate complete folder structure."""
+    logger = get_system_logger()
+    log_component_start(
+        "folder_calculator",
+        "calculate_folder_structure",
+        tenant_slug=tenant.slug,
+        user=user.username if user else None,
+        language=language,
+    )
+
     params = build_template_params(tenant, user, language, config)
 
     # Render tenant root
+    logger.debug("folder_calculator", "calculate_folder_structure", "Rendering tenant root path")
     tenant_root_str = render_path_template(config.tenant_root_template, **params)
     tenant_root = Path(tenant_root_str)
 
     # Build folder paths structure
     paths = FolderPaths(tenant_root=tenant_root)
+    logger.debug("folder_calculator", "calculate_folder_structure", f"Tenant root: {tenant_root}")
 
     # Core tenant folders (direct construction)
+    logger.trace("folder_calculator", "calculate_folder_structure", "Creating core tenant folders")
     paths.tenant_cache = tenant_root / "cache"
     paths.tenant_exports = tenant_root / "exports"
     paths.tenant_logs = tenant_root / "logs"
 
     # ChromaDB path using template
+    logger.debug("folder_calculator", "calculate_folder_structure", "Calculating ChromaDB path")
     chromadb_str = render_path_template(config.chromadb_path_template, **params)
     paths.tenant_chromadb = Path(chromadb_str)
 
     # Language-specific tenant folders
     if language:
+        logger.debug(
+            "folder_calculator", "calculate_folder_structure", f"Creating language-specific folders for {language}"
+        )
         tenant_shared_str = render_path_template(config.tenant_shared_template, **params)
         paths.tenant_shared_documents_lang = Path(tenant_shared_str)
 
@@ -200,6 +233,9 @@ def calculate_folder_structure(
 
     # User-specific folders
     if user:
+        logger.debug(
+            "folder_calculator", "calculate_folder_structure", f"Creating user-specific folders for {user.username}"
+        )
         user_root = tenant_root / "users" / user.username
         paths.user_root = user_root
         paths.user_exports = user_root / "exports"
@@ -208,6 +244,9 @@ def calculate_folder_structure(
 
         # Language-specific user folders
         if language:
+            logger.trace(
+                "folder_calculator", "calculate_folder_structure", f"Adding user language folders for {language}"
+            )
             user_documents_str = render_path_template(config.user_documents_template, **params)
             paths.user_documents_lang = Path(user_documents_str)
 
@@ -216,6 +255,7 @@ def calculate_folder_structure(
 
     # Model folders
     if language:
+        logger.debug("folder_calculator", "calculate_folder_structure", f"Creating model folders for {language}")
         models_str = render_path_template(config.models_path_template, **params)
         models_path = Path(models_str)
         paths.tenant_models_lang = models_path
@@ -223,10 +263,13 @@ def calculate_folder_structure(
         paths.tenant_models_generation = models_path / "generation"
 
     # Tenant models root (no language)
+    logger.trace("folder_calculator", "calculate_folder_structure", "Creating tenant models root")
     models_root = Path(config.models_base_dir) / tenant.slug
     paths.tenant_models = models_root
     paths.tenant_models_shared = models_root / "shared"
 
+    folder_count = len([p for p in get_all_folder_paths(paths) if p is not None])
+    log_component_end("folder_calculator", "calculate_folder_structure", f"Calculated {folder_count} folder paths")
     return paths
 
 
@@ -234,13 +277,29 @@ def calculate_document_path(
     context: TenantUserContext, language: str, scope: DocumentScope, config: FolderConfig
 ) -> Path:
     """Pure function to calculate document storage path."""
+    logger = get_system_logger()
+    logger.debug(
+        "folder_calculator",
+        "calculate_document_path",
+        f"Calculating document path for scope: {scope.value}",
+        metadata={"tenant": context.tenant.slug, "user": context.user.username, "language": language},
+    )
+
     paths = calculate_folder_structure(context.tenant, context.user, language, config)
 
     if scope == DocumentScope.USER:
         assert paths.user_documents_lang is not None, "User documents path not configured"
+        logger.trace(
+            "folder_calculator", "calculate_document_path", f"User documents path: {paths.user_documents_lang}"
+        )
         return paths.user_documents_lang
     else:  # DocumentScope.TENANT
         assert paths.tenant_shared_documents_lang is not None, "Tenant documents path not configured"
+        logger.trace(
+            "folder_calculator",
+            "calculate_document_path",
+            f"Tenant documents path: {paths.tenant_shared_documents_lang}",
+        )
         return paths.tenant_shared_documents_lang
 
 
@@ -349,10 +408,16 @@ class _TenantFolderManager:
         logger_provider: LoggerProvider | None = None,
     ):
         """Initialize with injected dependencies."""
+        logger = get_system_logger()
+        log_component_start("folder_manager", "init", has_logger=logger_provider is not None)
+
         self._config_provider = config_provider
         self._filesystem_provider = filesystem_provider
         self._logger = logger_provider
         self._config: FolderConfig | None = None
+
+        logger.debug("folder_manager", "init", "TenantFolderManager initialized with dependency injection")
+        log_component_end("folder_manager", "init", "TenantFolderManager ready for operations")
 
     def _get_config(self) -> FolderConfig:
         """Get configuration with caching."""
@@ -391,6 +456,15 @@ class _TenantFolderManager:
         self, tenant: Tenant, user: User | None = None, languages: list[str] | None = None
     ) -> tuple[bool, list[str]]:
         """Create complete folder structure for tenant/user/languages."""
+        logger = get_system_logger()
+        log_component_start(
+            "folder_manager",
+            "create_tenant_folder_structure",
+            tenant_slug=tenant.slug,
+            user=user.username if user else None,
+            languages=languages,
+        )
+
         created_folders = []
 
         try:
@@ -399,32 +473,58 @@ class _TenantFolderManager:
             # Get supported languages if not provided
             if languages is None:
                 languages = tenant.get_supported_languages()
+                logger.debug(
+                    "folder_manager", "create_tenant_folder_structure", f"Using tenant default languages: {languages}"
+                )
 
-            self._log_info(
-                f"Creating folder structure for tenant: {tenant.slug}, user: {user.username if user else None}, languages: {languages}"
+            logger.info(
+                "folder_manager",
+                "create_tenant_folder_structure",
+                f"Creating folder structure for tenant: {tenant.slug}, user: {user.username if user else None}, languages: {languages}",
             )
 
             # Create base structure for each language
             for language in languages:
+                logger.debug("folder_manager", "create_tenant_folder_structure", f"Processing language: {language}")
                 paths = calculate_folder_structure(tenant, user, language, config)
 
                 # Create all paths
                 for folder_path in get_all_folder_paths(paths):
                     if self._filesystem_provider.create_folder(folder_path):
                         created_folders.append(str(folder_path))
-                        self._log_debug(f"Created folder: {folder_path}")
+                        logger.trace(
+                            "folder_manager", "create_tenant_folder_structure", f"Created folder: {folder_path}"
+                        )
 
             # Create system folders if needed
+            logger.debug("folder_manager", "create_tenant_folder_structure", "Creating system folders")
             system_paths = get_system_paths(config)
             for system_path in system_paths:
                 if self._filesystem_provider.create_folder(system_path):
                     created_folders.append(str(system_path))
+                    logger.trace(
+                        "folder_manager", "create_tenant_folder_structure", f"Created system folder: {system_path}"
+                    )
 
-            self._log_info(f"Successfully created {len(created_folders)} folders for tenant structure")
+            logger.info(
+                "folder_manager",
+                "create_tenant_folder_structure",
+                f"Successfully created {len(created_folders)} folders for tenant structure",
+            )
+            log_component_end(
+                "folder_manager",
+                "create_tenant_folder_structure",
+                f"Created {len(created_folders)} folders successfully",
+            )
             return True, created_folders
 
         except Exception as e:
-            self._log_error(f"Failed to create tenant folder structure: {e}")
+            log_error_context(
+                "folder_manager",
+                "create_tenant_folder_structure",
+                e,
+                {"tenant_slug": tenant.slug, "user": user.username if user else None, "languages": languages},
+            )
             raise
 
     def get_tenant_document_path(
@@ -497,33 +597,62 @@ class _TenantFolderManager:
 
     def cleanup_tenant_folders(self, tenant: Tenant, confirm: bool = False) -> bool:
         """Clean up all folders for a tenant. USE WITH CAUTION."""
+        logger = get_system_logger()
+        log_component_start("folder_manager", "cleanup_tenant_folders", tenant_slug=tenant.slug, confirm=confirm)
+
         if not confirm:
-            self._log_warning("Cleanup requires explicit confirmation. Set confirm=True")
+            logger.warning(
+                "folder_manager", "cleanup_tenant_folders", "Cleanup requires explicit confirmation. Set confirm=True"
+            )
             return False
 
         try:
             config = self._get_config()
             cleanup_paths = calculate_tenant_cleanup_paths(tenant, config)
+            logger.info(
+                "folder_manager",
+                "cleanup_tenant_folders",
+                f"Cleaning up {len(cleanup_paths)} paths for tenant {tenant.slug}",
+            )
 
             for path in cleanup_paths:
+                logger.debug("folder_manager", "cleanup_tenant_folders", f"Checking path: {path}")
                 if self._filesystem_provider.folder_exists(path):
+                    logger.warning("folder_manager", "cleanup_tenant_folders", f"Removing folder: {path}")
                     if self._filesystem_provider.remove_folder(path):
-                        self._log_info(f"Cleaned up folder: {path}")
+                        logger.info(
+                            "folder_manager", "cleanup_tenant_folders", f"Successfully cleaned up folder: {path}"
+                        )
                     else:
-                        self._log_error(f"Failed to clean up folder: {path}")
+                        logger.error("folder_manager", "cleanup_tenant_folders", f"Failed to clean up folder: {path}")
                         return False
+                else:
+                    logger.trace("folder_manager", "cleanup_tenant_folders", f"Path does not exist, skipping: {path}")
 
+            log_component_end(
+                "folder_manager", "cleanup_tenant_folders", f"Tenant {tenant.slug} cleanup completed successfully"
+            )
             return True
 
         except Exception as e:
-            self._log_error(f"Failed to cleanup tenant folders: {e}")
+            log_error_context(
+                "folder_manager", "cleanup_tenant_folders", e, {"tenant_slug": tenant.slug, "confirm": confirm}
+            )
             raise
 
     def get_folder_usage_stats(self, tenant: Tenant) -> TenantStats:
         """Get storage usage statistics for tenant."""
+        logger = get_system_logger()
+        log_component_start("folder_manager", "get_folder_usage_stats", tenant_slug=tenant.slug)
+
         try:
             config = self._get_config()
             stats_paths = calculate_usage_stats_paths(tenant, config)
+            logger.debug(
+                "folder_manager",
+                "get_folder_usage_stats",
+                f"Analyzing {len(stats_paths)} path types for tenant {tenant.slug}",
+            )
 
             stats = TenantStats(
                 documents=FolderStats(), processed=FolderStats(), models=FolderStats(), chromadb=FolderStats()
@@ -531,14 +660,32 @@ class _TenantFolderManager:
 
             # Get stats for each path type
             for stat_type, path in stats_paths.items():
+                logger.trace("folder_manager", "get_folder_usage_stats", f"Checking {stat_type} path: {path}")
                 if self._filesystem_provider.folder_exists(path):
                     folder_stats = self._filesystem_provider.get_folder_stats(path)
                     setattr(stats, stat_type, folder_stats)
+                    logger.debug(
+                        "folder_manager",
+                        "get_folder_usage_stats",
+                        f"{stat_type}: {folder_stats.count} files, {folder_stats.size_bytes} bytes",
+                    )
+                else:
+                    logger.trace("folder_manager", "get_folder_usage_stats", f"{stat_type} path does not exist: {path}")
 
+            total_files = stats.documents.count + stats.processed.count + stats.models.count + stats.chromadb.count
+            total_size = (
+                stats.documents.size_bytes
+                + stats.processed.size_bytes
+                + stats.models.size_bytes
+                + stats.chromadb.size_bytes
+            )
+            log_component_end(
+                "folder_manager", "get_folder_usage_stats", f"Stats collected: {total_files} files, {total_size} bytes"
+            )
             return stats
 
         except Exception as e:
-            self._log_error(f"Error getting folder stats: {e}")
+            log_error_context("folder_manager", "get_folder_usage_stats", e, {"tenant_slug": tenant.slug})
             raise
 
 

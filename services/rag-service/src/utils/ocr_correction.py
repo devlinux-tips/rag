@@ -8,6 +8,8 @@ Works for any language and content, not specific Croatian/English patterns.
 import re
 from typing import Any
 
+from .logging_factory import get_system_logger, log_component_end, log_component_start, log_data_transformation
+
 
 def fix_spaced_capitals(text: str) -> str:
     """
@@ -25,11 +27,21 @@ def fix_spaced_capitals(text: str) -> str:
     Returns:
         Text with spaced capitals fixed
     """
+    logger = get_system_logger()
+    logger.trace("ocr_correction", "fix_spaced_capitals", f"Processing text length: {len(text)}")
+
+    original_text = text
+
     # Fix fully spaced capitals: "H R V A T S K A" → "HRVATSKA"
+    logger.debug("ocr_correction", "fix_spaced_capitals", "Applying fully spaced capitals pattern")
     text = re.sub(r"\b([A-Z])\s+([A-Z](?:\s+[A-Z])*)\b", lambda m: m.group(0).replace(" ", ""), text)
 
     # Fix partially spaced capitals: "HR VATSKA" → "HRVATSKA"
+    logger.debug("ocr_correction", "fix_spaced_capitals", "Applying partially spaced capitals pattern")
     text = re.sub(r"\b([A-Z]{2,})\s+([A-Z]{2,})\b", r"\1\2", text)
+
+    if text != original_text:
+        log_data_transformation("ocr_correction", "fix_spaced_capitals", "spaced capitals text", "fixed capitals text")
 
     return text
 
@@ -141,22 +153,51 @@ def apply_ocr_corrections(text: str, config: dict[str, Any], language: str | Non
     Returns:
         Text with OCR corrections applied
     """
+    logger = get_system_logger()
+    log_component_start("ocr_correction", "apply_ocr_corrections", language=language, text_length=len(text))
+
     if not text or not config:
+        logger.warning("ocr_correction", "apply_ocr_corrections", "Empty text or config, returning original text")
         return text
+
+    original_text = text
+    corrections_applied = []
 
     # Apply corrections based on config flags
     if config["fix_spaced_capitals"]:
+        logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced capitals correction")
         text = fix_spaced_capitals(text)
+        corrections_applied.append("spaced_capitals")
 
     if config["fix_spaced_punctuation"]:
+        logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced punctuation correction")
         text = fix_spaced_punctuation(text)
+        corrections_applied.append("spaced_punctuation")
 
     if config["fix_common_ocr_errors"]:
+        logger.debug("ocr_correction", "apply_ocr_corrections", "Applying common OCR errors correction")
         text = fix_common_ocr_errors(text)
+        corrections_applied.append("common_ocr_errors")
 
     if config["fix_spaced_diacritics"]:
+        logger.debug(
+            "ocr_correction", "apply_ocr_corrections", f"Applying spaced diacritics correction for language: {language}"
+        )
         text = fix_spaced_diacritics(text, language)
+        corrections_applied.append("spaced_diacritics")
 
+    if text != original_text:
+        stats = get_ocr_correction_stats(original_text, text)
+        log_data_transformation(
+            "ocr_correction",
+            "apply_ocr_corrections",
+            f"text with OCR errors ({len(original_text)} chars)",
+            f"corrected text ({len(text)} chars)",
+            corrections=corrections_applied,
+            characters_changed=stats["characters_changed"],
+        )
+
+    log_component_end("ocr_correction", "apply_ocr_corrections", f"Applied {len(corrections_applied)} correction types")
     return text
 
 
@@ -171,9 +212,19 @@ def get_ocr_correction_stats(original_text: str, corrected_text: str) -> dict[st
     Returns:
         Dictionary with correction statistics
     """
-    return {
+    logger = get_system_logger()
+    logger.trace(
+        "ocr_correction",
+        "get_ocr_correction_stats",
+        f"Calculating stats for texts of length {len(original_text)} and {len(corrected_text)}",
+    )
+
+    stats = {
         "original_length": len(original_text),
         "corrected_length": len(corrected_text),
         "characters_changed": sum(1 for a, b in zip(original_text, corrected_text, strict=False) if a != b),
         "length_difference": len(corrected_text) - len(original_text),
     }
+
+    logger.trace("ocr_correction", "get_ocr_correction_stats", f"Stats calculated: {stats}")
+    return stats

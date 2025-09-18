@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
 from .categorization import CategoryMatch
 
 
@@ -571,14 +579,44 @@ class HierarchicalRetriever:
         max_results = max_results or self._config.default_max_results
         context = context or {}
 
+        # Add structured logging for AI debugging
+        logger = get_system_logger()
+        log_component_start(
+            "hierarchical_retriever",
+            "retrieve",
+            query_length=len(query),
+            max_results=max_results,
+            context_keys=list(context.keys()) if context else [],
+            retrieval_count=self._retrieval_count + 1,
+        )
+
         # Increment retrieval counter for performance tracking
         self._retrieval_count += 1
 
         self._log_info(f"🎯 Hierarchical retrieval for: {query[:50]}...")
+        logger.debug("hierarchical_retriever", "retrieve", f"Processing query: '{query[:100]}...'")
 
         # Step 1: Process and categorize query
+        logger.debug("hierarchical_retriever", "retrieve", "Step 1: Query processing and categorization")
         processed_query = self._query_processor.process_query(query, context)
         categorization = self._categorizer.categorize_query(query, context)
+
+        log_data_transformation(
+            "hierarchical_retriever",
+            "query_processing",
+            f"query[{len(query)}chars]",
+            f"processed[{len(processed_query.processed)}chars]",
+            original_query=query[:50],
+            processed_query=processed_query.processed[:50],
+        )
+
+        log_decision_point(
+            "hierarchical_retriever",
+            "categorization",
+            f"category={categorization.category.value}",
+            f"confidence={categorization.confidence:.3f}",
+            strategy=categorization.retrieval_strategy,
+        )
 
         self._log_info(f"📂 Category: {categorization.category.value} (confidence: {categorization.confidence:.3f})")
 
@@ -649,9 +687,40 @@ class HierarchicalRetriever:
             routing_metadata=routing_metadata,
         )
 
+        # Log comprehensive performance metrics for AI debugging
+        log_performance_metric("hierarchical_retriever", "retrieve", "retrieval_time_ms", retrieval_time * 1000)
+        log_performance_metric("hierarchical_retriever", "retrieve", "results_count", len(result_dicts))
+        log_performance_metric("hierarchical_retriever", "retrieve", "overall_confidence", overall_confidence)
+        log_performance_metric("hierarchical_retriever", "retrieve", "similarity_threshold", similarity_threshold)
+
+        log_data_transformation(
+            "hierarchical_retriever",
+            "result_filtering",
+            f"raw_results[{len(raw_results)}]",
+            f"final_results[{len(result_dicts)}]",
+            strategy=strategy_type.value,
+            reranked=self._reranker is not None,
+        )
+
         self._log_info(
             f"✅ Hierarchical retrieval complete: {len(result_dicts)} results "
             f"in {retrieval_time:.3f}s using {strategy_type.value}"
+        )
+
+        logger.info(
+            "hierarchical_retriever",
+            "retrieve",
+            f"Retrieval complete: {len(result_dicts)} results, confidence={overall_confidence:.3f}, strategy={strategy_type.value}",
+        )
+
+        log_component_end(
+            "hierarchical_retriever",
+            "retrieve",
+            f"Retrieved {len(result_dicts)} results in {retrieval_time:.3f}s",
+            results_count=len(result_dicts),
+            retrieval_time=retrieval_time,
+            strategy=strategy_type.value,
+            confidence=overall_confidence,
         )
 
         return result

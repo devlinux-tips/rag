@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_decision_point,
+    log_performance_metric,
+)
+
 
 class CategoryType(Enum):
     """Enumeration of query category types."""
@@ -395,13 +403,44 @@ class QueryCategorizer:
         Returns:
             CategoryMatch with categorization results
         """
+        logger = get_system_logger()
+        log_component_start("query_categorizer", "categorize_query", query_length=len(query), query_preview=query[:50])
+
         self._log_debug(f"Categorizing query: {query[:50]}...")
+        logger.debug("query_categorizer", "categorize_query", f"Processing query: '{query}'")
 
         result = categorize_query_pure(query, self._config)
+
+        log_decision_point(
+            "query_categorizer",
+            "categorization_result",
+            f"category={result.category.value}",
+            f"confidence={result.confidence:.3f}",
+            strategy=result.retrieval_strategy,
+            complexity=result.complexity.value,
+        )
+
+        log_performance_metric("query_categorizer", "categorize_query", "categorization_confidence", result.confidence)
 
         self._log_info(
             f"Query categorized as {result.category.value} "
             f"(confidence: {result.confidence:.2f}, strategy: {result.retrieval_strategy})"
+        )
+
+        logger.info(
+            "query_categorizer",
+            "categorize_query",
+            f"Categorized as {result.category.value} with {result.confidence:.3f} confidence",
+        )
+
+        log_component_end(
+            "query_categorizer",
+            "categorize_query",
+            f"Category: {result.category.value}, Strategy: {result.retrieval_strategy}",
+            category=result.category.value,
+            confidence=result.confidence,
+            strategy=result.retrieval_strategy,
+            complexity=result.complexity.value,
         )
 
         return result

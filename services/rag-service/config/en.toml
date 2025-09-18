@@ -322,7 +322,7 @@ formality_level = "professional"  # English business communication norm
 
 [prompts]
 # English system prompts and templates
-system_base = "You are an AI assistant that helps with document analysis in English."
+system_base = "You are a helpful assistant who responds ONLY in English. Use the given contextual information to provide a precise and clear answer. Respond directly without explaining your reasoning process."
 context_intro = "Based on the following context:"
 answer_intro = "Answer:"
 no_context_response = "I don't have enough information in the context to answer that question."

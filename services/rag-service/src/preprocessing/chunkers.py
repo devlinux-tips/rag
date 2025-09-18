@@ -11,6 +11,14 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+)
+
 if TYPE_CHECKING:
     from ..utils.config_protocol import ConfigProvider
     from .cleaners import CleaningResult
@@ -38,7 +46,19 @@ def sliding_window_chunk_positions(
     Returns:
         List of (start, end) positions
     """
+    logger = get_system_logger()
+    log_component_start(
+        "sliding_window_chunker",
+        "calculate_positions",
+        text_length=text_length,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        boundaries_count=len(sentence_boundaries) if sentence_boundaries else 0,
+        respect_sentences=respect_sentences,
+    )
+
     if text_length == 0:
+        logger.debug("sliding_window_chunker", "calculate_positions", "Empty text, returning no positions")
         return []
 
     positions = []
@@ -46,34 +66,41 @@ def sliding_window_chunk_positions(
 
     while start < text_length:
         end = min(start + chunk_size, text_length)
+        logger.trace("sliding_window_chunker", "calculate_positions", f"Chunk window: {start}-{end}")
 
-        # Adjust to sentence boundary if requested and boundaries available
-        if end < text_length and respect_sentences and sentence_boundaries and sentence_boundaries:
-            # Find nearest sentence boundary within reasonable range
-            search_range = min(200, text_length - end)  # Configurable range
+        if end < text_length and respect_sentences and sentence_boundaries:
+            search_range = min(200, text_length - end)
             best_end = end
 
             for boundary in sentence_boundaries:
                 if end <= boundary <= end + search_range:
                     best_end = boundary
+                    logger.trace(
+                        "sliding_window_chunker", "calculate_positions", f"Adjusted to sentence boundary: {best_end}"
+                    )
                     break
 
             end = best_end
 
-        if start < end:  # Ensure valid chunk
+        if start < end:
             positions.append((start, end))
+            logger.trace("sliding_window_chunker", "calculate_positions", f"Added chunk position: {start}-{end}")
 
-        # If we've reached the end, stop
         if end >= text_length:
             break
 
-        # Calculate next start with overlap
         next_start = end - overlap
-        if next_start <= start:  # Prevent infinite loop - ensure progress
+        if next_start <= start:
             next_start = start + 1
 
         start = next_start
 
+    log_component_end(
+        "sliding_window_chunker",
+        "calculate_positions",
+        f"Generated {len(positions)} chunks",
+        positions_count=len(positions),
+    )
     return positions
 
 
@@ -426,11 +453,25 @@ class DocumentChunker:
             language_patterns: Language-specific patterns (optional)
             logger: Logger instance (optional)
         """
+        system_logger = get_system_logger()
+        log_component_start(
+            "document_chunker",
+            "init",
+            strategy=config.strategy.value,
+            chunk_size=config.chunk_size,
+            overlap=config.overlap,
+            has_cleaner=text_cleaner is not None,
+            has_extractor=sentence_extractor is not None,
+        )
+
         self.config = config
         self.text_cleaner = text_cleaner
         self.sentence_extractor = sentence_extractor
         self.language_patterns = language_patterns or {}
         self.logger = logger or logging.getLogger(__name__)
+
+        system_logger.debug("document_chunker", "init", f"Configured chunker with strategy {config.strategy.value}")
+        log_component_end("document_chunker", "init", "Document chunker initialized")
 
     def chunk_document(self, text: str, source_file: str, strategy: ChunkingStrategy | None = None) -> list[TextChunk]:
         """
@@ -444,19 +485,32 @@ class DocumentChunker:
         Returns:
             List of text chunks
         """
+        logger = get_system_logger()
+        log_component_start(
+            "document_chunker",
+            "chunk_document",
+            source_file=source_file,
+            text_length=len(text),
+            strategy_override=strategy.value if strategy else None,
+        )
+
         if not text or not text.strip():
+            logger.debug("document_chunker", "chunk_document", "Empty text, returning no chunks")
             return []
 
         strategy = strategy or self.config.strategy
+        log_decision_point("document_chunker", "chunk_document", "strategy_selection", f"using {strategy.value}")
         self.logger.info(f"Chunking document {source_file} with strategy '{strategy.value}'")
 
-        # Clean text if cleaner available
         cleaned_text = text
         if self.text_cleaner:
+            logger.debug("document_chunker", "chunk_document", "Cleaning text before chunking")
             cleaning_result = self.text_cleaner.clean_text(text, preserve_structure=True)
             cleaned_text = cleaning_result.text
+            log_data_transformation(
+                "document_chunker", "text_cleaning", f"text[{len(text)}]", f"cleaned[{len(cleaned_text)}]"
+            )
 
-        # Execute strategy
         if strategy == ChunkingStrategy.SLIDING_WINDOW:
             chunks = self._sliding_window_chunking(cleaned_text, source_file)
         elif strategy == ChunkingStrategy.SENTENCE:
@@ -464,22 +518,40 @@ class DocumentChunker:
         elif strategy == ChunkingStrategy.PARAGRAPH:
             chunks = self._paragraph_based_chunking(cleaned_text, source_file)
         else:
+            logger.error("document_chunker", "chunk_document", f"Unknown chunking strategy: {strategy}")
             raise ValueError(f"Unknown chunking strategy: {strategy}")
 
-        # Filter meaningful chunks
         meaningful_chunks = self._filter_meaningful_chunks(chunks)
+        log_data_transformation(
+            "document_chunker", "filter_chunks", f"chunks[{len(chunks)}]", f"meaningful[{len(meaningful_chunks)}]"
+        )
 
+        log_component_end(
+            "document_chunker",
+            "chunk_document",
+            f"Created {len(meaningful_chunks)} chunks",
+            total_chunks=len(chunks),
+            meaningful_chunks=len(meaningful_chunks),
+            strategy=strategy.value,
+        )
         self.logger.info(f"Created {len(meaningful_chunks)} meaningful chunks from {len(chunks)} total")
         return meaningful_chunks
 
     def _sliding_window_chunking(self, text: str, source_file: str) -> list[TextChunk]:
         """Execute sliding window chunking using pure functions."""
-        # Get sentence boundaries if needed
+        logger = get_system_logger()
+        log_component_start("sliding_window_chunker", "chunk_text", text_length=len(text), source_file=source_file)
+
         sentence_boundaries = None
         if self.config.respect_sentences:
+            logger.debug("sliding_window_chunker", "chunk_text", "Finding sentence boundaries")
             sentence_boundaries = find_sentence_boundaries(text, self.language_patterns)
+            logger.debug(
+                "sliding_window_chunker",
+                "chunk_text",
+                f"Found {len(sentence_boundaries) if sentence_boundaries else 0} sentence boundaries",
+            )
 
-        # Calculate positions using pure function
         positions = sliding_window_chunk_positions(
             text_length=len(text),
             chunk_size=self.config.chunk_size,
@@ -488,7 +560,6 @@ class DocumentChunker:
             respect_sentences=self.config.respect_sentences,
         )
 
-        # Create chunks from positions
         chunks = []
         for i, (start, end) in enumerate(positions):
             chunk_text = text[start:end].strip()
@@ -497,7 +568,11 @@ class DocumentChunker:
                     content=chunk_text, source_file=source_file, start_char=start, end_char=end, chunk_index=i
                 )
                 chunks.append(chunk)
+                logger.trace("sliding_window_chunker", "chunk_text", f"Created chunk {i}: {len(chunk_text)} chars")
 
+        log_component_end(
+            "sliding_window_chunker", "chunk_text", f"Created {len(chunks)} chunks", chunks_created=len(chunks)
+        )
         return chunks
 
     def _sentence_based_chunking(self, text: str, source_file: str) -> list[TextChunk]:

@@ -13,6 +13,15 @@ from chromadb.api.models.Collection import Collection
 from chromadb.api.types import Metadata, WhereDocument
 from chromadb.config import Settings
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
 from .storage import VectorCollection, VectorDatabase
 
 logger = logging.getLogger(__name__)
@@ -22,8 +31,13 @@ class ChromaDBCollection(VectorCollection):
     """ChromaDB implementation of VectorCollection protocol."""
 
     def __init__(self, collection: Collection):
+        get_system_logger()
+        log_component_start("chroma_collection", "init", collection_name=collection.name)
+
         self._collection = collection
         self.logger = logging.getLogger(__name__)
+
+        log_component_end("chroma_collection", "init", f"ChromaDB collection initialized: {collection.name}")
 
     def add(
         self,
@@ -33,20 +47,51 @@ class ChromaDBCollection(VectorCollection):
         embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Add documents to collection."""
+        logger = get_system_logger()
+        log_component_start(
+            "chroma_collection",
+            "add",
+            doc_count=len(documents),
+            has_embeddings=embeddings is not None,
+            collection=self._collection.name,
+        )
+
         try:
+            logger.trace("chroma_collection", "add", f"Adding {len(documents)} documents with {len(ids)} IDs")
+
             if embeddings is not None:
+                logger.debug("chroma_collection", "add", f"Converting {len(embeddings)} embeddings to ChromaDB format")
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in embeddings]
+                log_data_transformation(
+                    "chroma_collection",
+                    "add",
+                    f"{len(embeddings)} numpy arrays",
+                    f"{len(embedding_lists)} embedding lists",
+                )
 
                 self._collection.add(
                     ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas), embeddings=embedding_lists
                 )
+                log_decision_point("chroma_collection", "add", "embeddings=provided", "added_with_embeddings")
             else:
+                log_decision_point("chroma_collection", "add", "embeddings=none", "added_without_embeddings")
                 self._collection.add(ids=ids, documents=documents, metadatas=cast(list[Metadata], metadatas))
-            self.logger.debug(f"Added {len(documents)} documents to collection")
+
+            log_performance_metric("chroma_collection", "add", "documents_added", len(documents))
+            log_component_end("chroma_collection", "add", f"Successfully added {len(documents)} documents")
 
         except Exception as e:
-            self.logger.error(f"Failed to add documents to collection: {e}")
+            log_error_context(
+                "chroma_collection",
+                "add",
+                e,
+                {
+                    "doc_count": len(documents),
+                    "has_embeddings": embeddings is not None,
+                    "collection": self._collection.name,
+                },
+            )
             raise
 
     def query(
@@ -59,12 +104,38 @@ class ChromaDBCollection(VectorCollection):
         include: list[str] | None = None,
     ) -> dict[str, Any]:
         """Query collection for similar documents."""
+        logger = get_system_logger()
+        log_component_start(
+            "chroma_collection",
+            "query",
+            n_results=n_results,
+            has_text=bool(query_texts),
+            has_embeddings=bool(query_embeddings),
+            collection=self._collection.name,
+        )
+
         try:
+            logger.trace(
+                "chroma_collection",
+                "query",
+                f"Query: texts={len(query_texts) if query_texts else 0}, "
+                f"embeddings={len(query_embeddings) if query_embeddings else 0}, n_results={n_results}",
+            )
             final_include = include if include is not None else ["documents", "metadatas", "distances"]
+            logger.trace("chroma_collection", "query", f"Include fields: {final_include}")
 
             if query_embeddings is not None:
+                logger.debug("chroma_collection", "query", f"Querying with {len(query_embeddings)} embeddings")
+                log_decision_point("chroma_collection", "query", "query_type=embeddings", "using_embeddings")
+
                 # Convert numpy arrays to lists for ChromaDB
                 embedding_lists = [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in query_embeddings]
+                log_data_transformation(
+                    "chroma_collection",
+                    "query",
+                    f"{len(query_embeddings)} numpy embeddings",
+                    f"{len(embedding_lists)} embedding lists",
+                )
 
                 results = self._collection.query(
                     query_embeddings=embedding_lists,
@@ -74,6 +145,9 @@ class ChromaDBCollection(VectorCollection):
                     include=final_include,  # type: ignore[arg-type]
                 )
             else:
+                logger.debug("chroma_collection", "query", f"Querying with texts: {query_texts}")
+                log_decision_point("chroma_collection", "query", "query_type=text", "using_text")
+
                 results = self._collection.query(
                     query_texts=query_texts,
                     n_results=n_results,
@@ -81,13 +155,22 @@ class ChromaDBCollection(VectorCollection):
                     where_document=cast(WhereDocument, where_document),
                     include=final_include,  # type: ignore[arg-type]
                 )
-            self.logger.debug("Query returned results for collection")
 
             # Convert ChromaDB QueryResult to dict for compatibility
-            return dict(results)
+            results_dict = dict(results)
+            num_results = len(results_dict.get("ids", [[]])[0]) if results_dict.get("ids") else 0
+
+            log_performance_metric("chroma_collection", "query", "results_returned", num_results)
+            log_component_end("chroma_collection", "query", f"Query returned {num_results} results")
+            return results_dict
 
         except Exception as e:
-            self.logger.error(f"Failed to query collection: {e}")
+            log_error_context(
+                "chroma_collection",
+                "query",
+                e,
+                {"n_results": n_results, "has_embeddings": bool(query_embeddings), "has_texts": bool(query_texts)},
+            )
             raise
 
     def get(

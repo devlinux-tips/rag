@@ -7,6 +7,15 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
+from .logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_config_usage,
+    log_data_transformation,
+    log_decision_point,
+)
+
 # ================================
 # DATA CLASSES & CONFIGURATION
 # ================================
@@ -26,10 +35,17 @@ class LanguageConfig:
 
     def __post_init__(self):
         """Validate language configuration."""
+        logger = get_system_logger()
+        logger.trace("language_config", "validate", f"Validating config for {self.code}")
+
         if not self.code or len(self.code) < 2:
+            logger.error("language_config", "validate", f"Invalid language code: {self.code}")
             raise ValueError(f"Invalid language code: {self.code}")
         if not self.name:
+            logger.error("language_config", "validate", f"Language name required for {self.code}")
             raise ValueError(f"Language name required for {self.code}")
+
+        logger.debug("language_config", "validate", f"Validation passed for {self.code} ({self.name})")
 
 
 @dataclass
@@ -127,12 +143,20 @@ def create_language_config(
 
 def build_languages_dict(settings: LanguageSettings) -> dict[str, LanguageConfig]:
     """Pure function to build languages dictionary from settings."""
+    logger = get_system_logger()
+    log_component_start("language_manager", "build_languages_dict", supported_count=len(settings.supported_languages))
+
     languages = {}
 
     for lang_code in settings.supported_languages:
+        logger.trace("language_manager", "build_languages_dict", f"Processing language: {lang_code}")
+
         if lang_code not in settings.language_names:
+            logger.error("language_manager", "build_languages_dict", f"Language name missing for {lang_code}")
             raise ValueError(f"Language name missing for {lang_code} in configuration")
+
         name = settings.language_names[lang_code]
+        logger.debug("language_manager", "build_languages_dict", f"Creating config for {lang_code}: {name}")
 
         languages[lang_code] = create_language_config(
             code=lang_code,
@@ -144,6 +168,12 @@ def build_languages_dict(settings: LanguageSettings) -> dict[str, LanguageConfig
             chunk_overlap=settings.chunk_overlap,
         )
 
+    log_component_end(
+        "language_manager",
+        "build_languages_dict",
+        f"Built {len(languages)} language configs",
+        created_languages=list(languages.keys()),
+    )
     return languages
 
 
@@ -187,24 +217,64 @@ def detect_language_from_text(
     min_words: int = 3,
 ) -> DetectionResult:
     """Pure function to detect language from text using pattern matching."""
+    logger = get_system_logger()
+    log_component_start(
+        "language_detection",
+        "detect_language_from_text",
+        auto_detect=auto_detect,
+        text_length=len(text),
+        pattern_count=len(detection_patterns),
+    )
+
     if not auto_detect or not text:
+        log_decision_point(
+            "language_detection",
+            "detect_language_from_text",
+            f"auto_detect={auto_detect}, text_empty={not text}",
+            f"fallback to {default_language}",
+        )
         return DetectionResult(detected_language=default_language, confidence=0.0, scores={}, fallback_used=True)
 
     words = normalize_text_for_detection(text)
+    log_data_transformation("language_detection", "normalize_text", f"text[{len(text)}]", f"words[{len(words)}]")
 
-    if len(words) < min_words:  # Too short for reliable detection
+    if len(words) < min_words:
+        log_decision_point(
+            "language_detection",
+            "detect_language_from_text",
+            f"words_count={len(words)} < min_words={min_words}",
+            f"fallback to {default_language}",
+        )
         return DetectionResult(detected_language=default_language, confidence=0.0, scores={}, fallback_used=True)
 
-    # Score languages based on pattern matches
     language_scores = calculate_pattern_scores(words, detection_patterns)
+    logger.debug("language_detection", "calculate_scores", f"Language scores: {language_scores}")
 
     if language_scores:
-        # Return language with highest match score
         detected_lang, confidence = max(language_scores.items(), key=lambda x: x[1])
+        log_decision_point(
+            "language_detection",
+            "detect_language_from_text",
+            f"scores={language_scores}",
+            f"detected {detected_lang} confidence={confidence:.3f}",
+        )
+        log_component_end(
+            "language_detection",
+            "detect_language_from_text",
+            f"Detected {detected_lang}",
+            confidence=confidence,
+            all_scores=language_scores,
+        )
         return DetectionResult(
             detected_language=detected_lang, confidence=confidence, scores=language_scores, fallback_used=False
         )
 
+    log_decision_point(
+        "language_detection", "detect_language_from_text", "no_patterns_matched", f"fallback to {default_language}"
+    )
+    log_component_end(
+        "language_detection", "detect_language_from_text", f"No detection, fallback to {default_language}"
+    )
     return DetectionResult(
         detected_language=default_language, confidence=0.0, scores=language_scores, fallback_used=True
     )
@@ -309,15 +379,41 @@ class _LanguageManager:
         logger_provider: LoggerProvider | None = None,
     ):
         """Initialize with injected dependencies."""
+        logger = get_system_logger()
+        log_component_start("language_manager", "init", has_logger=logger_provider is not None)
+
         self._config_provider = config_provider
         self._pattern_provider = pattern_provider
         self._logger = logger_provider
 
-        # Load configuration
+        logger.debug("language_manager", "init", "Loading language settings")
         self._settings = self._config_provider.get_language_settings()
+        log_config_usage(
+            "language_manager",
+            "settings_loaded",
+            {
+                "supported_languages": self._settings.supported_languages,
+                "default_language": self._settings.default_language,
+                "auto_detect": self._settings.auto_detect,
+                "fallback_language": self._settings.fallback_language,
+            },
+        )
+
+        logger.debug("language_manager", "init", "Loading language patterns")
         self._patterns = self._pattern_provider.get_language_patterns()
+        logger.trace(
+            "language_manager", "init", f"Loaded patterns for: {list(self._patterns.detection_patterns.keys())}"
+        )
+
+        logger.debug("language_manager", "init", "Building languages dictionary")
         self._languages = build_languages_dict(self._settings)
 
+        log_component_end(
+            "language_manager",
+            "init",
+            f"Loaded {len(self._languages)} supported languages",
+            supported_languages=list(self._languages.keys()),
+        )
         self._log_info(f"Loaded {len(self._languages)} supported languages: {list(self._languages.keys())}")
 
     def _log_info(self, message: str) -> None:
@@ -364,6 +460,9 @@ class _LanguageManager:
 
     def detect_language(self, text: str) -> str:
         """Detect language from text using pattern matching."""
+        logger = get_system_logger()
+        log_component_start("language_manager", "detect_language", text_length=len(text))
+
         result = detect_language_from_text(
             text=text,
             detection_patterns=self._patterns.detection_patterns,
@@ -372,10 +471,23 @@ class _LanguageManager:
         )
 
         if result.scores:
+            logger.debug("language_manager", "detect_language", f"Detected language: {result.detected_language}")
             self._log_debug(f"Detected language: {result.detected_language} (scores: {result.scores})")
         elif result.fallback_used:
+            logger.debug(
+                "language_manager",
+                "detect_language",
+                f"No language detected, using default: {result.detected_language}",
+            )
             self._log_debug(f"No language detected, using default: {result.detected_language}")
 
+        log_component_end(
+            "language_manager",
+            "detect_language",
+            f"Result: {result.detected_language}",
+            confidence=result.confidence,
+            fallback_used=result.fallback_used,
+        )
         return result.detected_language
 
     def detect_language_detailed(self, text: str) -> DetectionResult:
@@ -460,9 +572,19 @@ class _LanguageManager:
         stopwords: list[str] | None = None,
     ) -> None:
         """Add language support at runtime."""
+        logger = get_system_logger()
+        log_component_start(
+            "language_manager",
+            "add_language_runtime",
+            code=code,
+            name=name,
+            has_patterns=patterns is not None,
+            has_stopwords=stopwords is not None,
+        )
+
         self._log_info(f"Adding runtime language support: {code} ({name})")
 
-        # Add language config
+        logger.debug("language_manager", "add_language_runtime", f"Creating language config for {code}")
         self._languages[code] = create_language_config(
             code=code,
             name=name,
@@ -473,14 +595,22 @@ class _LanguageManager:
             chunk_overlap=self._settings.chunk_overlap,
         )
 
-        # Add detection patterns if provided
         if patterns:
+            logger.debug(
+                "language_manager", "add_language_runtime", f"Adding {len(patterns)} detection patterns for {code}"
+            )
             self._patterns.detection_patterns[code] = patterns
 
-        # Add stopwords if provided
         if stopwords:
+            logger.debug("language_manager", "add_language_runtime", f"Adding {len(stopwords)} stopwords for {code}")
             self._patterns.stopwords[code] = set(stopwords)
 
+        log_component_end(
+            "language_manager",
+            "add_language_runtime",
+            f"Language {code} added successfully",
+            total_languages=len(self._languages),
+        )
         self._log_info(f"Language {code} added successfully")
 
 

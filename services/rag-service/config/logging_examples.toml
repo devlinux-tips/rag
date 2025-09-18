@@ -1,0 +1,49 @@
+# Example logging configurations for different environments
+
+# Development: Console only (default)
+[logging]
+backends = ["console"]
+level = "DEBUG"
+
+# Development with TRACE: Maximum verbosity for debugging
+# [logging]
+# backends = ["console"]
+# level = "TRACE"
+
+# Production: Console + Elasticsearch
+# [logging]
+# backends = ["console", "elasticsearch"]
+# level = "INFO"
+#
+# [logging.elasticsearch]
+# hosts = ["localhost:9200"]
+# index_prefix = "rag-logs"
+# timeout = 30
+# verify_certs = false
+# # Optional authentication
+# # auth = ["username", "password"]
+
+# File logging for debugging
+# [logging]
+# backends = ["console", "file"]
+# level = "DEBUG"
+#
+# [logging.file]
+# log_file = "logs/rag_system.log"
+# format_type = "json"  # or "text"
+
+# High-volume production with structured logging
+# [logging]
+# backends = ["elasticsearch", "file"]
+# level = "INFO"
+#
+# [logging.elasticsearch]
+# hosts = ["es-cluster-1:9200", "es-cluster-2:9200"]
+# index_prefix = "production-rag-logs"
+# timeout = 60
+# verify_certs = true
+# auth = ["elastic_user", "elastic_password"]
+#
+# [logging.file]
+# log_file = "/var/log/rag/system.jsonl"
+# format_type = "json"

@@ -5,6 +5,13 @@ Production and mock providers for testable query processing system.
 
 from typing import Any, Protocol
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_error_context,
+    log_performance_metric,
+)
 from .query_processor import QueryProcessingConfig
 
 # ================================
@@ -34,32 +41,102 @@ class LanguageDataProvider:
 
     def __init__(self, config_provider: ConfigProvider):
         """Initialize with configuration provider."""
+        logger = get_system_logger()
+        log_component_start("language_data_provider", "init")
+
         self.config_provider = config_provider
         self._cache: dict[str, Any] = {}
 
+        logger.debug("language_data_provider", "init", "Language data provider initialized with cache")
+        log_component_end("language_data_provider", "init", "Language data provider ready")
+
     def get_stop_words(self, language: str) -> set[str]:
         """Get stop words for language."""
-        cache_key = f"stop_words_{language}"
-        if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config("language_data", language)
-            if "stop_words" not in lang_config:
-                raise ValueError(f"Missing 'stop_words' in language configuration for {language}")
-            stop_words = lang_config["stop_words"]
-            self._cache[cache_key] = set(stop_words)
+        logger = get_system_logger()
+        log_component_start("language_data_provider", "get_stop_words", language=language)
 
-        return self._cache[cache_key]
+        cache_key = f"stop_words_{language}"
+
+        try:
+            if cache_key not in self._cache:
+                logger.debug("language_data_provider", "get_stop_words", f"Cache miss for {language} stop words")
+                lang_config = self.config_provider.get_language_specific_config("language_data", language)
+
+                if "stop_words" not in lang_config:
+                    error_msg = f"Missing 'stop_words' in language configuration for {language}"
+                    logger.error("language_data_provider", "get_stop_words", error_msg)
+                    raise ValueError(error_msg)
+
+                stop_words = lang_config["stop_words"]
+                self._cache[cache_key] = set(stop_words)
+
+                logger.debug(
+                    "language_data_provider", "get_stop_words", f"Cached {len(stop_words)} stop words for {language}"
+                )
+            else:
+                logger.trace("language_data_provider", "get_stop_words", f"Cache hit for {language} stop words")
+
+            result = self._cache[cache_key]
+            log_performance_metric("language_data_provider", "get_stop_words", "stop_words_count", len(result))
+
+            log_component_end(
+                "language_data_provider", "get_stop_words", f"Retrieved {len(result)} stop words for {language}"
+            )
+            return result
+
+        except Exception as e:
+            log_error_context(
+                "language_data_provider", "get_stop_words", e, {"language": language, "cache_key": cache_key}
+            )
+            raise
 
     def get_question_patterns(self, language: str) -> list[str]:
         """Get question patterns for language."""
-        cache_key = f"question_patterns_{language}"
-        if cache_key not in self._cache:
-            lang_config = self.config_provider.get_language_specific_config("language_data", language)
-            if "question_patterns" not in lang_config:
-                raise ValueError(f"Missing 'question_patterns' in language configuration for {language}")
-            patterns = lang_config["question_patterns"]
-            self._cache[cache_key] = patterns
+        logger = get_system_logger()
+        log_component_start("language_data_provider", "get_question_patterns", language=language)
 
-        return self._cache[cache_key]
+        cache_key = f"question_patterns_{language}"
+
+        try:
+            if cache_key not in self._cache:
+                logger.debug(
+                    "language_data_provider", "get_question_patterns", f"Cache miss for {language} question patterns"
+                )
+                lang_config = self.config_provider.get_language_specific_config("language_data", language)
+
+                if "question_patterns" not in lang_config:
+                    error_msg = f"Missing 'question_patterns' in language configuration for {language}"
+                    logger.error("language_data_provider", "get_question_patterns", error_msg)
+                    raise ValueError(error_msg)
+
+                patterns = lang_config["question_patterns"]
+                self._cache[cache_key] = patterns
+
+                logger.debug(
+                    "language_data_provider",
+                    "get_question_patterns",
+                    f"Cached {len(patterns)} question patterns for {language}",
+                )
+            else:
+                logger.trace(
+                    "language_data_provider", "get_question_patterns", f"Cache hit for {language} question patterns"
+                )
+
+            result = self._cache[cache_key]
+            log_performance_metric("language_data_provider", "get_question_patterns", "patterns_count", len(result))
+
+            log_component_end(
+                "language_data_provider",
+                "get_question_patterns",
+                f"Retrieved {len(result)} question patterns for {language}",
+            )
+            return result
+
+        except Exception as e:
+            log_error_context(
+                "language_data_provider", "get_question_patterns", e, {"language": language, "cache_key": cache_key}
+            )
+            raise
 
     def get_synonym_groups(self, language: str) -> dict[str, list[str]]:
         """Get synonym groups for language."""

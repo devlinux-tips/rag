@@ -12,6 +12,15 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,10 +39,21 @@ class SearchQuery:
 
     def __post_init__(self):
         """Validate query parameters."""
+        system_logger = get_system_logger()
+        system_logger.trace(
+            "search_query", "validate", f"Validating query: top_k={self.top_k}, threshold={self.similarity_threshold}"
+        )
+
         if self.top_k <= 0:
+            system_logger.error("search_query", "validate", f"Invalid top_k: {self.top_k} (must be positive)")
             raise ValueError("top_k must be positive")
         if self.similarity_threshold < 0 or self.similarity_threshold > 1:
+            system_logger.error(
+                "search_query", "validate", f"Invalid similarity_threshold: {self.similarity_threshold} (must be 0-1)"
+            )
             raise ValueError("similarity_threshold must be between 0 and 1")
+
+        system_logger.trace("search_query", "validate", "Query validation passed")
 
 
 @dataclass
@@ -132,27 +152,71 @@ def validate_search_query(query: SearchQuery) -> list[str]:
     Returns:
         List of validation error messages (empty if valid)
     """
+    logger = get_system_logger()
+    log_component_start("search_validator", "validate_search_query", method=query.method, top_k=query.top_k)
+
     errors = []
 
+    logger.trace(
+        "search_validator",
+        "validate_search_query",
+        f"Validating query text length: {len(query.text.strip()) if query.text else 0}",
+    )
     if not query.text or not query.text.strip():
+        logger.debug("search_validator", "validate_search_query", "Query text validation failed: empty")
         errors.append("Query text cannot be empty")
 
+    logger.trace("search_validator", "validate_search_query", f"Validating top_k: {query.top_k}")
     if query.top_k <= 0:
+        logger.debug("search_validator", "validate_search_query", f"top_k validation failed: {query.top_k} <= 0")
         errors.append("top_k must be positive")
 
     if query.top_k > 100:
+        logger.debug("search_validator", "validate_search_query", f"top_k validation failed: {query.top_k} > 100")
         errors.append("top_k cannot exceed 100")
 
+    logger.trace(
+        "search_validator", "validate_search_query", f"Validating similarity_threshold: {query.similarity_threshold}"
+    )
     if query.similarity_threshold < 0 or query.similarity_threshold > 1:
+        logger.debug(
+            "search_validator",
+            "validate_search_query",
+            f"similarity_threshold validation failed: {query.similarity_threshold}",
+        )
         errors.append("similarity_threshold must be between 0 and 1")
 
     if query.max_context_length <= 0:
+        logger.debug(
+            "search_validator",
+            "validate_search_query",
+            f"max_context_length validation failed: {query.max_context_length} <= 0",
+        )
         errors.append("max_context_length must be positive")
 
     valid_methods = {method.value for method in SearchMethod}
+    logger.trace(
+        "search_validator", "validate_search_query", f"Validating method: {query.method} against {valid_methods}"
+    )
     if query.method not in valid_methods:
+        logger.debug(
+            "search_validator",
+            "validate_search_query",
+            f"method validation failed: {query.method} not in {valid_methods}",
+        )
         errors.append(f"method must be one of: {', '.join(valid_methods)}")
 
+    log_decision_point(
+        "search_validator",
+        "validate_search_query",
+        f"validation_result={len(errors)}_errors",
+        "valid" if not errors else "invalid",
+    )
+    log_component_end(
+        "search_validator",
+        "validate_search_query",
+        f"Validation complete: {'valid' if not errors else len(errors)} errors",
+    )
     return errors
 
 
@@ -167,35 +231,61 @@ def parse_vector_search_results(raw_results: dict[str, Any], method_used: str = 
     Returns:
         List of parsed search results
     """
+    logger = get_system_logger()
+    log_component_start("search_parser", "parse_vector_search_results", method=method_used)
+
     results: list[SearchResult] = []
 
     if not raw_results or not raw_results.get("ids"):
+        logger.debug("search_parser", "parse_vector_search_results", "No results to parse: empty raw_results or no ids")
+        log_component_end("search_parser", "parse_vector_search_results", "No results parsed")
         return results
 
     # Handle ChromaDB-style nested lists
     ids = raw_results["ids"]
+    logger.trace(
+        "search_parser",
+        "parse_vector_search_results",
+        f"Raw ids structure: {type(ids)}, length: {len(ids) if ids else 0}",
+    )
     if isinstance(ids, list) and ids and isinstance(ids[0], list):
         ids = ids[0]
+        logger.trace("search_parser", "parse_vector_search_results", "Flattened nested ids list")
 
     # Validate ChromaDB response format - fail fast if unexpected structure
+    logger.trace("search_parser", "parse_vector_search_results", "Validating ChromaDB response structure")
     if "documents" not in raw_results:
+        logger.error("search_parser", "parse_vector_search_results", "ChromaDB response missing 'documents' field")
         raise ValueError("ChromaDB response missing 'documents' field")
     if "metadatas" not in raw_results:
+        logger.error("search_parser", "parse_vector_search_results", "ChromaDB response missing 'metadatas' field")
         raise ValueError("ChromaDB response missing 'metadatas' field")
     if "distances" not in raw_results:
+        logger.error("search_parser", "parse_vector_search_results", "ChromaDB response missing 'distances' field")
         raise ValueError("ChromaDB response missing 'distances' field")
 
     documents = raw_results["documents"]
     if isinstance(documents, list) and documents and isinstance(documents[0], list):
         documents = documents[0]
+        logger.trace("search_parser", "parse_vector_search_results", "Flattened nested documents list")
 
     metadatas = raw_results["metadatas"]
     if isinstance(metadatas, list) and metadatas and isinstance(metadatas[0], list):
         metadatas = metadatas[0]
+        logger.trace("search_parser", "parse_vector_search_results", "Flattened nested metadatas list")
 
     distances = raw_results["distances"]
     if isinstance(distances, list) and distances and isinstance(distances[0], list):
         distances = distances[0]
+        logger.trace("search_parser", "parse_vector_search_results", "Flattened nested distances list")
+
+    logger.debug("search_parser", "parse_vector_search_results", f"Processing {len(ids)} search results")
+    log_data_transformation(
+        "search_parser",
+        "parse_vector_search_results",
+        f"raw ChromaDB response ({len(raw_results)} fields)",
+        f"{len(ids)} SearchResult objects",
+    )
 
     # Create SearchResult objects
     for i, doc_id in enumerate(ids):
@@ -203,12 +293,23 @@ def parse_vector_search_results(raw_results: dict[str, Any], method_used: str = 
         metadata = metadatas[i] if i < len(metadatas) else {}
         distance = distances[i] if i < len(distances) else 0.0
 
+        logger.trace(
+            "search_parser",
+            "parse_vector_search_results",
+            f"Processing result {i}: id={doc_id}, distance={distance}, content_len={len(content)}",
+        )
+
         # Convert distance to similarity score
         score = distance_to_similarity(distance)
+        logger.trace(
+            "search_parser", "parse_vector_search_results", f"Converted distance {distance} to similarity {score}"
+        )
 
         result = SearchResult(id=str(doc_id), content=content, score=score, metadata=metadata, method_used=method_used)
         results.append(result)
 
+    log_performance_metric("search_parser", "parse_vector_search_results", "results_count", len(results))
+    log_component_end("search_parser", "parse_vector_search_results", f"Parsed {len(results)} search results")
     return results
 
 
@@ -222,9 +323,14 @@ def distance_to_similarity(distance: float) -> float:
     Returns:
         Similarity score (0-1, higher = more similar)
     """
+    logger = get_system_logger()
+    logger.trace("search_scorer", "distance_to_similarity", f"Converting distance: {distance}")
+
     # For cosine distance: similarity = 1 - distance
     # Clamp to valid range
     similarity = max(0.0, min(1.0, 1.0 - distance))
+
+    logger.trace("search_scorer", "distance_to_similarity", f"Result: {distance} -> {similarity}")
     return similarity
 
 
@@ -239,28 +345,44 @@ def calculate_keyword_score(query_terms: list[str], document_text: str) -> float
     Returns:
         Keyword relevance score (0-1)
     """
+    logger = get_system_logger()
+    logger.trace(
+        "search_scorer",
+        "calculate_keyword_score",
+        f"Calculating score for {len(query_terms)} terms vs {len(document_text)} chars",
+    )
+
     if not query_terms or not document_text:
+        logger.trace("search_scorer", "calculate_keyword_score", "Empty input: returning 0.0")
         return 0.0
 
     doc_words = document_text.split()
     if not doc_words:
+        logger.trace("search_scorer", "calculate_keyword_score", "No document words: returning 0.0")
         return 0.0
+
+    logger.trace("search_scorer", "calculate_keyword_score", f"Document has {len(doc_words)} words")
 
     # Count term matches
     matches = 0
     for term in query_terms:
         if term in document_text:
             matches += 1
+            logger.trace("search_scorer", "calculate_keyword_score", f"Term match found: '{term}'")
 
     # Basic TF-like score
     score = matches / len(query_terms)
+    logger.debug("search_scorer", "calculate_keyword_score", f"Basic score: {matches}/{len(query_terms)} = {score}")
 
     # Boost for exact phrase matches
     query_phrase = " ".join(query_terms)
     if query_phrase in document_text:
         score *= 1.5
+        logger.debug("search_scorer", "calculate_keyword_score", f"Phrase match boost applied: {score}")
 
-    return min(1.0, score)
+    final_score = min(1.0, score)
+    logger.trace("search_scorer", "calculate_keyword_score", f"Final keyword score: {final_score}")
+    return final_score
 
 
 def combine_scores(

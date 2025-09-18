@@ -10,6 +10,14 @@ from typing import Any, Protocol, cast
 
 from ..utils.config_models import RankingConfig
 from ..utils.config_protocol import ConfigProvider
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -663,31 +671,135 @@ class DocumentRanker:
         Returns:
             List of RankedDocument objects, ranked by relevance
         """
+        logger = get_system_logger()
+        log_component_start(
+            "document_ranker",
+            "rank_documents",
+            input_docs=len(documents),
+            query_type=query.query_type,
+            language=self.language,
+            ranking_method=self.config.method.value,
+        )
+
         if not documents:
+            log_component_end("document_ranker", "rank_documents", "No documents to rank")
             return []
 
         context = context or {}
 
+        log_data_transformation(
+            "document_ranker",
+            "ranking_config",
+            f"Input: {len(documents)} documents, query: {query.query_type}",
+            f"Config loaded: {self.config.method.value}, diversity: {self.config.enable_diversity}",
+            method=self.config.method.value,
+            diversity_enabled=self.config.enable_diversity,
+            language_boost=self.config.language_specific_boost,
+        )
+
         self.logger.info(f"Ranking {len(documents)} documents using {self.config.method.value}")
+        logger.debug(
+            "document_ranker", "rank_documents", f"Processing {len(documents)} documents with query: '{query.text}'"
+        )
 
         # Step 1: Calculate ranking signals for each document
         ranked_docs: list[RankedDocument] = []
-        for document in documents:
+        total_signals = 0
+        avg_semantic_score = 0.0
+
+        for _i, document in enumerate(documents):
             ranked_doc = self._rank_single_document(document, query, context)
             ranked_docs.append(ranked_doc)
+            total_signals += len(ranked_doc.ranking_signals)
+            avg_semantic_score += ranked_doc.original_score
+
+        avg_semantic_score /= len(documents) if documents else 1
+        log_performance_metric(
+            "document_ranker", "rank_documents", "avg_signals_per_doc", total_signals / len(documents)
+        )
+        log_performance_metric("document_ranker", "rank_documents", "avg_semantic_score", avg_semantic_score)
+
+        log_data_transformation(
+            "document_ranker",
+            "signals_computed",
+            f"Input: {len(ranked_docs)} documents processed",
+            f"Generated {total_signals} ranking signals across {len(ranked_docs)} documents",
+            total_signals=total_signals,
+            avg_signals_per_doc=total_signals / len(documents),
+        )
 
         # Step 2: Apply diversity filtering if enabled
+        original_count = len(ranked_docs)
         if self.config.enable_diversity:
+            log_decision_point(
+                "document_ranker",
+                "diversity_filtering",
+                f"Diversity enabled with threshold {self.config.diversity_threshold}",
+                "apply_diversity_filtering",
+                threshold=self.config.diversity_threshold,
+                original_count=original_count,
+            )
             ranked_docs = apply_diversity_filtering(ranked_docs, self.config.diversity_threshold)
+            filtered_count = len(ranked_docs)
+
+            log_performance_metric(
+                "document_ranker", "rank_documents", "diversity_retention_ratio", filtered_count / original_count
+            )
+            log_data_transformation(
+                "document_ranker",
+                "diversity_applied",
+                f"Input: {original_count} documents with similarity threshold {self.config.diversity_threshold}",
+                f"Filtered {original_count} → {filtered_count} documents",
+                original_count=original_count,
+                filtered_count=filtered_count,
+                removed_count=original_count - filtered_count,
+            )
 
         # Step 3: Final sort by score
+        [doc.final_score for doc in ranked_docs]
         ranked_docs.sort(key=lambda x: x.final_score, reverse=True)
+        post_sort_scores = [doc.final_score for doc in ranked_docs]
+
+        log_performance_metric(
+            "document_ranker", "rank_documents", "score_range", max(post_sort_scores) - min(post_sort_scores)
+        )
+        log_performance_metric("document_ranker", "rank_documents", "top_score", max(post_sort_scores))
 
         # Step 4: Update ranks
         for i, doc in enumerate(ranked_docs):
             doc.rank = i + 1
 
+        # Track top ranking signals for AI debugging
+        if ranked_docs:
+            top_doc = ranked_docs[0]
+            top_signals = sorted(
+                [(s.name, s.score * s.weight) for s in top_doc.ranking_signals], key=lambda x: x[1], reverse=True
+            )[:3]
+
+            log_decision_point(
+                "document_ranker",
+                "ranking_complete",
+                f"Top doc (rank 1): score={top_doc.final_score:.3f}",
+                "ranking_successful",
+                top_score=top_doc.final_score,
+                top_signals=dict(top_signals),
+                total_ranked=len(ranked_docs),
+            )
+
+        log_performance_metric("document_ranker", "rank_documents", "final_document_count", len(ranked_docs))
+
         self.logger.info(f"Ranking complete: {len(ranked_docs)} documents ranked")
+        logger.info("document_ranker", "rank_documents", f"Successfully ranked {len(ranked_docs)} documents")
+
+        log_component_end(
+            "document_ranker",
+            "rank_documents",
+            f"Ranked {len(ranked_docs)} documents successfully",
+            final_count=len(ranked_docs),
+            top_score=ranked_docs[0].final_score if ranked_docs else 0.0,
+            method=self.config.method.value,
+        )
+
         return ranked_docs
 
     def _rank_single_document(
@@ -697,6 +809,14 @@ class DocumentRanker:
         content = document.get("content", "")  # Keep .get() - document data from external sources
         metadata = document.get("metadata", {})  # Keep .get() - document data from external sources
         original_score = document.get("relevance_score", 0.0)  # Keep .get() - document data from external sources
+        doc_id = document.get("id", "unknown")  # Keep .get() - document data from external sources
+
+        logger = get_system_logger()
+        logger.debug(
+            "document_ranker",
+            "_rank_single_document",
+            f"Ranking document {doc_id}: {len(content)} chars, original_score={original_score:.3f}",
+        )
 
         ranking_signals = []
 
@@ -713,6 +833,8 @@ class DocumentRanker:
         )
         ranking_signals.append(keyword_signal)
 
+        log_performance_metric("document_ranker", "_rank_single_document", "keyword_score", keyword_score)
+
         # Signal 3: Content quality
         quality_score, quality_metadata = calculate_content_quality_score(
             content, self.language_features.quality_indicators, metadata
@@ -721,6 +843,8 @@ class DocumentRanker:
             name="content_quality", score=quality_score, weight=0.15, metadata=quality_metadata
         )
         ranking_signals.append(quality_signal)
+
+        log_performance_metric("document_ranker", "_rank_single_document", "quality_score", quality_score)
 
         # Signal 4: Language-specific features
         if self.config.language_specific_boost:
@@ -732,6 +856,17 @@ class DocumentRanker:
             )
             ranking_signals.append(lang_signal)
 
+            log_performance_metric("document_ranker", "_rank_single_document", "language_score", lang_score)
+            log_data_transformation(
+                "document_ranker",
+                "language_features",
+                f"Input: {self.language} language analysis for {len(content)} chars",
+                f"Language features detected for {self.language}",
+                language=self.language,
+                features_detected=lang_metadata.get("language_features_detected", False),
+                config_driven=lang_metadata.get("config_driven", False),
+            )
+
         # Signal 5: Document authority
         if self.config.boost_authoritative:
             auth_score, auth_metadata = calculate_authority_score(
@@ -741,6 +876,8 @@ class DocumentRanker:
             )
             auth_signal = RankingSignal(name="authority_score", score=auth_score, weight=0.1, metadata=auth_metadata)
             ranking_signals.append(auth_signal)
+
+            log_performance_metric("document_ranker", "_rank_single_document", "authority_score", auth_score)
 
         # Calculate final score
         final_score = combine_ranking_signals(ranking_signals)
@@ -754,8 +891,25 @@ class DocumentRanker:
             )[:3],
         }
 
+        # Log detailed signal analysis for AI debugging
+        signal_contributions = [(s.name, s.score, s.weight, s.score * s.weight) for s in ranking_signals]
+        top_contributor = max(signal_contributions, key=lambda x: x[3])
+
+        log_data_transformation(
+            "document_ranker",
+            "signals_calculated",
+            f"Input: Document {doc_id} with {len(ranking_signals)} signals",
+            f"Final score calculated: {final_score:.3f} (top signal: {top_contributor[0]})",
+            doc_id=doc_id,
+            original_score=original_score,
+            final_score=final_score,
+            signal_count=len(ranking_signals),
+            top_signal=top_contributor[0],
+            top_contribution=top_contributor[3],
+        )
+
         return RankedDocument(
-            id=document.get("id", "unknown"),  # Keep .get() - document data from external sources
+            id=doc_id,
             content=content,
             metadata=metadata,
             original_score=original_score,

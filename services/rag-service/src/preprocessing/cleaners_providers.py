@@ -8,6 +8,8 @@ import logging
 import os
 from typing import Any, cast
 
+from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
+
 # ================================
 # STANDARD PROVIDERS
 # ================================
@@ -18,42 +20,140 @@ class ConfigProvider:
 
     def get_language_config(self, language: str) -> dict[str, Any]:
         """Get language-specific text processing configuration."""
-        from ..utils.config_loader import get_language_specific_config
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_language_config", language=language)
 
-        return get_language_specific_config("text_processing", language)
+        try:
+            from ..utils.config_loader import get_language_specific_config
+
+            logger.debug("config_provider", "get_language_config", f"Loading text_processing config for {language}")
+            config = get_language_specific_config("text_processing", language)
+
+            logger.debug("config_provider", "get_language_config", f"Loaded config with {len(config)} keys")
+            logger.trace("config_provider", "get_language_config", f"Config keys: {list(config.keys())}")
+
+            log_component_end("config_provider", "get_language_config", f"Language config loaded for {language}")
+            return config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_language_config", e, {"language": language})
+            raise
 
     def get_cleaning_config(self) -> dict[str, Any]:
         """Get general cleaning configuration."""
-        from ..utils.config_loader import get_cleaning_config
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_cleaning_config")
 
-        return get_cleaning_config()
+        try:
+            from ..utils.config_loader import get_cleaning_config
+
+            logger.debug("config_provider", "get_cleaning_config", "Loading general cleaning configuration")
+            config = get_cleaning_config()
+
+            logger.debug("config_provider", "get_cleaning_config", f"Loaded cleaning config with {len(config)} keys")
+            logger.trace("config_provider", "get_cleaning_config", f"Cleaning config keys: {list(config.keys())}")
+
+            log_component_end("config_provider", "get_cleaning_config", "General cleaning config loaded")
+            return config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_cleaning_config", e, {})
+            raise
 
     def get_document_cleaning_config(self, language: str) -> dict[str, Any]:
         """Get document cleaning configuration."""
-        from ..utils.config_loader import get_language_specific_config
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_document_cleaning_config", language=language)
 
-        return get_language_specific_config("document_cleaning", language)
+        try:
+            from ..utils.config_loader import get_language_specific_config
+
+            logger.debug(
+                "config_provider", "get_document_cleaning_config", f"Loading document_cleaning config for {language}"
+            )
+            config = get_language_specific_config("document_cleaning", language)
+
+            logger.debug(
+                "config_provider",
+                "get_document_cleaning_config",
+                f"Loaded document cleaning config with {len(config)} keys",
+            )
+            logger.trace(
+                "config_provider",
+                "get_document_cleaning_config",
+                f"Document cleaning config keys: {list(config.keys())}",
+            )
+
+            log_component_end(
+                "config_provider", "get_document_cleaning_config", f"Document cleaning config loaded for {language}"
+            )
+            return config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_document_cleaning_config", e, {"language": language})
+            raise
 
     def get_chunking_config(self, language: str) -> dict[str, Any]:
         """Get chunking configuration (merged)."""
-        from ..utils.config_loader import get_chunking_config, get_language_specific_config
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_chunking_config", language=language)
 
-        # Load main chunking config
-        main_chunking_config = get_chunking_config()
+        try:
+            from ..utils.config_loader import get_chunking_config, get_language_specific_config
 
-        # Load language-specific overrides
-        language_chunking_config = get_language_specific_config("chunking", language)
+            logger.debug("config_provider", "get_chunking_config", "Loading main chunking configuration")
+            main_chunking_config = get_chunking_config()
 
-        # Merge configs: language-specific overrides main config
-        merged_config = {**main_chunking_config, **language_chunking_config}
+            logger.debug(
+                "config_provider", "get_chunking_config", f"Loading language-specific chunking config for {language}"
+            )
+            language_chunking_config = get_language_specific_config("chunking", language)
 
-        return merged_config
+            logger.debug(
+                "config_provider",
+                "get_chunking_config",
+                f"Merging configs: {len(main_chunking_config)} main + {len(language_chunking_config)} language",
+            )
+            merged_config = {**main_chunking_config, **language_chunking_config}
+
+            logger.debug(
+                "config_provider", "get_chunking_config", f"Merged chunking config has {len(merged_config)} keys"
+            )
+            logger.trace("config_provider", "get_chunking_config", f"Merged config keys: {list(merged_config.keys())}")
+
+            log_component_end("config_provider", "get_chunking_config", f"Chunking config merged for {language}")
+            return merged_config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_chunking_config", e, {"language": language})
+            raise
 
     def get_shared_language_config(self, language: str) -> dict[str, Any]:
         """Get shared language configuration."""
-        from ..utils.config_loader import get_language_shared
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_shared_language_config", language=language)
 
-        return get_language_shared(language)
+        try:
+            from ..utils.config_loader import get_language_shared
+
+            logger.debug(
+                "config_provider", "get_shared_language_config", f"Loading shared language config for {language}"
+            )
+            config = get_language_shared(language)
+
+            logger.debug(
+                "config_provider", "get_shared_language_config", f"Loaded shared config with {len(config)} keys"
+            )
+            logger.trace("config_provider", "get_shared_language_config", f"Shared config keys: {list(config.keys())}")
+
+            log_component_end(
+                "config_provider", "get_shared_language_config", f"Shared language config loaded for {language}"
+            )
+            return config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_shared_language_config", e, {"language": language})
+            raise
 
 
 class LoggerProvider:

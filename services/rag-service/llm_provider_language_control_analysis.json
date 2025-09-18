@@ -1,0 +1,179 @@
+{
+  "analysis_overview": {
+    "objective": "Research LLM providers that offer proper language control mechanisms instead of requiring hard-coded post-processing patterns",
+    "user_requirement": "Multilingual RAG system where Croatian questions get Croatian answers, English questions get English answers",
+    "current_problem": "OpenRouter's Qwen3-30b outputs reasoning in English regardless of input language, requiring extraction patterns",
+    "user_constraint": "No hard-coded patterns allowed in codebase - must be proper API-level language control"
+  },
+
+  "provider_analysis": {
+    "openai_gpt": {
+      "language_control_mechanism": "System prompt instructions",
+      "api_parameters": {
+        "system": "Accepts string or object array for system instructions",
+        "language_specific_parameters": "None - relies on prompt engineering"
+      },
+      "language_control_approach": {
+        "method": "System prompt with explicit language instructions",
+        "example": "system: 'You are a helpful assistant who responds ONLY in the same language as the user's question. If asked in Croatian, respond in Croatian. If asked in English, respond in English.'",
+        "effectiveness": "High - GPT models are generally good at following language instructions",
+        "reliability": "Strong adherence to system prompt language directives"
+      },
+      "advantages": [
+        "Excellent multilingual capabilities",
+        "Strong adherence to system prompt instructions",
+        "Natural language switching based on input language",
+        "No reasoning artifacts in wrong language"
+      ],
+      "disadvantages": [
+        "Requires careful prompt engineering",
+        "May occasionally slip languages in complex contexts",
+        "No explicit API-level language parameter"
+      ],
+      "recommendation_score": 9,
+      "suitability": "Excellent - GPT models excel at language-aware responses through system prompts"
+    },
+
+    "google_gemini": {
+      "language_control_mechanism": "System instructions",
+      "api_parameters": {
+        "systemInstruction": "Accepts text or object array for behavior guidance",
+        "language_specific_parameters": "None - relies on instruction following"
+      },
+      "language_control_approach": {
+        "method": "System instruction with language response guidelines",
+        "example": "systemInstruction: 'Always respond in the same language as the user's input. Croatian input = Croatian response. English input = English response.'",
+        "effectiveness": "Very High - Gemini models show excellent instruction following",
+        "reliability": "Strong language consistency based on clear instructions"
+      },
+      "advantages": [
+        "Excellent multilingual performance",
+        "Strong instruction following for language control",
+        "Natural language detection and matching",
+        "Good at maintaining language consistency"
+      ],
+      "disadvantages": [
+        "Requires system instruction configuration",
+        "No dedicated language parameter",
+        "May need reinforcement for edge cases"
+      ],
+      "recommendation_score": 9,
+      "suitability": "Excellent - Gemini excels at following language instructions consistently"
+    },
+
+    "anthropic_claude": {
+      "language_control_mechanism": "System prompt configuration",
+      "api_parameters": {
+        "system": "String or object array for context and instructions",
+        "language_specific_parameters": "None - relies on system prompt guidance"
+      },
+      "language_control_approach": {
+        "method": "System prompt with explicit language matching instructions",
+        "example": "system: 'You must respond in the same language as the user's question. Match the input language exactly: Croatian input requires Croatian response, English input requires English response.'",
+        "effectiveness": "Very High - Claude models are exceptional at following system instructions",
+        "reliability": "Excellent adherence to language directives"
+      },
+      "advantages": [
+        "Exceptional system prompt compliance",
+        "Superior multilingual capabilities",
+        "Precise language matching",
+        "No unwanted language mixing"
+      ],
+      "disadvantages": [
+        "Requires system prompt configuration",
+        "No explicit language parameter",
+        "Potentially higher cost than alternatives"
+      ],
+      "recommendation_score": 10,
+      "suitability": "Outstanding - Claude's instruction following makes it ideal for language-controlled responses"
+    },
+
+    "current_openrouter_qwen": {
+      "language_control_mechanism": "Limited - reasoning field contamination",
+      "api_parameters": {
+        "system": "Standard system message support",
+        "language_specific_parameters": "None effective"
+      },
+      "language_control_approach": {
+        "method": "System prompt attempts + post-processing (current problematic approach)",
+        "example": "System prompts ignored, reasoning field contains English regardless of input",
+        "effectiveness": "Poor - outputs English reasoning even for Croatian inputs",
+        "reliability": "Unreliable - requires hard-coded extraction patterns"
+      },
+      "advantages": [
+        "Potentially lower cost",
+        "Multiple model access through one API"
+      ],
+      "disadvantages": [
+        "Poor language control",
+        "Requires hard-coded post-processing",
+        "English reasoning contamination",
+        "Violates clean architecture principles"
+      ],
+      "recommendation_score": 3,
+      "suitability": "Poor - requires anti-pattern solutions that violate codebase principles"
+    }
+  },
+
+  "implementation_recommendations": {
+    "preferred_solution": {
+      "provider": "Anthropic Claude",
+      "reasoning": "Best instruction following for language control + superior multilingual capabilities",
+      "implementation_approach": {
+        "system_prompt_template": "You are a helpful assistant who responds EXCLUSIVELY in the same language as the user's question. Language matching rules:\n- If the user asks in Croatian, respond ONLY in Croatian\n- If the user asks in English, respond ONLY in English\n- Never mix languages in your response\n- Match the input language exactly",
+        "config_changes_needed": [
+          "Add Claude API configuration in config.toml",
+          "Update OllamaConfig to support Claude endpoints",
+          "Add Claude-specific response parsing",
+          "Update language-specific system prompts in hr.toml and en.toml"
+        ]
+      }
+    },
+
+    "alternative_solutions": {
+      "openai_gpt": {
+        "provider": "OpenAI GPT-4",
+        "implementation": "Similar system prompt approach with OpenAI API",
+        "benefits": "Proven multilingual performance, widespread compatibility"
+      },
+      "google_gemini": {
+        "provider": "Google Gemini",
+        "implementation": "System instruction based language control",
+        "benefits": "Strong instruction following, competitive pricing"
+      }
+    }
+  },
+
+  "migration_strategy": {
+    "phase_1": "Configure Claude API as primary provider",
+    "phase_2": "Update system prompts for language-specific behavior",
+    "phase_3": "Test Croatian/English language consistency",
+    "phase_4": "Keep OpenRouter as fallback option (with acceptance of language mixing)",
+    "phase_5": "Remove any hard-coded language extraction patterns"
+  },
+
+  "config_implementation": {
+    "claude_config_example": {
+      "provider": "claude",
+      "api_key": "${CLAUDE_API_KEY}",
+      "model": "claude-3-sonnet-20240229",
+      "base_url": "https://api.anthropic.com",
+      "response_format": "anthropic",
+      "endpoints": {
+        "chat_completions": "/v1/messages"
+      }
+    },
+    "system_prompt_updates": {
+      "hr.toml": "system_base = \"Ti si pomoćni asistent koji odgovara ISKLJUČIVO na hrvatskom jeziku. Bez obzira na kontekst, uvijek odgovori na hrvatskom. Koristi dane informacije da daš precizan odgovor.\"",
+      "en.toml": "system_base = \"You are a helpful assistant who responds EXCLUSIVELY in English. Regardless of context, always respond in English. Use the given information to provide a precise answer.\""
+    }
+  },
+
+  "conclusion": {
+    "recommended_action": "Migrate from OpenRouter/Qwen3-30b to Anthropic Claude API",
+    "primary_reason": "Claude provides superior language control through system prompts without requiring hard-coded extraction patterns",
+    "implementation_complexity": "Medium - requires API configuration changes but follows existing patterns",
+    "user_benefit": "Clean language-specific responses without architectural compromises",
+    "technical_benefit": "Maintains fail-fast principles and clean codebase architecture"
+  }
+}

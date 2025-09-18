@@ -4,13 +4,19 @@ Clean architecture with pure functions and dependency injection.
 """
 
 import asyncio
-import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
 
 
 # Pure Data Structures
@@ -159,8 +165,26 @@ def select_retrieval_strategy(
     Returns:
         Selected retrieval strategy
     """
+    logger = get_system_logger()
+    logger.debug(
+        "retrieval_strategy",
+        "select_retrieval_strategy",
+        f"Selecting strategy for query type: {query.query_type.value}",
+        metadata={
+            "query_type": query.query_type.value,
+            "keywords_count": len(query.keywords),
+            "default": default_strategy.value,
+        },
+    )
+
     # Use explicit override if provided
     if query.strategy_override:
+        log_decision_point(
+            "retrieval_strategy",
+            "select_retrieval_strategy",
+            "explicit override provided",
+            f"using {query.strategy_override.value}",
+        )
         return query.strategy_override
 
     # Strategy selection based on query type
@@ -173,15 +197,34 @@ def select_retrieval_strategy(
     }
 
     if query.query_type not in strategy_map:
+        log_decision_point(
+            "retrieval_strategy",
+            "select_retrieval_strategy",
+            f"unknown query type {query.query_type.value}",
+            f"using default {default_strategy.value}",
+        )
         selected = default_strategy
     else:
-        selected = strategy_map[query.query_type]
+        mapped_strategy = strategy_map[query.query_type]
+        log_decision_point(
+            "retrieval_strategy",
+            "select_retrieval_strategy",
+            f"query type {query.query_type.value}",
+            f"mapped to {mapped_strategy.value}",
+        )
+        selected = mapped_strategy
 
     # Adjust based on query characteristics
     if len(query.keywords) >= 3 and selected == RetrievalStrategy.SEMANTIC:
-        # Many keywords suggest hybrid approach might work better
+        log_decision_point(
+            "retrieval_strategy",
+            "select_retrieval_strategy",
+            f"many keywords ({len(query.keywords)} >= 3)",
+            "switching semantic to hybrid",
+        )
         selected = RetrievalStrategy.HYBRID
 
+    logger.debug("retrieval_strategy", "select_retrieval_strategy", f"Final strategy selected: {selected.value}")
     return selected
 
 
@@ -196,6 +239,14 @@ def calculate_adaptive_top_k(query: RetrievalQuery, base_top_k: int = 10) -> int
     Returns:
         Adjusted top_k value
     """
+    logger = get_system_logger()
+    logger.debug(
+        "retrieval_adapter",
+        "calculate_adaptive_top_k",
+        f"Calculating adaptive top_k for {query.query_type.value}",
+        metadata={"base_top_k": base_top_k, "keywords_count": len(query.keywords)},
+    )
+
     # Base adjustment factors
     multipliers = {
         QueryType.FACTUAL: 0.8,  # Precise queries need fewer results
@@ -207,18 +258,46 @@ def calculate_adaptive_top_k(query: RetrievalQuery, base_top_k: int = 10) -> int
 
     if query.query_type not in multipliers:
         multiplier = 1.0
+        logger.trace(
+            "retrieval_adapter",
+            "calculate_adaptive_top_k",
+            f"Unknown query type {query.query_type.value}, using default multiplier 1.0",
+        )
     else:
         multiplier = multipliers[query.query_type]
+        logger.trace(
+            "retrieval_adapter",
+            "calculate_adaptive_top_k",
+            f"Query type {query.query_type.value} multiplier: {multiplier}",
+        )
 
     # Adjust for query complexity
     if len(query.keywords) > 5:
-        multiplier *= 1.2  # Complex queries may need more results
+        multiplier *= 1.2
+        logger.debug(
+            "retrieval_adapter",
+            "calculate_adaptive_top_k",
+            f"Complex query ({len(query.keywords)} keywords), increasing multiplier by 1.2x",
+        )
     elif len(query.keywords) <= 2:
-        multiplier *= 0.9  # Simple queries need fewer
+        multiplier *= 0.9
+        logger.debug(
+            "retrieval_adapter",
+            "calculate_adaptive_top_k",
+            f"Simple query ({len(query.keywords)} keywords), decreasing multiplier by 0.9x",
+        )
 
     # Apply bounds
     adjusted = int(base_top_k * multiplier)
-    return max(5, min(50, adjusted))  # Clamp to reasonable range
+    final_top_k = max(5, min(50, adjusted))
+
+    log_decision_point(
+        "retrieval_adapter",
+        "calculate_adaptive_top_k",
+        f"multiplier {multiplier} applied to base {base_top_k}",
+        f"final top_k {final_top_k} (clamped to 5-50 range)",
+    )
+    return final_top_k
 
 
 def merge_retrieval_results(
@@ -412,11 +491,16 @@ class DocumentRetriever:
             result_ranker: Result ranking service
             config: Configuration service
         """
+        logger = get_system_logger()
+        log_component_start("document_retriever", "init")
+
         self.query_processor = query_processor
         self.search_engine = search_engine
         self.result_ranker = result_ranker
         self.config = config
-        self.logger = logging.getLogger(__name__)
+
+        logger.debug("document_retriever", "init", "DocumentRetriever initialized with dependency injection")
+        log_component_end("document_retriever", "init", "DocumentRetriever ready for retrieval operations")
 
     async def retrieve_documents(
         self,
@@ -442,35 +526,66 @@ class DocumentRetriever:
         Raises:
             ValueError: For invalid parameters
         """
+        logger = get_system_logger()
+        log_component_start(
+            "document_retriever",
+            "retrieve_documents",
+            query_length=len(query),
+            language=language,
+            max_results=max_results,
+            strategy_override=strategy.value if strategy else None,
+        )
+
         if not query or not query.strip():
+            logger.error("document_retriever", "retrieve_documents", "Empty query provided")
             raise ValueError("Query cannot be empty")
 
         start_time = time.time()
 
         try:
             # Process query
+            logger.debug("document_retriever", "retrieve_documents", "Processing query")
             processed_query = await self.query_processor.process_query(query, language)
 
             # Apply overrides
             if max_results is not None:
+                logger.trace(
+                    "document_retriever", "retrieve_documents", f"Applying max_results override: {max_results}"
+                )
                 processed_query.max_results = max_results
             if strategy is not None:
+                logger.trace(
+                    "document_retriever", "retrieve_documents", f"Applying strategy override: {strategy.value}"
+                )
                 processed_query.strategy_override = strategy
             if filters is not None:
+                logger.trace("document_retriever", "retrieve_documents", f"Applying filters: {filters}")
                 processed_query.filters = filters
 
             # Select retrieval strategy
+            logger.debug("document_retriever", "retrieve_documents", "Selecting retrieval strategy")
             selected_strategy = select_retrieval_strategy(processed_query)
 
             # Execute retrieval based on strategy
+            logger.info(
+                "document_retriever", "retrieve_documents", f"Executing {selected_strategy.value} retrieval strategy"
+            )
             documents = await self._execute_retrieval_strategy(processed_query, selected_strategy)
 
             # Apply post-processing
+            logger.debug(
+                "document_retriever", "retrieve_documents", f"Post-processing {len(documents)} retrieved documents"
+            )
             documents = self._post_process_results(processed_query, documents)
 
             retrieval_time = time.time() - start_time
 
-            return RetrievalResult(
+            diversity_score = calculate_diversity_score(documents)
+            log_performance_metric("document_retriever", "retrieve_documents", "retrieval_time", retrieval_time)
+            log_performance_metric("document_retriever", "retrieve_documents", "documents_retrieved", len(documents))
+            log_performance_metric("document_retriever", "retrieve_documents", "diversity_score", diversity_score)
+
+            result = RetrievalResult(
                 query=query,
                 documents=documents,
                 total_found=len(documents),
@@ -482,12 +597,30 @@ class DocumentRetriever:
                     "processed_query": processed_query.processed_text,
                     "keywords": processed_query.keywords,
                     "filters": processed_query.filters,
-                    "diversity_score": calculate_diversity_score(documents),
+                    "diversity_score": diversity_score,
                 },
             )
 
+            log_component_end(
+                "document_retriever",
+                "retrieve_documents",
+                f"Retrieved {len(documents)} documents in {retrieval_time:.3f}s using {selected_strategy.value}",
+                duration=retrieval_time,
+            )
+            return result
+
         except Exception as e:
-            self.logger.error(f"Retrieval failed for query '{query}': {e}")
+            log_error_context(
+                "document_retriever",
+                "retrieve_documents",
+                e,
+                {
+                    "query": query,
+                    "language": language,
+                    "max_results": max_results,
+                    "strategy_override": strategy.value if strategy else None,
+                },
+            )
             raise
 
     async def _execute_retrieval_strategy(

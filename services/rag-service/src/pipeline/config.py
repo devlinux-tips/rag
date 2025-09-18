@@ -19,6 +19,14 @@ from ..utils.config_models import (
     ProcessingConfig,
     RetrievalConfig,
 )
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_error_context,
+    log_performance_metric,
+)
 
 
 class RAGConfig(BaseSettings):
@@ -152,8 +160,73 @@ class RAGConfig(BaseSettings):
 
 def load_yaml_config(config_path: str) -> dict[str, Any]:
     """Load configuration from YAML file."""
+    logger = get_system_logger()
+    log_component_start(
+        "config_loader", "load_yaml_config", config_path=config_path, file_exists=Path(config_path).exists()
+    )
+
     config_file = Path(config_path)
+
     if config_file.exists():
-        with open(config_file, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    return {}
+        try:
+            with open(config_file, encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+
+            config_size = len(str(config_data)) if config_data else 0
+            config_keys = len(config_data) if isinstance(config_data, dict) else 0
+
+            log_performance_metric("config_loader", "load_yaml_config", "config_keys_count", config_keys)
+            log_performance_metric("config_loader", "load_yaml_config", "config_size_chars", config_size)
+
+            log_data_transformation(
+                "config_loader",
+                "yaml_parsing",
+                f"Input: YAML file at {config_path}",
+                f"Loaded configuration with {config_keys} top-level keys",
+                file_path=config_path,
+                keys_loaded=config_keys,
+                config_size=config_size,
+            )
+
+            logger.info(
+                "config_loader",
+                "load_yaml_config",
+                f"Successfully loaded YAML config from {config_path}: {config_keys} keys",
+            )
+
+            log_component_end(
+                "config_loader",
+                "load_yaml_config",
+                f"Configuration loaded successfully: {config_keys} keys",
+                config_keys=config_keys,
+                file_path=config_path,
+            )
+
+            return config_data
+
+        except yaml.YAMLError as e:
+            log_error_context(
+                "config_loader", "load_yaml_config", e, {"file_path": config_path, "error_type": "yaml_error"}
+            )
+            logger.error("config_loader", "load_yaml_config", f"Failed to parse YAML file {config_path}: {e}")
+            log_component_end("config_loader", "load_yaml_config", f"Failed to parse YAML: {e}")
+            raise
+        except Exception as e:
+            log_error_context(
+                "config_loader", "load_yaml_config", e, {"file_path": config_path, "error_type": "file_error"}
+            )
+            logger.error("config_loader", "load_yaml_config", f"Failed to read config file {config_path}: {e}")
+            log_component_end("config_loader", "load_yaml_config", f"Failed to read file: {e}")
+            raise
+    else:
+        logger.warning(
+            "config_loader", "load_yaml_config", f"Config file not found: {config_path}, returning empty config"
+        )
+        log_component_end(
+            "config_loader",
+            "load_yaml_config",
+            "File not found, returning empty config",
+            file_path=config_path,
+            file_exists=False,
+        )
+        return {}

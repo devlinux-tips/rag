@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 from .folder_manager import FolderConfig, FolderStats
+from .logging_factory import get_system_logger, log_component_end, log_component_start, log_data_transformation
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -176,10 +177,41 @@ class ProductionFileSystemProvider:
 
     def create_folder(self, folder_path: Path) -> bool:
         """Create a folder if it doesn't exist."""
+        get_system_logger()
+        log_component_start(
+            "folder_manager_providers",
+            "create_folder",
+            folder_path=str(folder_path),
+            exists_before=folder_path.exists(),
+        )
+
         if not folder_path.exists():
             folder_path.mkdir(parents=True, exist_ok=True)
-            self.logger.debug(f"Created folder: {folder_path}")
+            log_data_transformation(
+                "folder_manager_providers",
+                "folder_creation",
+                f"Input: folder path {folder_path}",
+                "Output: folder created successfully",
+                folder_path=str(folder_path),
+                parents_created=True,
+            )
+
+            log_component_end(
+                "folder_manager_providers",
+                "create_folder",
+                "Folder created successfully",
+                folder_path=str(folder_path),
+                operation_result="created",
+            )
             return True
+
+        log_component_end(
+            "folder_manager_providers",
+            "create_folder",
+            "Folder already exists",
+            folder_path=str(folder_path),
+            operation_result="exists",
+        )
         return False
 
     def folder_exists(self, folder_path: Path) -> bool:
@@ -188,14 +220,57 @@ class ProductionFileSystemProvider:
 
     def remove_folder(self, folder_path: Path) -> bool:
         """Remove folder and all contents."""
+        get_system_logger()
+        log_component_start(
+            "folder_manager_providers",
+            "remove_folder",
+            folder_path=str(folder_path),
+            exists_before=folder_path.exists(),
+        )
+
         if folder_path.exists():
+            # Get stats before deletion for logging
+            stats = self.get_folder_stats(folder_path)
             shutil.rmtree(folder_path)
-            self.logger.info(f"Removed folder: {folder_path}")
+
+            log_data_transformation(
+                "folder_manager_providers",
+                "folder_removal",
+                f"Input: folder {folder_path} ({stats.count} files, {stats.size_bytes} bytes)",
+                "Output: folder removed successfully",
+                folder_path=str(folder_path),
+                files_removed=stats.count,
+                bytes_removed=stats.size_bytes,
+            )
+
+            log_component_end(
+                "folder_manager_providers",
+                "remove_folder",
+                "Folder removed successfully",
+                folder_path=str(folder_path),
+                operation_result="removed",
+            )
             return True
+
+        log_component_end(
+            "folder_manager_providers",
+            "remove_folder",
+            "Folder does not exist",
+            folder_path=str(folder_path),
+            operation_result="not_found",
+        )
         return False
 
     def get_folder_stats(self, folder_path: Path) -> FolderStats:
         """Get file count and size statistics for folder."""
+        get_system_logger()
+        log_component_start(
+            "folder_manager_providers",
+            "get_folder_stats",
+            folder_path=str(folder_path),
+            folder_exists=folder_path.exists(),
+        )
+
         stats = FolderStats(count=0, size_bytes=0)
 
         if folder_path.exists():
@@ -204,6 +279,24 @@ class ProductionFileSystemProvider:
                     stats.count += 1
                     stats.size_bytes += file_path.stat().st_size
 
+            log_data_transformation(
+                "folder_manager_providers",
+                "stats_calculation",
+                f"Input: folder scan of {folder_path}",
+                f"Output: {stats.count} files, {stats.size_bytes} bytes total",
+                folder_path=str(folder_path),
+                file_count=stats.count,
+                total_bytes=stats.size_bytes,
+            )
+
+        log_component_end(
+            "folder_manager_providers",
+            "get_folder_stats",
+            "Statistics calculated",
+            folder_path=str(folder_path),
+            file_count=stats.count,
+            total_bytes=stats.size_bytes,
+        )
         return stats
 
 
@@ -216,12 +309,28 @@ class ProductionConfigProvider:
 
     def get_folder_config(self) -> FolderConfig:
         """Get folder configuration from real config system."""
+        get_system_logger()
+        log_component_start(
+            "folder_manager_providers", "get_folder_config", cache_available=self._config_cache is not None
+        )
+
         if self._config_cache is None:
             self._config_cache = self._load_config_from_system()
+
+        log_component_end(
+            "folder_manager_providers",
+            "get_folder_config",
+            "Folder configuration retrieved",
+            data_base_dir=self._config_cache.data_base_dir,
+            models_base_dir=self._config_cache.models_base_dir,
+        )
         return self._config_cache
 
     def _load_config_from_system(self) -> FolderConfig:
         """Load configuration from the real system."""
+        system_logger = get_system_logger()
+        log_component_start("folder_manager_providers", "_load_config_from_system")
+
         try:
             # Import at runtime to avoid circular dependencies
             from ..utils.config_loader import get_paths_config, load_config
@@ -230,7 +339,17 @@ class ProductionConfigProvider:
             main_config = load_config("config")
             storage_config = main_config["storage"]
 
-            return FolderConfig(
+            log_data_transformation(
+                "folder_manager_providers",
+                "config_loading",
+                "Input: paths config + main config + storage config",
+                "Output: FolderConfig with templates and base directories",
+                data_base_dir=paths_config["data_base_dir"],
+                models_base_dir=paths_config["models_base_dir"],
+                templates_count=8,
+            )
+
+            config = FolderConfig(
                 data_base_dir=paths_config["data_base_dir"],
                 models_base_dir=paths_config["models_base_dir"],
                 system_dir=paths_config["system_dir"],
@@ -243,7 +362,24 @@ class ProductionConfigProvider:
                 models_path_template=paths_config["models_path_template"],
                 collection_name_template=storage_config["collection_name_template"],
             )
+
+            log_component_end(
+                "folder_manager_providers",
+                "_load_config_from_system",
+                "Successfully loaded folder configuration",
+                data_base_dir=config.data_base_dir,
+                models_base_dir=config.models_base_dir,
+            )
+
+            return config
         except Exception as e:
+            system_logger.error(
+                "folder_manager_providers",
+                "_load_config_from_system",
+                "FAILED: Configuration loading error",
+                error_type=type(e).__name__,
+                stack_trace=str(e),
+            )
             raise RuntimeError(f"Failed to load folder configuration from system: {e}") from e
 
 

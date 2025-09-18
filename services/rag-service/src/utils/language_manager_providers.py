@@ -7,6 +7,7 @@ import logging
 
 from .config_validator import ConfigurationError
 from .language_manager import LanguagePatterns, LanguageSettings
+from .logging_factory import get_system_logger, log_component_end, log_component_start, log_data_transformation
 
 # ================================
 # MOCK PROVIDERS FOR TESTING
@@ -136,12 +137,28 @@ class ProductionConfigProvider:
 
     def get_language_settings(self) -> LanguageSettings:
         """Get language settings from real config system."""
+        get_system_logger()
+        log_component_start(
+            "language_manager_providers", "get_language_settings", cache_available=self._settings_cache is not None
+        )
+
         if self._settings_cache is None:
             self._settings_cache = self._load_settings_from_system()
+
+        log_component_end(
+            "language_manager_providers",
+            "get_language_settings",
+            "Language settings retrieved",
+            supported_languages=len(self._settings_cache.supported_languages),
+            default_language=self._settings_cache.default_language,
+        )
         return self._settings_cache
 
     def _load_settings_from_system(self) -> LanguageSettings:
         """Load settings from the real configuration system."""
+        system_logger = get_system_logger()
+        log_component_start("language_manager_providers", "_load_settings_from_system")
+
         try:
             # Import at runtime to avoid circular dependencies
             from .config_loader import get_shared_config, get_supported_languages, load_config
@@ -155,7 +172,17 @@ class ProductionConfigProvider:
             languages_config = main_config["languages"]
             embeddings_config = main_config["embeddings"]
 
-            return LanguageSettings(
+            log_data_transformation(
+                "language_manager_providers",
+                "settings_loading",
+                f"Input: config files (main, shared, {len(supported_langs)} languages)",
+                f"Output: LanguageSettings with {len(supported_langs)} supported languages",
+                default_language=languages_config["default"],
+                auto_detect=languages_config["auto_detect"],
+                embedding_model=embeddings_config["model_name"],
+            )
+
+            settings = LanguageSettings(
                 supported_languages=supported_langs,
                 default_language=languages_config["default"],
                 auto_detect=languages_config["auto_detect"],
@@ -165,7 +192,24 @@ class ProductionConfigProvider:
                 chunk_size=shared_config["default_chunk_size"],
                 chunk_overlap=shared_config["default_chunk_overlap"],
             )
+
+            log_component_end(
+                "language_manager_providers",
+                "_load_settings_from_system",
+                "Successfully loaded language settings",
+                languages_count=len(settings.supported_languages),
+                default_language=settings.default_language,
+            )
+
+            return settings
         except Exception as e:
+            system_logger.error(
+                "language_manager_providers",
+                "_load_settings_from_system",
+                "FAILED: Configuration loading error",
+                error_type=type(e).__name__,
+                stack_trace=str(e),
+            )
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
                 f"Failed to load language settings: {e}. Please check your configuration files."
@@ -181,12 +225,28 @@ class ProductionPatternProvider:
 
     def get_language_patterns(self) -> LanguagePatterns:
         """Get language patterns from real config system."""
+        get_system_logger()
+        log_component_start(
+            "language_manager_providers", "get_language_patterns", cache_available=self._patterns_cache is not None
+        )
+
         if self._patterns_cache is None:
             self._patterns_cache = self._load_patterns_from_system()
+
+        log_component_end(
+            "language_manager_providers",
+            "get_language_patterns",
+            "Language patterns retrieved",
+            detection_patterns_count=len(self._patterns_cache.detection_patterns),
+            stopwords_languages=len(self._patterns_cache.stopwords),
+        )
         return self._patterns_cache
 
     def _load_patterns_from_system(self) -> LanguagePatterns:
         """Load patterns from the real configuration system."""
+        system_logger = get_system_logger()
+        log_component_start("language_manager_providers", "_load_patterns_from_system")
+
         try:
             # Import at runtime to avoid circular dependencies
             from .config_loader import get_language_config, get_supported_languages
@@ -229,15 +289,51 @@ class ProductionPatternProvider:
                         # Use first 20 stopwords for efficiency
                         stopwords[lang_code] = set(stopwords_list[:20])
 
+                    log_data_transformation(
+                        "language_manager_providers",
+                        "pattern_loading",
+                        f"Input: {lang_code} config file",
+                        f"Output: {len(detection_patterns.get(lang_code, []))} detection patterns, {len(stopwords.get(lang_code, set()))} stopwords",
+                        language=lang_code,
+                        detection_patterns_count=len(detection_patterns.get(lang_code, [])),
+                        stopwords_count=len(stopwords.get(lang_code, set())),
+                    )
+
                 except Exception as e:
+                    system_logger.error(
+                        "language_manager_providers",
+                        "_load_patterns_from_system",
+                        f"FAILED: Pattern loading for language {lang_code}",
+                        error_type=type(e).__name__,
+                        stack_trace=str(e),
+                        language=lang_code,
+                    )
                     raise ConfigurationError(
                         f"Failed to load patterns for language '{lang_code}': {e}. "
                         f"Please check configuration for {lang_code}"
                     ) from e
 
-            return LanguagePatterns(detection_patterns=detection_patterns, stopwords=stopwords)
+            patterns = LanguagePatterns(detection_patterns=detection_patterns, stopwords=stopwords)
+
+            log_component_end(
+                "language_manager_providers",
+                "_load_patterns_from_system",
+                "Successfully loaded language patterns",
+                languages_processed=len(supported_langs),
+                detection_languages=len(detection_patterns),
+                stopwords_languages=len(stopwords),
+            )
+
+            return patterns
 
         except Exception as e:
+            system_logger.error(
+                "language_manager_providers",
+                "_load_patterns_from_system",
+                "FAILED: Pattern system loading error",
+                error_type=type(e).__name__,
+                stack_trace=str(e),
+            )
             # FAIL FAST: No fallbacks - configuration must be valid
             raise ConfigurationError(
                 f"Failed to load language patterns: {e}. Please check your configuration files."

@@ -12,6 +12,14 @@ from typing import Any, cast
 
 from src.retrieval.categorization import CategoryType
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_performance_metric,
+)
+
 
 class TenantStatus(Enum):
     ACTIVE = "active"
@@ -275,13 +283,27 @@ class CategorizationTemplate:
         """Calculate match score for query against this template."""
         import re
 
+        logger = get_system_logger()
+        log_component_start(
+            "query_template",
+            "matches_query",
+            query_length=len(query),
+            keywords_count=len(self.keywords),
+            patterns_count=len(self.patterns),
+        )
+
         query_lower = query.lower()
         score = 0.0
 
         # Check keyword matches
         keyword_matches = sum(1 for keyword in self.keywords if keyword.lower() in query_lower)
+        keyword_score = 0.0
         if self.keywords:
-            score += (keyword_matches / len(self.keywords)) * 0.6
+            keyword_score = (keyword_matches / len(self.keywords)) * 0.6
+            score += keyword_score
+
+        log_performance_metric("query_template", "matches_query", "keyword_matches", keyword_matches)
+        log_performance_metric("query_template", "matches_query", "keyword_score", keyword_score)
 
         # Check pattern matches
         pattern_matches = 0
@@ -292,10 +314,43 @@ class CategorizationTemplate:
             except re.error:
                 continue
 
+        pattern_score = 0.0
         if self.patterns:
-            score += (pattern_matches / len(self.patterns)) * 0.4
+            pattern_score = (pattern_matches / len(self.patterns)) * 0.4
+            score += pattern_score
 
-        return min(score, 1.0)
+        log_performance_metric("query_template", "matches_query", "pattern_matches", pattern_matches)
+        log_performance_metric("query_template", "matches_query", "pattern_score", pattern_score)
+
+        final_score = min(score, 1.0)
+        log_performance_metric("query_template", "matches_query", "final_score", final_score)
+
+        log_data_transformation(
+            "query_template",
+            "score_calculation",
+            f"Input: query '{query[:30]}...' vs template",
+            f"Score calculated: {final_score:.3f} (keywords: {keyword_score:.3f}, patterns: {pattern_score:.3f})",
+            keyword_matches=keyword_matches,
+            pattern_matches=pattern_matches,
+            final_score=final_score,
+        )
+
+        logger.debug(
+            "query_template",
+            "matches_query",
+            f"Template matching: {keyword_matches}/{len(self.keywords)} keywords, {pattern_matches}/{len(self.patterns)} patterns, score: {final_score:.3f}",
+        )
+
+        log_component_end(
+            "query_template",
+            "matches_query",
+            f"Match score calculated: {final_score:.3f}",
+            final_score=final_score,
+            keyword_contribution=keyword_score,
+            pattern_contribution=pattern_score,
+        )
+
+        return final_score
 
 
 @dataclass

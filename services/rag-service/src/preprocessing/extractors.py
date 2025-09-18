@@ -11,6 +11,16 @@ from typing import Any, Protocol, runtime_checkable
 from docx import Document
 from pypdf import PdfReader
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
+
 
 @dataclass
 class ExtractionResult:
@@ -93,10 +103,18 @@ def validate_file_format(file_path: Path, supported_formats: list[str]) -> tuple
     Returns:
         Tuple of (is_valid, error_message)
     """
+    logger = get_system_logger()
+    logger.trace("file_extractor", "validate_file_format", f"Validating format for {file_path.name}")
+
     suffix = file_path.suffix.lower()
+    logger.debug("file_extractor", "validate_file_format", f"File extension: {suffix}")
+
     if suffix not in supported_formats:
         error_msg = f"Unsupported format: {suffix}. Supported: {supported_formats}"
+        logger.warning("file_extractor", "validate_file_format", error_msg)
         return False, error_msg
+
+    logger.debug("file_extractor", "validate_file_format", f"Format validation passed for {suffix}")
     return True, None
 
 
@@ -115,23 +133,43 @@ def extract_text_from_pdf_binary(pdf_binary: bytes) -> tuple[str, int]:
         Exception: If PDF processing fails
         ImportError: If pypdf is not available
     """
+    logger = get_system_logger()
+    log_component_start("pdf_extractor", "extract_text_from_pdf_binary", binary_size=len(pdf_binary))
 
     from io import BytesIO
 
     text_content = []
 
-    with BytesIO(pdf_binary) as pdf_stream:
-        pdf_reader = PdfReader(pdf_stream)
-        pages_processed = len(pdf_reader.pages)
+    try:
+        with BytesIO(pdf_binary) as pdf_stream:
+            pdf_reader = PdfReader(pdf_stream)
+            pages_processed = len(pdf_reader.pages)
+            logger.debug("pdf_extractor", "extract_text_from_pdf_binary", f"PDF has {pages_processed} pages")
 
-        for page_num in range(pages_processed):
-            page = pdf_reader.pages[page_num]
-            text = page.extract_text()
-            if text.strip():
-                text_content.append(text.strip())
+            for page_num in range(pages_processed):
+                logger.trace("pdf_extractor", "extract_text_from_pdf_binary", f"Processing page {page_num + 1}")
+                page = pdf_reader.pages[page_num]
+                text = page.extract_text()
+                if text.strip():
+                    text_content.append(text.strip())
+                    logger.trace(
+                        "pdf_extractor", "extract_text_from_pdf_binary", f"Page {page_num + 1}: {len(text)} chars"
+                    )
 
-    full_text = "\n\n".join(text_content)
-    return full_text, pages_processed
+        full_text = "\n\n".join(text_content)
+        log_data_transformation("pdf_extractor", "join_pages", f"{pages_processed} pages", f"text[{len(full_text)}]")
+        log_component_end(
+            "pdf_extractor",
+            "extract_text_from_pdf_binary",
+            f"Extracted {len(full_text)} chars",
+            pages_processed=pages_processed,
+            total_chars=len(full_text),
+        )
+        return full_text, pages_processed
+
+    except Exception as e:
+        log_error_context("pdf_extractor", "extract_text_from_pdf_binary", e, {"binary_size": len(pdf_binary)})
+        raise
 
 
 def extract_text_from_docx_binary(docx_binary: bytes) -> str:
@@ -149,20 +187,44 @@ def extract_text_from_docx_binary(docx_binary: bytes) -> str:
         Exception: If DOCX processing fails
         ImportError: If python-docx is not available
     """
+    logger = get_system_logger()
+    log_component_start("docx_extractor", "extract_text_from_docx_binary", binary_size=len(docx_binary))
 
     from io import BytesIO
 
     text_content = []
 
-    with BytesIO(docx_binary) as docx_stream:
-        doc = Document(docx_stream)
+    try:
+        with BytesIO(docx_binary) as docx_stream:
+            doc = Document(docx_stream)
+            paragraphs_total = len(doc.paragraphs)
+            logger.debug("docx_extractor", "extract_text_from_docx_binary", f"DOCX has {paragraphs_total} paragraphs")
 
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                text_content.append(paragraph.text.strip())
+            for i, paragraph in enumerate(doc.paragraphs):
+                if paragraph.text.strip():
+                    text_content.append(paragraph.text.strip())
+                    logger.trace(
+                        "docx_extractor",
+                        "extract_text_from_docx_binary",
+                        f"Paragraph {i + 1}: {len(paragraph.text)} chars",
+                    )
 
-    full_text = "\n\n".join(text_content)
-    return full_text
+        full_text = "\n\n".join(text_content)
+        log_data_transformation(
+            "docx_extractor", "join_paragraphs", f"{paragraphs_total} paragraphs", f"text[{len(full_text)}]"
+        )
+        log_component_end(
+            "docx_extractor",
+            "extract_text_from_docx_binary",
+            f"Extracted {len(full_text)} chars",
+            paragraphs_processed=paragraphs_total,
+            total_chars=len(full_text),
+        )
+        return full_text
+
+    except Exception as e:
+        log_error_context("docx_extractor", "extract_text_from_docx_binary", e, {"binary_size": len(docx_binary)})
+        raise
 
 
 def extract_text_with_encoding_fallback(text_binary: bytes, encodings: list[str]) -> tuple[str, str]:
@@ -180,14 +242,45 @@ def extract_text_with_encoding_fallback(text_binary: bytes, encodings: list[str]
     Raises:
         ValueError: If no encoding succeeds
     """
-    for encoding in encodings:
+    logger = get_system_logger()
+    log_component_start(
+        "text_extractor",
+        "extract_text_with_encoding_fallback",
+        binary_size=len(text_binary),
+        encodings_count=len(encodings),
+    )
+
+    for i, encoding in enumerate(encodings):
+        logger.trace(
+            "text_extractor",
+            "extract_text_with_encoding_fallback",
+            f"Trying encoding {i + 1}/{len(encodings)}: {encoding}",
+        )
         try:
             text = text_binary.decode(encoding).strip()
+            log_decision_point(
+                "text_extractor",
+                "extract_text_with_encoding_fallback",
+                f"encoding={encoding}",
+                f"success with {len(text)} chars",
+            )
+            log_component_end(
+                "text_extractor",
+                "extract_text_with_encoding_fallback",
+                f"Decoded with {encoding}",
+                successful_encoding=encoding,
+                text_length=len(text),
+            )
             return text, encoding
-        except UnicodeDecodeError:
+        except UnicodeDecodeError as e:
+            logger.debug(
+                "text_extractor", "extract_text_with_encoding_fallback", f"Encoding {encoding} failed: {str(e)}"
+            )
             continue
 
-    raise ValueError(f"Could not decode text with any supported encoding: {encodings}")
+    error_msg = f"Could not decode text with any supported encoding: {encodings}"
+    logger.error("text_extractor", "extract_text_with_encoding_fallback", error_msg)
+    raise ValueError(error_msg)
 
 
 def post_process_extracted_text(text: str) -> str:
@@ -229,17 +322,21 @@ class DocumentExtractor:
         logger_provider: LoggerProvider | None = None,
     ):
         """Initialize extractor with injected dependencies."""
+        logger = get_system_logger()
+        log_component_start("document_extractor", "init", has_logger=logger_provider is not None)
+
         self._config_provider = config_provider
         self._file_system = file_system_provider
         self._logger = logger_provider
 
-        # Load configuration once during initialization
+        logger.debug("document_extractor", "init", "Loading extraction configuration")
         config_data = config_provider.get_extraction_config()
 
-        # Validate required configuration keys
         if "max_file_size_mb" not in config_data:
+            logger.error("document_extractor", "init", "Missing 'max_file_size_mb' in extraction configuration")
             raise ValueError("Missing 'max_file_size_mb' in extraction configuration")
         if "enable_logging" not in config_data:
+            logger.error("document_extractor", "init", "Missing 'enable_logging' in extraction configuration")
             raise ValueError("Missing 'enable_logging' in extraction configuration")
 
         self._config = ExtractionConfig(
@@ -247,6 +344,15 @@ class DocumentExtractor:
             text_encodings=config_data["text_encodings"],
             max_file_size_mb=config_data["max_file_size_mb"],
             enable_logging=config_data["enable_logging"],
+        )
+
+        log_component_end(
+            "document_extractor",
+            "init",
+            "Extraction system initialized",
+            supported_formats=self._config.supported_formats,
+            max_file_size_mb=self._config.max_file_size_mb,
+            encodings_count=len(self._config.text_encodings),
         )
 
     def extract_text(self, file_path: Path) -> ExtractionResult:
@@ -263,32 +369,62 @@ class DocumentExtractor:
             FileNotFoundError: If file doesn't exist
             ValueError: If file format is not supported or file too large
         """
-        # File existence validation
+        logger = get_system_logger()
+        log_component_start("document_extractor", "extract_text", file_path=str(file_path))
+
         if not self._file_system.file_exists(file_path):
+            logger.error("document_extractor", "extract_text", f"File not found: {file_path}")
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        # File size validation
         file_size_mb = self._file_system.get_file_size_mb(file_path)
+        log_performance_metric("document_extractor", "extract_text", "file_size_mb", file_size_mb)
+
         if file_size_mb > self._config.max_file_size_mb:
+            logger.error(
+                "document_extractor",
+                "extract_text",
+                f"File too large: {file_size_mb:.1f}MB > {self._config.max_file_size_mb}MB",
+            )
             raise ValueError(f"File too large: {file_size_mb:.1f}MB > {self._config.max_file_size_mb}MB")
 
-        # Format validation
         is_valid, error_msg = validate_file_format(file_path, self._config.supported_formats)
         if not is_valid:
+            logger.error("document_extractor", "extract_text", error_msg)
             raise ValueError(error_msg)
 
         self._log_info(f"Extracting text from {file_path}")
 
         suffix = file_path.suffix.lower()
+        log_decision_point("document_extractor", "extract_text", f"file_extension={suffix}", "route_to_extractor")
 
-        if suffix == ".pdf":
-            return self._extract_pdf(file_path)
-        elif suffix == ".docx":
-            return self._extract_docx(file_path)
-        elif suffix == ".txt":
-            return self._extract_txt(file_path)
-        else:
-            raise ValueError(f"Unsupported format: {suffix}")
+        try:
+            if suffix == ".pdf":
+                result = self._extract_pdf(file_path)
+            elif suffix == ".docx":
+                result = self._extract_docx(file_path)
+            elif suffix == ".txt":
+                result = self._extract_txt(file_path)
+            else:
+                raise ValueError(f"Unsupported format: {suffix}")
+
+            log_component_end(
+                "document_extractor",
+                "extract_text",
+                f"Extracted {result.character_count} chars",
+                extraction_method=result.extraction_method,
+                character_count=result.character_count,
+                file_size_mb=file_size_mb,
+            )
+            return result
+
+        except Exception as e:
+            log_error_context(
+                "document_extractor",
+                "extract_text",
+                e,
+                {"file_path": str(file_path), "file_size_mb": file_size_mb, "file_extension": suffix},
+            )
+            raise
 
     def _extract_pdf(self, file_path: Path) -> ExtractionResult:
         """Extract text from PDF using pure function."""

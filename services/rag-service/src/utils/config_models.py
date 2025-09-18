@@ -15,6 +15,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from .logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_performance_metric,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +49,13 @@ class RankingMethod(Enum):
     BASIC = "basic"
     LANGUAGE_ENHANCED = "language_enhanced"
     SEMANTIC_BOOST = "semantic_boost"
+
+
+class ResponseFormat(Enum):
+    """Supported API response formats."""
+
+    OLLAMA = "ollama"  # Ollama streaming format: {"response": "text", "done": false}
+    OPENAI = "openai"  # OpenAI streaming format: data: {"choices": [{"delta": {"content": "text"}}]}
 
 
 @dataclass
@@ -104,7 +119,16 @@ class EmbeddingConfig:
         cls, main_config: dict, language_config: dict[Any, Any] | None = None
     ) -> "EmbeddingConfig":
         """Create config from validated main configuration with optional language-specific overrides."""
+        get_system_logger()
+        log_component_start(
+            "embedding_config",
+            "from_validated_config",
+            has_language_config=language_config is not None,
+            main_config_sections=list(main_config.keys()),
+        )
+
         embed_config = main_config["embeddings"]  # Direct access
+        original_model = embed_config["model_name"]
 
         # Language-specific overrides if provided
         if language_config and "embeddings" in language_config:
@@ -114,7 +138,25 @@ class EmbeddingConfig:
             merged_config.update(lang_embed_config)
             embed_config = merged_config
 
-        return cls(
+            log_data_transformation(
+                "embedding_config",
+                "language_override",
+                f"Input: main config with model '{original_model}'",
+                f"Output: merged config with model '{embed_config['model_name']}'",
+                original_model=original_model,
+                final_model=embed_config["model_name"],
+                overrides_applied=list(lang_embed_config.keys()),
+            )
+        else:
+            log_data_transformation(
+                "embedding_config",
+                "no_override",
+                f"Input: main config with model '{original_model}'",
+                f"Output: using main config model '{original_model}'",
+                model_name=original_model,
+            )
+
+        config_instance = cls(
             model_name=embed_config["model_name"],
             device=embed_config["device"],
             max_seq_length=embed_config["max_seq_length"],
@@ -125,6 +167,22 @@ class EmbeddingConfig:
             torch_dtype=embed_config["torch_dtype"],
             cache_dir=main_config["shared"]["cache_dir"],
         )
+
+        log_performance_metric(
+            "embedding_config", "from_validated_config", "max_seq_length", config_instance.max_seq_length
+        )
+        log_performance_metric("embedding_config", "from_validated_config", "batch_size", config_instance.batch_size)
+
+        log_component_end(
+            "embedding_config",
+            "from_validated_config",
+            f"Successfully created EmbeddingConfig with model '{config_instance.model_name}'",
+            model_name=config_instance.model_name,
+            device=config_instance.device,
+            has_language_overrides=language_config is not None,
+        )
+
+        return config_instance
 
 
 @dataclass
@@ -255,6 +313,28 @@ class HybridRetrievalConfig:
 
 
 @dataclass
+class EndpointsConfig:
+    """
+    Configuration for API endpoints for different LLM providers.
+    """
+
+    health_check: str
+    chat_completions: str
+    models_list: str
+    streaming_chat: str
+
+    @classmethod
+    def from_validated_config(cls, endpoints_config: dict) -> "EndpointsConfig":
+        """Create endpoints config from validated configuration."""
+        return cls(
+            health_check=endpoints_config["health_check"],
+            chat_completions=endpoints_config["chat_completions"],
+            models_list=endpoints_config["models_list"],
+            streaming_chat=endpoints_config["streaming_chat"],
+        )
+
+
+@dataclass
 class OllamaConfig:
     """
     Configuration for Ollama LLM client.
@@ -272,11 +352,22 @@ class OllamaConfig:
     num_predict: int
     repeat_penalty: float
     seed: int
+    endpoints: EndpointsConfig
+    response_format: ResponseFormat
+    api_key: str | None = None  # Optional API key for OpenRouter or other providers
 
     @classmethod
     def from_validated_config(cls, main_config: dict) -> "OllamaConfig":
         """Create config from validated main configuration."""
         ollama_config = main_config["ollama"]  # Direct access
+        endpoints_config = EndpointsConfig.from_validated_config(ollama_config["endpoints"])
+
+        # Convert string to enum for response_format
+        response_format_str = ollama_config["response_format"]
+        try:
+            response_format = ResponseFormat(response_format_str)
+        except ValueError as e:
+            raise ValueError(f"Invalid response format: {response_format_str}") from e
 
         return cls(
             base_url=ollama_config["base_url"],
@@ -291,6 +382,9 @@ class OllamaConfig:
             num_predict=ollama_config["num_predict"],
             repeat_penalty=float(ollama_config["repeat_penalty"]),
             seed=ollama_config["seed"],
+            api_key=ollama_config.get("api_key"),  # Optional - use .get() for API key only
+            endpoints=endpoints_config,
+            response_format=response_format,
         )
 
 
@@ -552,6 +646,7 @@ class ChromaConfig:
     def from_validated_config(cls, main_config: dict, tenant_slug: str = "development") -> "ChromaConfig":
         """Create config from validated configuration."""
         storage_config = main_config["storage"]  # Direct access - guaranteed by validation
+        chroma_config = main_config["chroma"]  # Direct access - created by factories.py
 
         # Generate tenant-specific db_path from template
         db_path_template = storage_config["db_path_template"]
@@ -560,11 +655,11 @@ class ChromaConfig:
 
         return cls(
             db_path=db_path,
-            collection_name=storage_config.get("collection_name_template", "default_collection"),
+            collection_name=storage_config["collection_name_template"],
             distance_metric=storage_config["distance_metric"],
-            chunk_size=storage_config.get("chunk_size", 1000),
-            ef_construction=storage_config.get("ef_construction", 200),
-            m=storage_config.get("m", 16),
+            chunk_size=chroma_config["chunk_size"],
+            ef_construction=chroma_config["ef_construction"],
+            m=chroma_config["m"],
             persist=storage_config["persist"],
             allow_reset=storage_config["allow_reset"],
         )

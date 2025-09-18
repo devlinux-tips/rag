@@ -7,6 +7,16 @@ import logging
 from dataclasses import dataclass
 from typing import Protocol
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,21 +37,40 @@ def validate_query_for_prompt(query: str) -> str:
     Raises:
         ValueError: If query is invalid
     """
+    logger = get_system_logger()
+    log_component_start(
+        "query_validator",
+        "validate_for_prompt",
+        input_type=type(query).__name__,
+        input_length=len(query) if isinstance(query, str) else 0,
+    )
+
     if not query:
+        logger.error("query_validator", "validate_for_prompt", "Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
     if not isinstance(query, str):
+        logger.error("query_validator", "validate_for_prompt", f"Query must be string, got {type(query)}")
         raise ValueError(f"Query must be string, got {type(query)}")
 
     # Normalize whitespace and strip
     normalized = " ".join(query.strip().split())
+    logger.trace(
+        "query_validator", "validate_for_prompt", f"Normalized whitespace: {len(query)} → {len(normalized)} chars"
+    )
 
     if not normalized:
+        logger.error("query_validator", "validate_for_prompt", "Query cannot be only whitespace")
         raise ValueError("Query cannot be only whitespace")
 
     if len(normalized) > 10000:
+        logger.error("query_validator", "validate_for_prompt", f"Query too long: {len(normalized)} > 10000 chars")
         raise ValueError("Query too long (max 10000 characters)")
 
+    log_data_transformation(
+        "query_validator", "normalize_query", f"raw[{len(query)}]", f"normalized[{len(normalized)}]"
+    )
+    log_component_end("query_validator", "validate_for_prompt", f"Validated query: {len(normalized)} chars")
     return normalized
 
 
@@ -61,22 +90,43 @@ def truncate_context_chunks(chunks: list[str], max_total_length: int, chunk_sepa
     Raises:
         ValueError: If max_total_length is invalid
     """
+    logger = get_system_logger()
+    log_component_start(
+        "context_truncator",
+        "truncate_chunks",
+        input_chunks=len(chunks),
+        max_length=max_total_length,
+        separator_length=len(chunk_separator),
+    )
+
     if max_total_length <= 0:
+        logger.error("context_truncator", "truncate_chunks", f"Invalid max_total_length: {max_total_length}")
         raise ValueError("max_total_length must be positive")
 
     if not chunks:
+        logger.debug("context_truncator", "truncate_chunks", "No chunks provided, returning empty list")
+        log_component_end("context_truncator", "truncate_chunks", "No chunks to process")
         return []
 
     if not all(isinstance(chunk, str) for chunk in chunks):
+        logger.error("context_truncator", "truncate_chunks", "All chunks must be strings")
         raise ValueError("All chunks must be strings")
 
     result_chunks: list[str] = []
     current_length = 0
     separator_length = len(chunk_separator)
+    total_input_length = sum(len(chunk.strip()) for chunk in chunks if chunk.strip())
 
-    for _i, chunk in enumerate(chunks):
+    logger.debug(
+        "context_truncator",
+        "truncate_chunks",
+        f"Processing {len(chunks)} chunks, total input: {total_input_length} chars",
+    )
+
+    for i, chunk in enumerate(chunks):
         chunk = chunk.strip()
         if not chunk:
+            logger.trace("context_truncator", "truncate_chunks", f"Skipping empty chunk {i}")
             continue
 
         # Calculate length if we add this chunk
@@ -87,6 +137,11 @@ def truncate_context_chunks(chunks: list[str], max_total_length: int, chunk_sepa
         if current_length + total_addition <= max_total_length:
             result_chunks.append(chunk)
             current_length += total_addition
+            logger.trace(
+                "context_truncator",
+                "truncate_chunks",
+                f"Added chunk {i}: {chunk_length} chars, total: {current_length}",
+            )
         else:
             # Try to fit a truncated version if this is the first chunk
             if not result_chunks:
@@ -94,8 +149,35 @@ def truncate_context_chunks(chunks: list[str], max_total_length: int, chunk_sepa
                 if max_first_chunk > 0:
                     truncated = chunk[:max_first_chunk] + "..."
                     result_chunks.append(truncated)
+                    current_length = len(truncated)
+                    log_decision_point(
+                        "context_truncator",
+                        "truncate_chunks",
+                        f"first_chunk_too_long={chunk_length}",
+                        f"truncated_to={len(truncated)}",
+                    )
+                else:
+                    logger.warning(
+                        "context_truncator",
+                        "truncate_chunks",
+                        f"First chunk too large for limit: {chunk_length} > {max_total_length}",
+                    )
+            else:
+                log_decision_point(
+                    "context_truncator",
+                    "truncate_chunks",
+                    f"chunk_{i}_exceeds_limit",
+                    f"stopping_at_{len(result_chunks)}_chunks",
+                )
             break
 
+    log_data_transformation(
+        "context_truncator", "filter_chunks", f"input[{len(chunks)}]", f"output[{len(result_chunks)}]"
+    )
+    log_performance_metric("context_truncator", "truncate_chunks", "final_length", current_length)
+    log_component_end(
+        "context_truncator", "truncate_chunks", f"Truncated to {len(result_chunks)} chunks, {current_length} chars"
+    )
     return result_chunks
 
 
@@ -155,31 +237,65 @@ def classify_query_type(query: str, keyword_patterns: dict[str, list[str]]) -> s
     Raises:
         ValueError: If inputs are invalid
     """
+    logger = get_system_logger()
+    log_component_start(
+        "query_classifier", "classify_type", query_length=len(query), pattern_count=len(keyword_patterns)
+    )
+
     if not query:
+        logger.error("query_classifier", "classify_type", "Query cannot be empty")
         raise ValueError("Query cannot be empty")
 
     if not isinstance(keyword_patterns, dict):
+        logger.error("query_classifier", "classify_type", "keyword_patterns must be dict")
         raise ValueError("keyword_patterns must be dict")
 
     query_lower = query.lower()
+    logger.trace(
+        "query_classifier",
+        "classify_type",
+        f"Analyzing query: '{query_lower[:50]}{'...' if len(query_lower) > 50 else ''}'",
+    )
 
     # Check patterns in priority order
     priority_order = ["tourism", "cultural", "summarization", "comparison", "explanatory", "factual"]
+    logger.debug("query_classifier", "classify_type", f"Checking priority patterns: {priority_order}")
 
     for query_type in priority_order:
         if query_type in keyword_patterns:
             keywords = keyword_patterns[query_type]
-            if isinstance(keywords, list) and any(
-                keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)
-            ):
-                return query_type
+            if isinstance(keywords, list):
+                matched_keywords = [
+                    keyword for keyword in keywords if isinstance(keyword, str) and keyword.lower() in query_lower
+                ]
+                if matched_keywords:
+                    log_decision_point(
+                        "query_classifier",
+                        "classify_type",
+                        f"matched_keywords={matched_keywords}",
+                        f"type={query_type}",
+                    )
+                    log_component_end(
+                        "query_classifier", "classify_type", f"Classified as {query_type} (priority match)"
+                    )
+                    return query_type
 
     # Check remaining patterns
+    logger.debug("query_classifier", "classify_type", "Checking remaining patterns")
     for query_type, keywords in keyword_patterns.items():
         if query_type not in priority_order and isinstance(keywords, list):
-            if any(keyword.lower() in query_lower for keyword in keywords if isinstance(keyword, str)):
+            matched_keywords = [
+                keyword for keyword in keywords if isinstance(keyword, str) and keyword.lower() in query_lower
+            ]
+            if matched_keywords:
+                log_decision_point(
+                    "query_classifier", "classify_type", f"matched_keywords={matched_keywords}", f"type={query_type}"
+                )
+                log_component_end("query_classifier", "classify_type", f"Classified as {query_type} (secondary match)")
                 return query_type
 
+    log_decision_point("query_classifier", "classify_type", "no_keywords_matched", "type=default")
+    log_component_end("query_classifier", "classify_type", "Classified as default (no matches)")
     return "default"
 
 
@@ -203,41 +319,70 @@ def build_complete_prompt(
     Raises:
         ValueError: If templates are invalid
     """
+    logger = get_system_logger()
+    log_component_start(
+        "prompt_builder",
+        "build_complete",
+        system_length=len(system_prompt),
+        query_length=len(query),
+        context_length=len(context_text),
+        has_context=bool(context_text),
+    )
+
     if not isinstance(system_prompt, str):
+        logger.error("prompt_builder", "build_complete", "system_prompt must be string")
         raise ValueError("system_prompt must be string")
 
     if not isinstance(user_template, str):
+        logger.error("prompt_builder", "build_complete", "user_template must be string")
         raise ValueError("user_template must be string")
 
     if "{query}" not in user_template:
+        logger.error("prompt_builder", "build_complete", "user_template must contain {query} placeholder")
         raise ValueError("user_template must contain {query} placeholder")
 
     # Build user prompt
     user_prompt_parts = []
+    logger.debug("prompt_builder", "build_complete", "Building user prompt components")
 
     # Add context if provided
     if context_text:
+        logger.debug("prompt_builder", "build_complete", f"Adding context: {len(context_text)} chars")
         if not isinstance(context_template, str):
+            logger.error("prompt_builder", "build_complete", "context_template must be string")
             raise ValueError("context_template must be string")
 
         if "{context}" not in context_template:
+            logger.error("prompt_builder", "build_complete", "context_template must contain {context} placeholder")
             raise ValueError("context_template must contain {context} placeholder")
 
         try:
             formatted_context = context_template.format(context=context_text)
             user_prompt_parts.append(formatted_context)
+            logger.trace("prompt_builder", "build_complete", f"Formatted context: {len(formatted_context)} chars")
         except KeyError as e:
+            logger.error("prompt_builder", "build_complete", f"Invalid context_template: {e}")
             raise ValueError(f"Invalid context_template: {e}") from e
 
     # Add query
+    logger.trace("prompt_builder", "build_complete", f"Adding query: {len(query)} chars")
     try:
         formatted_query = user_template.format(query=query)
         user_prompt_parts.append(formatted_query)
+        logger.trace("prompt_builder", "build_complete", f"Formatted query: {len(formatted_query)} chars")
     except KeyError as e:
+        logger.error("prompt_builder", "build_complete", f"Invalid user_template: {e}")
         raise ValueError(f"Invalid user_template: {e}") from e
 
     user_prompt = "".join(user_prompt_parts)
-
+    log_data_transformation(
+        "prompt_builder", "combine_parts", f"parts[{len(user_prompt_parts)}]", f"prompt[{len(user_prompt)}]"
+    )
+    log_component_end(
+        "prompt_builder",
+        "build_complete",
+        f"Built complete prompt: system={len(system_prompt)}, user={len(user_prompt)}",
+    )
     return system_prompt, user_prompt
 
 
@@ -330,15 +475,30 @@ class MultilingualRAGPrompts:
             config_provider: Provider for prompt configuration
             language: Language code
         """
+        logger = get_system_logger()
+        log_component_start("multilingual_prompts", "init", language=language)
+
         self.language = language
         self.config_provider = config_provider
         self.logger = logging.getLogger(__name__)
 
         try:
+            logger.debug("multilingual_prompts", "init", f"Loading prompt config for {language}")
             self._config = config_provider.get_prompt_config(language)
-            self.logger.debug(f"Initialized prompts for language: {language}")
+
+            template_count = len(self._config.templates)
+            pattern_count = len(self._config.keyword_patterns)
+            log_performance_metric("multilingual_prompts", "init", "template_count", template_count)
+            log_performance_metric("multilingual_prompts", "init", "pattern_count", pattern_count)
+
+            log_component_end("multilingual_prompts", "init", f"Initialized {template_count} templates for {language}")
         except Exception as e:
-            self.logger.error(f"Failed to initialize prompts for {language}: {e}")
+            log_error_context(
+                "multilingual_prompts",
+                "init",
+                e,
+                {"language": language, "config_provider": type(config_provider).__name__},
+            )
             raise
 
     @property
@@ -375,8 +535,14 @@ class MultilingualRAGPrompts:
         Returns:
             Query type string
         """
+        get_system_logger()
+        log_component_start("multilingual_prompts", "classify_query", query_length=len(query), language=self.language)
+
         validated_query = validate_query_for_prompt(query)
-        return classify_query_type(validated_query, self._config.keyword_patterns)
+        query_type = classify_query_type(validated_query, self._config.keyword_patterns)
+
+        log_component_end("multilingual_prompts", "classify_query", f"Classified '{query[:50]}...' as {query_type}")
+        return query_type
 
     def get_template_for_query(self, query: str) -> PromptTemplate:
         """
@@ -388,6 +554,9 @@ class MultilingualRAGPrompts:
         Returns:
             Most suitable PromptTemplate
         """
+        logger = get_system_logger()
+        log_component_start("multilingual_prompts", "get_template_for_query", query_length=len(query))
+
         query_type = self.classify_query(query)
 
         # Map query types to template names
@@ -402,14 +571,31 @@ class MultilingualRAGPrompts:
         }
 
         if query_type not in template_mapping:
+            logger.error(
+                "multilingual_prompts",
+                "get_template_for_query",
+                f"Unknown query type '{query_type}'. Supported: {list(template_mapping.keys())}",
+            )
             raise ValueError(f"Unknown query type '{query_type}'. Supported types: {list(template_mapping.keys())}")
+
         template_name = template_mapping[query_type]
+        log_decision_point(
+            "multilingual_prompts", "get_template_for_query", f"query_type={query_type}", f"template={template_name}"
+        )
 
         try:
-            return self.get_template(template_name)
+            template = self.get_template(template_name)
+            log_component_end("multilingual_prompts", "get_template_for_query", f"Selected template: {template_name}")
+            return template
         except KeyError:
-            self.logger.warning(f"Template '{template_name}' not found, using default")
-            return self.get_template("question_answering")
+            logger.warning(
+                "multilingual_prompts", "get_template_for_query", f"Template '{template_name}' not found, using default"
+            )
+            fallback_template = self.get_template("question_answering")
+            log_component_end(
+                "multilingual_prompts", "get_template_for_query", "Using fallback template: question_answering"
+            )
+            return fallback_template
 
 
 class PromptBuilder:
@@ -444,13 +630,24 @@ class PromptBuilder:
         Raises:
             ValueError: If inputs are invalid
         """
+        logger = get_system_logger()
+        log_component_start(
+            "prompt_builder",
+            "build_prompt",
+            query_length=len(query),
+            context_count=len(context) if context else 0,
+            max_context_length=max_context_length,
+        )
+
         # Validate query
         validated_query = validate_query_for_prompt(query)
 
         # Process context
         context_text = ""
         if context:
+            logger.debug("prompt_builder", "build_prompt", f"Formatting {len(context)} context chunks")
             context_text = self._format_context(context, max_context_length)
+            log_performance_metric("prompt_builder", "build_prompt", "context_text_length", len(context_text))
 
         # Build complete prompt
         system_prompt, user_prompt = build_complete_prompt(
@@ -461,7 +658,11 @@ class PromptBuilder:
             context_text=context_text,
         )
 
-        self.logger.debug(f"Built prompt for query length: {len(validated_query)}")
+        log_performance_metric("prompt_builder", "build_prompt", "system_prompt_length", len(system_prompt))
+        log_performance_metric("prompt_builder", "build_prompt", "user_prompt_length", len(user_prompt))
+        log_component_end(
+            "prompt_builder", "build_prompt", f"Built prompt: system={len(system_prompt)}, user={len(user_prompt)}"
+        )
         return system_prompt, user_prompt
 
     def _format_context(self, context: list[str], max_length: int) -> str:

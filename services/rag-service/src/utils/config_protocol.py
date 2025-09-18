@@ -126,11 +126,11 @@ class ProductionConfigProvider:
         """Get chunking configuration for specified language, merged with main config."""
         # Get base chunking config from main config
         main_config = self._config_loader.load_config("config")
-        base_chunking = main_config.get("chunking", {})
+        base_chunking = main_config["chunking"]
 
         # Get language-specific chunking config
         language_config = self.get_language_config(language)
-        lang_chunking = language_config.get("chunking", {})
+        lang_chunking = language_config["chunking"]
 
         # Merge configs (language-specific overrides main config)
         merged_config = {**base_chunking, **lang_chunking}
@@ -148,12 +148,12 @@ class ProductionConfigProvider:
         language_config = self.get_language_config(language)
 
         # Get shared categorization data
-        shared_config = language_config.get("shared", {})
-        shared_categorization = shared_config.get("categorization", {})
-        shared_patterns = shared_config.get("patterns", {})
+        shared_config = language_config["shared"]
+        shared_categorization = shared_config["categorization"]
+        shared_patterns = shared_config["patterns"]
 
         # Get language-specific categorization data
-        categorization_config = language_config.get("categorization", {})
+        categorization_config = language_config["categorization"]
 
         # Merge shared and language-specific data
         merged_config = {

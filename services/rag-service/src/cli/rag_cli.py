@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from ..utils.logging_config import setup_logging, get_component_logger, log_workflow_step
+from ..utils.logging_factory import setup_system_logging
+from ..utils.logging_config import log_workflow_event, log_component_info, log_component_error
 
 
 # Pure data structures
@@ -1286,9 +1287,21 @@ def create_mock_cli(should_fail: bool = False, output_writer: OutputWriterProtoc
 # Main entry point
 async def main():
     args = parse_cli_arguments(sys.argv[1:])
-    
-    logger = setup_logging(level=args.log_level, include_debug=args.log_level.upper() == "DEBUG")
-    log_workflow_step(logger, "CLI_STARTUP", "STARTED", command=args.command, language=args.language)
+
+    # Setup new logging system with configurable backends
+    backend_kwargs = {
+        "console": {"level": args.log_level, "colored": True}
+    }
+
+    # Add file logging in debug mode
+    if args.log_level.upper() == "DEBUG":
+        backend_kwargs["file"] = {
+            "log_file": "logs/rag_debug.log",
+            "format_type": "text"
+        }
+
+    logger = setup_system_logging(["console"], **backend_kwargs)
+    log_workflow_event("cli", "STARTUP", "STARTED", command=args.command, language=args.language)
 
     class StandardOutputWriter:
         def write(self, text: str) -> None:
@@ -1298,20 +1311,17 @@ async def main():
             sys.stdout.flush()
 
     class StandardLogger:
-        def __init__(self):
-            self.logger = get_component_logger("cli")
-
         def info(self, message: str) -> None:
-            self.logger.info(message)
+            log_component_info("cli", "OPERATION", message)
 
         def error(self, message: str) -> None:
-            self.logger.error(message)
+            log_component_error("cli", "OPERATION", message)
 
         def exception(self, message: str) -> None:
-            self.logger.exception(message)
+            log_component_error("cli", "EXCEPTION", message)
 
     def real_rag_factory(language: str, tenant_context=None):
-        logger.info(f"RAG_FACTORY: Creating system for language={language}")
+        log_component_info("cli", "RAG_FACTORY", f"Creating system for language={language}")
 
         try:
             from ..models.multitenant_models import Tenant, User
@@ -1339,11 +1349,11 @@ async def main():
                 user=user_obj
             )
 
-            logger.info(f"RAG_FACTORY: System created successfully for {language}")
+            log_component_info("cli", "RAG_FACTORY", f"System created successfully for {language}")
             return rag_system
 
         except Exception as e:
-            logger.error(f"RAG_FACTORY: Failed to create system for {language}: {e}")
+            log_component_error("cli", "RAG_FACTORY", f"Failed to create system for {language}", e)
             raise e
 
     from ..utils.folder_manager import TenantFolderManager
@@ -1395,7 +1405,7 @@ async def main():
         def get_storage_config(self) -> dict[str, Any]:
             from ..utils.config_loader import load_config
             config = load_config('config')
-            return config.get('storage', {})
+            return config['storage']
 
     cli = MultiTenantRAGCLI(
         output_writer=StandardOutputWriter(),
@@ -1407,7 +1417,7 @@ async def main():
     )
 
     await cli.execute_command(args)
-    log_workflow_step(logger, "CLI_STARTUP", "COMPLETED")
+    log_workflow_event("cli", "STARTUP", "COMPLETED")
 
 
 def cli_main():

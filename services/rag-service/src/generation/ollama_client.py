@@ -6,40 +6,24 @@ with configurable parameters and error handling.
 
 import asyncio
 import json
-import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ..preprocessing.cleaners import detect_language_content_with_config
 from ..utils.config_loader import ConfigError
+from ..utils.config_models import OllamaConfig
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
 
-
-@dataclass
-class OllamaConfig:
-    """Configuration for Ollama client - pure data structure."""
-
-    # Server settings
-    base_url: str = "http://localhost:11434"
-    timeout: float = 120.0
-
-    # Model settings
-    model: str = "llama3.1:8b"
-    temperature: float = 0.7
-    max_tokens: int = 2000
-    top_p: float = 0.9
-    top_k: int = 64
-
-    # Language-specific settings
-    preserve_diacritics: bool = True
-    prefer_formal_style: bool = True
-
-    # Generation settings
-    streaming: bool = True
-    confidence_threshold: float = 0.5
-
-    # Fallback models
-    fallback_models: list[str] = field(default_factory=lambda: ["qwen2.5:7b-instruct", "llama3.1:8b", "mistral:7b"])
+# OllamaConfig imported from config_models.py
 
 
 @dataclass
@@ -151,22 +135,43 @@ def build_complete_prompt(query: str, context: list[str] | None = None, system_p
     Returns:
         Complete formatted prompt
     """
+    logger = get_system_logger()
+    log_component_start(
+        "prompt_builder",
+        "build_complete_prompt",
+        query_length=len(query),
+        context_count=len(context) if context else 0,
+        has_system=system_prompt is not None,
+    )
+
     parts = []
 
     # Add system prompt if provided
     if system_prompt:
         parts.append(f"System: {system_prompt}")
+        logger.trace("prompt_builder", "build_complete_prompt", f"Added system prompt: {len(system_prompt)} chars")
 
     # Add context if provided
     if context:
         context_text = "\n\n".join(context)
         parts.append(f"Context:\n{context_text}")
+        logger.debug(
+            "prompt_builder",
+            "build_complete_prompt",
+            f"Added context: {len(context)} chunks, {len(context_text)} chars",
+        )
 
     # Add the main query
     parts.append(f"Question: {query}")
     parts.append("Answer:")
+    logger.trace("prompt_builder", "build_complete_prompt", f"Added query: {len(query)} chars")
 
-    return "\n\n".join(parts)
+    complete_prompt = "\n\n".join(parts)
+    log_data_transformation(
+        "prompt_builder", "assemble_parts", f"parts[{len(parts)}]", f"prompt[{len(complete_prompt)}]"
+    )
+    log_component_end("prompt_builder", "build_complete_prompt", f"Built prompt: {len(complete_prompt)} chars")
+    return complete_prompt
 
 
 def enhance_prompt_with_formality(prompt: str, formal_prompts: dict[str, str], use_formal_style: bool = True) -> str:
@@ -181,11 +186,32 @@ def enhance_prompt_with_formality(prompt: str, formal_prompts: dict[str, str], u
     Returns:
         Enhanced prompt
     """
-    if not use_formal_style or "formal_instruction" not in formal_prompts:
+    logger = get_system_logger()
+    log_component_start(
+        "prompt_enhancer",
+        "enhance_formality",
+        prompt_length=len(prompt),
+        use_formal=use_formal_style,
+        has_formal_templates=len(formal_prompts) > 0,
+    )
+
+    if not use_formal_style:
+        logger.debug("prompt_enhancer", "enhance_formality", "Formal style disabled, returning original")
+        log_component_end("prompt_enhancer", "enhance_formality", "No enhancement applied")
+        return prompt
+
+    if "formal_instruction" not in formal_prompts:
+        logger.debug("prompt_enhancer", "enhance_formality", "No formal_instruction found in templates")
+        log_component_end("prompt_enhancer", "enhance_formality", "No formal template available")
         return prompt
 
     formal_instruction = formal_prompts["formal_instruction"]
-    return f"{formal_instruction}\n\n{prompt}"
+    enhanced = f"{formal_instruction}\n\n{prompt}"
+
+    log_data_transformation("prompt_enhancer", "add_formality", f"prompt[{len(prompt)}]", f"enhanced[{len(enhanced)}]")
+    logger.debug("prompt_enhancer", "enhance_formality", f"Added formal instruction: {len(formal_instruction)} chars")
+    log_component_end("prompt_enhancer", "enhance_formality", f"Enhanced prompt: {len(enhanced)} chars")
+    return enhanced
 
 
 def create_ollama_request(prompt: str, config: OllamaConfig) -> dict[str, Any]:
@@ -199,22 +225,41 @@ def create_ollama_request(prompt: str, config: OllamaConfig) -> dict[str, Any]:
     Returns:
         Request dictionary for Ollama API
     """
-    return {
+    logger = get_system_logger()
+    log_component_start(
+        "request_builder",
+        "create_ollama_request",
+        model=config.model,
+        prompt_length=len(prompt),
+        streaming=config.stream,
+    )
+
+    # Standard Ollama format
+    request_data = {
         "model": config.model,
         "prompt": prompt,
         "stream": config.stream,
         "options": {
             "temperature": config.temperature,
-            "num_predict": config.max_tokens,
+            "num_predict": config.num_predict,
             "top_p": config.top_p,
             "top_k": config.top_k,
         },
     }
+    logger.debug(
+        "request_builder",
+        "create_ollama_request",
+        f"Ollama format: model={config.model}, temp={config.temperature}, "
+        f"tokens={config.num_predict}, stream={config.stream}",
+    )
+
+    log_component_end("request_builder", "create_ollama_request", f"Created request for {config.model}")
+    return request_data
 
 
 def parse_streaming_response(json_lines: list[str]) -> str:
     """
-    Parse streaming JSON lines into complete text.
+    Parse streaming JSON lines into complete text for Ollama format.
 
     Args:
         json_lines: List of JSON line strings
@@ -222,28 +267,64 @@ def parse_streaming_response(json_lines: list[str]) -> str:
     Returns:
         Complete generated text
     """
-    generated_chunks = []
+    logger = get_system_logger()
+    log_component_start("response_parser", "parse_streaming", lines_count=len(json_lines))
 
-    for line in json_lines:
+    generated_chunks = []
+    invalid_lines = 0
+    empty_lines = 0
+
+    for i, line in enumerate(json_lines):
         if not line.strip():
+            empty_lines += 1
             continue
+
         try:
             data = json.loads(line)
             if "response" not in data:
+                logger.trace("response_parser", "parse_streaming", f"Ollama line {i}: no 'response' field")
                 continue
+
             chunk = data["response"]
             if chunk:
                 generated_chunks.append(chunk)
-        except json.JSONDecodeError:
-            # Skip invalid JSON lines
+                logger.trace("response_parser", "parse_streaming", f"Ollama chunk {i}: '{chunk[:50]}...'")
+
+        except json.JSONDecodeError as e:
+            invalid_lines += 1
+            logger.debug("response_parser", "parse_streaming", f"Ollama line {i}: invalid JSON - {str(e)}")
             continue
 
-    return "".join(generated_chunks)
+    complete_text = "".join(generated_chunks)
+    log_data_transformation(
+        "response_parser", "combine_chunks", f"chunks[{len(generated_chunks)}]", f"text[{len(complete_text)}]"
+    )
+
+    logger.debug(
+        "response_parser",
+        "parse_streaming",
+        f"Generated chunks: {len(generated_chunks)}, Total chars: {len(complete_text)}",
+    )
+
+    if invalid_lines > 0 or empty_lines > 0:
+        logger.debug(
+            "response_parser",
+            "parse_streaming",
+            f"Processing stats: {len(generated_chunks)} chunks, skipped: {invalid_lines} invalid, {empty_lines} empty",
+        )
+
+    if len(generated_chunks) == 0:
+        logger.error("response_parser", "parse_streaming", f"NO CHUNKS EXTRACTED! Total lines: {len(json_lines)}")
+
+    log_component_end(
+        "response_parser", "parse_streaming", f"Parsed {len(generated_chunks)} chunks into {len(complete_text)} chars"
+    )
+    return complete_text
 
 
 def parse_non_streaming_response(response_data: dict[str, Any]) -> str:
     """
-    Parse non-streaming response into text.
+    Parse non-streaming response into text for Ollama format.
 
     Args:
         response_data: Response JSON data
@@ -251,9 +332,23 @@ def parse_non_streaming_response(response_data: dict[str, Any]) -> str:
     Returns:
         Generated text
     """
+    logger = get_system_logger()
+    log_component_start("response_parser", "parse_non_streaming", response_keys=list(response_data.keys()))
+
+    # Ollama format: {"response": "text"}
     if "response" not in response_data:
-        raise ValueError("Missing 'response' in response data")
-    return response_data["response"]
+        logger.error(
+            "response_parser",
+            "parse_non_streaming",
+            f"Missing 'response' field in Ollama response. Available keys: {list(response_data.keys())}",
+        )
+        raise ValueError("Missing 'response' in Ollama response data")
+
+    text = response_data["response"]
+
+    logger.debug("response_parser", "parse_non_streaming", f"Extracted response text: {len(text)} chars")
+    log_component_end("response_parser", "parse_non_streaming", f"Parsed non-streaming response: {len(text)} chars")
+    return text
 
 
 def calculate_generation_confidence(
@@ -270,19 +365,40 @@ def calculate_generation_confidence(
     Returns:
         Confidence score between 0.0 and 1.0
     """
+    logger = get_system_logger()
+    log_component_start(
+        "confidence_calculator",
+        "calculate_confidence",
+        text_length=len(generated_text),
+        language=request.language,
+        has_context=len(request.context) > 0,
+    )
+
     confidence = 0.5  # Base confidence
+    logger.debug("confidence_calculator", "calculate_confidence", f"Starting with base confidence: {confidence}")
 
     # Length check
     text_length = len(generated_text.strip())
     if text_length < 10:
         confidence -= 0.3
+        log_decision_point("confidence_calculator", "calculate_confidence", f"short_text={text_length}", "penalty=-0.3")
     elif text_length > 50:
         confidence += 0.1
+        log_decision_point(
+            "confidence_calculator", "calculate_confidence", f"adequate_length={text_length}", "bonus=+0.1"
+        )
 
     # Language content check
     if request.language:
         language_score = detect_language_content_with_config(generated_text, request.language)
-        confidence += language_score * 0.3
+        language_bonus = language_score * 0.3
+        confidence += language_bonus
+        log_decision_point(
+            "confidence_calculator",
+            "calculate_confidence",
+            f"language_score={language_score:.3f}",
+            f"bonus=+{language_bonus:.3f}",
+        )
 
     # Query relevance (simple keyword check)
     query_words = set(request.query.lower().split())
@@ -290,7 +406,14 @@ def calculate_generation_confidence(
     overlap = len(query_words.intersection(text_words))
     if len(query_words) > 0:
         relevance = overlap / len(query_words)
-        confidence += relevance * 0.2
+        relevance_bonus = relevance * 0.2
+        confidence += relevance_bonus
+        log_decision_point(
+            "confidence_calculator",
+            "calculate_confidence",
+            f"query_relevance={relevance:.3f}",
+            f"bonus=+{relevance_bonus:.3f}",
+        )
 
     # Context usage check
     if request.context:
@@ -300,15 +423,28 @@ def calculate_generation_confidence(
         if len(context_words) > 0:
             context_usage = min(context_overlap / len(context_words), 0.3)
             confidence += context_usage
+            log_decision_point(
+                "confidence_calculator",
+                "calculate_confidence",
+                f"context_usage={context_usage:.3f}",
+                f"bonus=+{context_usage:.3f}",
+            )
 
     # Error indicators from config
     if "error_phrases" not in confidence_settings:
+        logger.error("confidence_calculator", "calculate_confidence", "Missing 'error_phrases' in confidence_settings")
         raise ValueError("Missing 'error_phrases' in confidence_settings")
-    error_phrases = confidence_settings["error_phrases"]
-    if any(phrase in generated_text.lower() for phrase in error_phrases):
-        confidence -= 0.2
 
-    return max(0.0, min(1.0, confidence))
+    error_phrases = confidence_settings["error_phrases"]
+    error_found = any(phrase in generated_text.lower() for phrase in error_phrases)
+    if error_found:
+        confidence -= 0.2
+        log_decision_point("confidence_calculator", "calculate_confidence", "error_phrases_detected", "penalty=-0.2")
+
+    final_confidence = max(0.0, min(1.0, confidence))
+    log_performance_metric("confidence_calculator", "calculate_confidence", "final_score", final_confidence)
+    log_component_end("confidence_calculator", "calculate_confidence", f"Calculated confidence: {final_confidence:.3f}")
+    return final_confidence
 
 
 def estimate_token_count(text: str) -> int:
@@ -401,7 +537,7 @@ class MultilingualOllamaClient:
         config: OllamaConfig,
         http_client: HttpClient | None = None,
         language_config_provider: LanguageConfigProvider | None = None,
-        logger: logging.Logger | None = None,
+        logger=None,
     ):
         """
         Initialize client with injected dependencies.
@@ -412,10 +548,22 @@ class MultilingualOllamaClient:
             language_config_provider: Language-specific configuration
             logger: Logger instance
         """
+        get_system_logger()
+        log_component_start(
+            "ollama_client",
+            "init",
+            model=config.model,
+            base_url=config.base_url,
+            streaming=config.stream,
+            has_http_client=http_client is not None,
+        )
+
         self.config = config
         self.http_client = http_client or self._create_default_http_client()
         self.language_config_provider = language_config_provider or self._create_default_language_provider()
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_system_logger()
+
+        log_component_end("ollama_client", "init", f"Initialized Ollama client for {config.model}")
 
     def _create_default_http_client(self) -> HttpClient:
         """Create default HTTP client implementation."""
@@ -439,67 +587,128 @@ class MultilingualOllamaClient:
         Returns:
             Generation response
         """
+        logger = get_system_logger()
+        log_component_start(
+            "ollama_client",
+            "generate_text_async",
+            query_length=len(request.query),
+            context_count=len(request.context),
+            language=request.language,
+            query_type=request.query_type,
+        )
+
         start_time = time.time()
 
-        # Step 1: Check if service is available
-        if not await self.is_service_available():
-            raise ConnectionError("Ollama service is not available")
+        try:
+            # Step 1: Check if service is available
+            logger.debug("ollama_client", "generate_text_async", "Checking service availability")
+            if not await self.is_service_available():
+                logger.error("ollama_client", "generate_text_async", "Ollama service is not available")
+                raise ConnectionError("Ollama service is not available")
 
-        # Step 2: Get language-specific configuration
-        formal_prompts = self.language_config_provider.get_formal_prompts(request.language)
+            # Step 2: Get language-specific configuration
+            logger.debug("ollama_client", "generate_text_async", f"Getting formal prompts for {request.language}")
+            formal_prompts = self.language_config_provider.get_formal_prompts(request.language)
 
-        # Get appropriate system prompt based on query type
-        system_prompt = self._get_system_prompt_for_query(request, formal_prompts)
+            # Get appropriate system prompt based on query type
+            system_prompt = self._get_system_prompt_for_query(request, formal_prompts)
+            logger.debug(
+                "ollama_client",
+                "generate_text_async",
+                f"Selected system prompt for {request.query_type}: {len(system_prompt)} chars",
+            )
 
-        # Step 3: Build and enhance prompt
-        base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
+            # Step 3: Build and enhance prompt
+            base_prompt = build_complete_prompt(request.query, request.context, system_prompt)
 
-        enhanced_prompt = enhance_prompt_with_formality(
-            base_prompt, formal_prompts, getattr(self.config, "prefer_formal_style", False)
-        )
+            enhanced_prompt = enhance_prompt_with_formality(
+                base_prompt,
+                formal_prompts,
+                True,  # Default to formal style
+            )
+            log_performance_metric("ollama_client", "generate_text_async", "final_prompt_length", len(enhanced_prompt))
 
-        # Step 4: Create API request
-        ollama_request = create_ollama_request(enhanced_prompt, self.config)
+            # Step 4: Create API request
+            ollama_request = create_ollama_request(enhanced_prompt, self.config)
 
-        # Step 5: Make API call (streaming or non-streaming)
-        url = f"{self.config.base_url}/api/generate"
+            # Step 5: Make API call (streaming or non-streaming)
+            url = f"{self.config.base_url}/api/generate"
+            logger.info(
+                "ollama_client",
+                "generate_text_async",
+                f"Generating with {self.config.model}, streaming={self.config.stream}",
+            )
 
-        if self.config.stream:
-            json_lines = await self.http_client.stream_post(url, ollama_request, self.config.timeout)
-            generated_text = parse_streaming_response(json_lines)
-        else:
-            response = await self.http_client.post(url, ollama_request, self.config.timeout)
-            generated_text = parse_non_streaming_response(response.json())
+            if self.config.stream:
+                logger.debug("ollama_client", "generate_text_async", "Making streaming request")
+                json_lines = await self.http_client.stream_post(url, ollama_request, self.config.timeout)
+                generated_text = parse_streaming_response(json_lines)
+            else:
+                logger.debug("ollama_client", "generate_text_async", "Making non-streaming request")
+                response = await self.http_client.post(url, ollama_request, self.config.timeout)
+                generated_text = parse_non_streaming_response(response.json())
 
-        # Step 6: Apply text preservation if needed
-        # Apply text preservation if needed (this would be in language config, not Ollama config)
-        # if preserve_diacritics:
-        #     generated_text = preserve_text_encoding(generated_text)
+            generation_time = time.time() - start_time
+            log_performance_metric("ollama_client", "generate_text_async", "generation_time_sec", generation_time)
+            logger.debug(
+                "ollama_client",
+                "generate_text_async",
+                f"Generated {len(generated_text)} chars in {generation_time:.3f}s",
+            )
 
-        # Step 7: Calculate confidence
-        confidence_settings = self.language_config_provider.get_confidence_settings(request.language)
-        confidence = calculate_generation_confidence(generated_text, request, confidence_settings)
+            # Step 7: Calculate confidence
+            confidence_settings = self.language_config_provider.get_confidence_settings(request.language)
+            confidence = calculate_generation_confidence(generated_text, request, confidence_settings)
 
-        # Step 8: Build response
-        metadata = {
-            "query_type": request.query_type,
-            "language": request.language,
-            "context_length": len(" ".join(request.context)),
-            "streaming": self.config.stream,
-            "formal_style": getattr(self.config, "prefer_formal_style", False),
-        }
-        if request.metadata:
-            metadata.update(request.metadata)
+            # Step 8: Build response
+            context_length = len(" ".join(request.context))
+            metadata = {
+                "query_type": request.query_type,
+                "language": request.language,
+                "context_length": context_length,
+                "streaming": self.config.stream,
+                "formal_style": True,
+            }
+            if request.metadata:
+                metadata.update(request.metadata)
 
-        return GenerationResponse(
-            text=generated_text,
-            model=self.config.model,
-            tokens_used=estimate_token_count(generated_text),
-            generation_time=time.time() - start_time,
-            confidence=confidence,
-            metadata=metadata,
-            language=request.language,
-        )
+            tokens_used = estimate_token_count(generated_text)
+            log_performance_metric("ollama_client", "generate_text_async", "tokens_generated", tokens_used)
+
+            response = GenerationResponse(
+                text=generated_text,
+                model=self.config.model,
+                tokens_used=tokens_used,
+                generation_time=generation_time,
+                confidence=confidence,
+                metadata=metadata,
+                language=request.language,
+            )
+
+            log_component_end(
+                "ollama_client",
+                "generate_text_async",
+                f"Generated {len(generated_text)} chars, confidence={confidence:.3f}",
+                tokens=tokens_used,
+                confidence=confidence,
+                generation_time=generation_time,
+            )
+            return response
+
+        except Exception as e:
+            log_error_context(
+                "ollama_client",
+                "generate_text_async",
+                e,
+                {
+                    "query_length": len(request.query),
+                    "context_count": len(request.context),
+                    "language": request.language,
+                    "model": self.config.model,
+                    "base_url": self.config.base_url,
+                },
+            )
+            raise
 
     async def is_service_available(self) -> bool:
         """
@@ -508,9 +717,27 @@ class MultilingualOllamaClient:
         Returns:
             True if service is available
         """
-        url = f"{self.config.base_url}/api/tags"
-        response = await self.http_client.get(url, timeout=5.0)
-        return response.status_code == 200
+        logger = get_system_logger()
+        log_component_start("ollama_client", "is_service_available", base_url=self.config.base_url)
+
+        try:
+            url = f"{self.config.base_url}/api/version"
+            logger.trace("ollama_client", "is_service_available", f"Checking service at {url}")
+            response = await self.http_client.get(url, timeout=5.0)
+            available = response.status_code == 200
+
+            log_decision_point(
+                "ollama_client", "is_service_available", f"status_code={response.status_code}", f"available={available}"
+            )
+            log_component_end(
+                "ollama_client", "is_service_available", f"Service {'available' if available else 'unavailable'}"
+            )
+            return available
+
+        except Exception as e:
+            logger.debug("ollama_client", "is_service_available", f"Service check failed: {str(e)}")
+            log_component_end("ollama_client", "is_service_available", "Service unavailable (error)")
+            return False
 
     async def get_available_models(self) -> list[str]:
         """
@@ -688,7 +915,7 @@ def create_ollama_client(
     config: OllamaConfig | None = None,
     http_client: HttpClient | None = None,
     language_config_provider: LanguageConfigProvider | None = None,
-    logger: logging.Logger | None = None,
+    logger=None,
 ) -> MultilingualOllamaClient:
     """
     Factory function to create configured Ollama client.
@@ -702,9 +929,24 @@ def create_ollama_client(
     Returns:
         Configured MultilingualOllamaClient
     """
+    system_logger = get_system_logger()
+    log_component_start(
+        "ollama_factory",
+        "create_client",
+        has_config=config is not None,
+        has_http=http_client is not None,
+        has_lang_provider=language_config_provider is not None,
+    )
+
     if config is None:
+        system_logger.debug("ollama_factory", "create_client", "Creating default OllamaConfig")
         config = OllamaConfig()
 
-    return MultilingualOllamaClient(
+    system_logger.debug("ollama_factory", "create_client", f"Creating client for model: {config.model}")
+
+    client = MultilingualOllamaClient(
         config=config, http_client=http_client, language_config_provider=language_config_provider, logger=logger
     )
+
+    log_component_end("ollama_factory", "create_client", f"Created Ollama client for {config.model}")
+    return client

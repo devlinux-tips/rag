@@ -4,14 +4,20 @@ Includes production implementations and mock providers for testing.
 """
 
 import asyncio
-import logging
 from typing import Any
 
 import numpy as np
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
 from .search import ConfigProvider, EmbeddingProvider, VectorSearchProvider
-
-logger = logging.getLogger(__name__)
 
 
 # Mock Providers for Testing
@@ -29,7 +35,7 @@ class MockEmbeddingProvider(EmbeddingProvider):
         self.dimension = dimension
         self.deterministic = deterministic
         self._embedding_cache: dict[str, np.ndarray] = {}
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_system_logger()
 
     async def encode_text(self, text: str) -> np.ndarray:
         """Generate mock embedding for text."""
@@ -59,7 +65,7 @@ class MockVectorSearchProvider(VectorSearchProvider):
     def __init__(self):
         """Initialize mock search provider."""
         self.documents = {}  # id -> {"content": str, "embedding": np.ndarray, "metadata": dict}
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_system_logger()
 
     def add_document(self, doc_id: str, content: str, embedding: np.ndarray, metadata: dict[str, Any] | None = None):
         """Add document for testing."""
@@ -191,7 +197,7 @@ class MockConfigProvider(ConfigProvider):
             custom_config: Optional custom configuration
         """
         self.config = custom_config or self._default_config()
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_system_logger()
 
     def get_search_config(self) -> dict[str, Any]:
         """Get search configuration."""
@@ -239,35 +245,66 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             model_name: HuggingFace model name
             device: Device to run model on (cpu, cuda, mps)
         """
+        get_system_logger()
+        log_component_start("embedding_provider", "init", model=model_name, device=device)
+
         from sentence_transformers import SentenceTransformer
 
-        self.model = SentenceTransformer(model_name, device=device)
-        self.model_name = model_name
-        self.device = device
-        self.logger = logging.getLogger(__name__)
-        self.logger.info(f"Loaded embedding model {model_name} on {device}")
+        try:
+            self.model = SentenceTransformer(model_name, device=device)
+            self.model_name = model_name
+            self.device = device
+            self.logger = get_system_logger()
+
+            embedding_dim = self.model.get_sentence_embedding_dimension()
+            log_performance_metric(
+                "embedding_provider",
+                "init",
+                "embedding_dimension",
+                float(embedding_dim) if embedding_dim is not None else 0.0,
+            )
+            log_component_end("embedding_provider", "init", f"Loaded {model_name} on {device} ({embedding_dim}D)")
+
+        except Exception as e:
+            log_error_context("embedding_provider", "init", e, {"model_name": model_name, "device": device})
+            raise
 
     async def encode_text(self, text: str) -> np.ndarray:
         """Encode text using sentence-transformers model."""
+        logger = get_system_logger()
+        log_component_start("embedding_provider", "encode_text", text_length=len(text), model=self.model_name)
+
         try:
+            logger.trace("embedding_provider", "encode_text", f"Encoding text: '{text[:100]}...' ({len(text)} chars)")
+
             # Run encoding in thread pool to avoid blocking async loop
             loop = asyncio.get_event_loop()
             raw_embedding = await loop.run_in_executor(None, lambda: self.model.encode(text, normalize_embeddings=True))
             embedding: np.ndarray = np.asarray(raw_embedding)
 
+            logger.trace("embedding_provider", "encode_text", f"Raw embedding shape: {embedding.shape}")
+
             # Ensure numpy array format
             if not isinstance(embedding, np.ndarray):
                 embedding = np.array(embedding)
+                logger.trace("embedding_provider", "encode_text", "Converted to numpy array")
 
             # Ensure 1D array (some models return 2D with single row)
             if embedding.ndim == 2 and embedding.shape[0] == 1:
                 embedding = embedding[0]
+                logger.trace("embedding_provider", "encode_text", "Flattened 2D embedding to 1D")
 
-            self.logger.debug(f"Encoded text to {embedding.shape} embedding")
-            return embedding.astype(np.float32)
+            final_embedding = embedding.astype(np.float32)
+            log_data_transformation(
+                "embedding_provider", "encode_text", f"text ({len(text)} chars)", f"embedding {final_embedding.shape}"
+            )
+            log_component_end("embedding_provider", "encode_text", f"Generated {final_embedding.shape} embedding")
+            return final_embedding
 
         except Exception as e:
-            self.logger.error(f"Encoding failed: {e}")
+            log_error_context(
+                "embedding_provider", "encode_text", e, {"text_length": len(text), "model": self.model_name}
+            )
             raise
 
 
@@ -282,9 +319,15 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             collection: ChromaDB collection instance
             embedding_provider: Provider to generate embeddings for text queries
         """
+        get_system_logger()
+        log_component_start("search_provider", "init", provider_type="ChromaDB")
+
         self.collection = collection
         self.embedding_provider = embedding_provider
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_system_logger()
+
+        collection_name = getattr(collection, "name", "unknown")
+        log_component_end("search_provider", "init", f"ChromaDB provider initialized: {collection_name}")
 
     async def search_by_embedding(
         self,
@@ -294,7 +337,19 @@ class ChromaDBSearchProvider(VectorSearchProvider):
         include_metadata: bool = True,
     ) -> dict[str, Any]:
         """Search using embedding vector."""
+        logger = get_system_logger()
+        log_component_start(
+            "search_provider",
+            "search_by_embedding",
+            embedding_shape=query_embedding.shape,
+            top_k=top_k,
+            has_filters=bool(filters),
+        )
+
         try:
+            logger.trace("search_provider", "search_by_embedding", f"Query embedding shape: {query_embedding.shape}")
+            logger.debug("search_provider", "search_by_embedding", f"Searching for top {top_k} results")
+
             # Run ChromaDB query in thread pool
             loop = asyncio.get_event_loop()
 
@@ -308,14 +363,26 @@ class ChromaDBSearchProvider(VectorSearchProvider):
 
             if filters:
                 query_kwargs["where"] = filters
+                logger.debug("search_provider", "search_by_embedding", f"Applied filters: {filters}")
+
+            log_decision_point(
+                "search_provider", "search_by_embedding", f"include_metadata={include_metadata}", "executing_query"
+            )
 
             results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
 
-            self.logger.debug(f"ChromaDB embedding search returned {len(results.get('ids', [[]])[0])} results")
+            num_results = len(results["ids"][0]) if results and "ids" in results and results["ids"] else 0
+            log_performance_metric("search_provider", "search_by_embedding", "results_returned", float(num_results))
+            log_component_end("search_provider", "search_by_embedding", f"ChromaDB returned {num_results} results")
             return results
 
         except Exception as e:
-            self.logger.error(f"ChromaDB embedding search failed: {e}")
+            log_error_context(
+                "search_provider",
+                "search_by_embedding",
+                e,
+                {"embedding_shape": query_embedding.shape, "top_k": top_k, "filters": filters},
+            )
             raise
 
     async def search_by_text(
@@ -359,16 +426,21 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             )
 
             if results and results.get("ids") and results["ids"]:
-                return {
+                get_system_logger().debug("search_provider", "get_document", f"Document found: {document_id}")
+                document = {
                     "id": document_id,
                     "content": (results["documents"][0] if results.get("documents") else ""),
                     "metadata": (results["metadatas"][0] if results.get("metadatas") else {}),
                 }
+                log_component_end("search_provider", "get_document", f"Retrieved document: {document_id}")
+                return document
 
+            get_system_logger().debug("search_provider", "get_document", f"Document not found: {document_id}")
+            log_component_end("search_provider", "get_document", f"Document not found: {document_id}")
             return None
 
         except Exception as e:
-            self.logger.error(f"Failed to get document {document_id}: {e}")
+            log_error_context("search_provider", "get_document", e, {"document_id": document_id})
             return None
 
 
@@ -391,7 +463,7 @@ class ConfigProvider(ConfigProvider):
             self.get_search_config_func = get_search_config
             self.get_shared_config_func = get_shared_config
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_system_logger()
 
     def get_search_config(self) -> dict[str, Any]:
         """Get search configuration from config files."""

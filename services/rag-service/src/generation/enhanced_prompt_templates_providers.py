@@ -8,6 +8,8 @@ import logging
 from src.generation.enhanced_prompt_templates import PromptConfig, PromptType
 from src.retrieval.categorization import CategoryType
 
+from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_data_transformation
+
 # ================================
 # MOCK PROVIDERS FOR TESTING
 # ================================
@@ -354,12 +356,37 @@ def create_invalid_config(language: str = "hr") -> PromptConfig:
 
 def create_development_prompt_builder():
     """Create prompt builder configured for development/testing."""
+    get_system_logger()
+    log_component_start(
+        "prompt_templates_providers", "create_development_prompt_builder", language="hr", environment="development"
+    )
+
     from .enhanced_prompt_templates import create_enhanced_prompt_builder
 
     config_provider, logger_provider = create_prompt_builder()
-    return create_enhanced_prompt_builder(
+
+    log_data_transformation(
+        "prompt_templates_providers",
+        "builder_creation",
+        "Input: development environment request",
+        "Output: Croatian prompt builder with mock providers",
+        language="hr",
+        provider_type="mock",
+    )
+
+    builder = create_enhanced_prompt_builder(
         language="hr", config_provider=config_provider, logger_provider=logger_provider
     )
+
+    log_component_end(
+        "prompt_templates_providers",
+        "create_development_prompt_builder",
+        "Successfully created development prompt builder",
+        language="hr",
+        builder_type="enhanced",
+    )
+
+    return builder
 
 
 def create_test_prompt_builder(

@@ -314,7 +314,7 @@ formality_level = "polite"  # Croatian cultural norm
 
 [prompts]
 # Croatian system prompts and templates
-system_base = "Ti si AI asistent koji pomaže s analitom dokumenata na hrvatskom jeziku."
+system_base = "Ti si pomoćni asistent koji odgovara ISKLJUČIVO na hrvatskom jeziku. Koristi dane kontekstne informacije da daš precizan i jasan odgovor. Odgovori direktno bez objašnjavanja procesa razmišljanja."
 context_intro = "Na temelju sljedećeg konteksta:"
 answer_intro = "Odgovor:"
 no_context_response = "Nema dovoljno informacija u kontekstu za odgovaranje na to pitanje."

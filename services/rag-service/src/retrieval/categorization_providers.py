@@ -5,6 +5,7 @@ Production and mock providers for testable categorization system.
 
 from typing import Any
 
+from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
 from .categorization import ConfigProvider
 
 
@@ -12,18 +13,51 @@ class ProductionConfigProvider:
     """Production configuration provider using real TOML configuration."""
 
     def __init__(self):
+        logger = get_system_logger()
+        log_component_start("production_config_provider", "init")
+
         # Import at runtime to avoid circular dependencies
         from ..utils import config_loader
 
         self._config_loader = config_loader
 
+        logger.debug("production_config_provider", "init", "Production config provider initialized")
+        log_component_end("production_config_provider", "init", "Production config provider ready")
+
     def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
-        # Use the main config provider to get properly merged categorization config
-        from ..utils.config_protocol import get_config_provider
+        logger = get_system_logger()
+        log_component_start("production_config_provider", "get_categorization_config", language=language)
 
-        main_provider = get_config_provider()
-        return main_provider.get_categorization_config(language)
+        try:
+            # Use the main config provider to get properly merged categorization config
+            from ..utils.config_protocol import get_config_provider
+
+            logger.debug(
+                "production_config_provider",
+                "get_categorization_config",
+                f"Loading categorization config for {language}",
+            )
+            main_provider = get_config_provider()
+            config = main_provider.get_categorization_config(language)
+
+            logger.debug(
+                "production_config_provider", "get_categorization_config", f"Loaded config with {len(config)} keys"
+            )
+            logger.trace(
+                "production_config_provider", "get_categorization_config", f"Config keys: {list(config.keys())}"
+            )
+
+            log_component_end(
+                "production_config_provider",
+                "get_categorization_config",
+                f"Categorization config loaded for {language}",
+            )
+            return config
+
+        except Exception as e:
+            log_error_context("production_config_provider", "get_categorization_config", e, {"language": language})
+            raise
 
 
 class MockConfigProvider:

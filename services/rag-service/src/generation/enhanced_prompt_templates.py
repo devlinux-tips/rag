@@ -10,6 +10,16 @@ from typing import Any, Protocol
 
 from src.retrieval.categorization import CategoryType
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_error_context,
+    log_performance_metric,
+)
+
 
 class PromptType(Enum):
     """Types of prompt templates."""
@@ -409,6 +419,15 @@ class _EnhancedPromptBuilder:
 
     def __init__(self, language: str, config_provider: ConfigProvider, logger_provider: LoggerProvider | None = None):
         """Initialize with injected dependencies."""
+        logger = get_system_logger()
+        log_component_start(
+            "enhanced_prompt_builder",
+            "__init__",
+            language=language,
+            config_provided=config_provider is not None,
+            logger_provided=logger_provider is not None,
+        )
+
         self.language = language
         self._config_provider = config_provider
         self._logger = logger_provider
@@ -417,7 +436,32 @@ class _EnhancedPromptBuilder:
         self._prompt_config = self._config_provider.get_prompt_config(language)
         self._templates = parse_config_templates(self._prompt_config.category_templates, language)
 
+        log_data_transformation(
+            "enhanced_prompt_builder",
+            "template_loading",
+            f"Input: {language} language configuration",
+            f"Loaded {len(self._templates)} template categories",
+            language=language,
+            categories_loaded=len(self._templates),
+            category_list=list(self._templates.keys()),
+        )
+
+        log_performance_metric("enhanced_prompt_builder", "__init__", "template_categories_count", len(self._templates))
+
         self._log_info(f"Loaded {len(self._templates)} template categories for {language}")
+        logger.info(
+            "enhanced_prompt_builder",
+            "__init__",
+            f"Initialized prompt builder for {language} with {len(self._templates)} categories",
+        )
+
+        log_component_end(
+            "enhanced_prompt_builder",
+            "__init__",
+            f"Prompt builder initialized for {language}",
+            language=language,
+            categories=len(self._templates),
+        )
 
     def _log_info(self, message: str) -> None:
         """Log info message if logger available."""
@@ -448,6 +492,15 @@ class _EnhancedPromptBuilder:
         include_source_attribution: bool = True,
     ) -> tuple[str, str]:
         """Build category-specific system and user prompts."""
+        logger = get_system_logger()
+        log_component_start(
+            "enhanced_prompt_builder",
+            "build_prompt",
+            query_length=len(query),
+            context_chunks=len(context_chunks),
+            category=category.value,
+            max_context_length=max_context_length,
+        )
 
         try:
             formatting_options = ContextFormattingOptions(
@@ -470,10 +523,30 @@ class _EnhancedPromptBuilder:
                 ),
             )
 
+            log_data_transformation(
+                "enhanced_prompt_builder",
+                "formatting_options",
+                f"Input: {len(context_chunks)} chunks, max_length: {max_context_length}",
+                f"Formatting options configured: attribution={include_source_attribution}",
+                max_length=max_context_length,
+                source_attribution=include_source_attribution,
+                min_chunk_size=formatting_options.min_chunk_size,
+            )
+
             no_context_message = (
                 self._prompt_config.messages["no_context"]
                 if "no_context" in self._prompt_config.messages
                 else "No relevant context available."
+            )
+
+            log_decision_point(
+                "enhanced_prompt_builder",
+                "template_selection",
+                f"Using category: {category.value}",
+                f"template_{category.value}",
+                category=category.value,
+                templates_available=len(self._templates),
+                language=self.language,
             )
 
             result = build_category_prompt(
@@ -485,15 +558,64 @@ class _EnhancedPromptBuilder:
                 no_context_message=no_context_message,
             )
 
+            log_performance_metric("enhanced_prompt_builder", "build_prompt", "chunks_included", result.chunks_included)
+            log_performance_metric(
+                "enhanced_prompt_builder", "build_prompt", "system_prompt_length", len(result.system_prompt)
+            )
+            log_performance_metric(
+                "enhanced_prompt_builder", "build_prompt", "user_prompt_length", len(result.user_prompt)
+            )
+
             if result.truncated:
+                log_decision_point(
+                    "enhanced_prompt_builder",
+                    "context_truncation",
+                    f"Context truncated: {result.chunks_included} chunks included",
+                    "truncate_context",
+                    chunks_included=result.chunks_included,
+                    original_chunks=len(context_chunks),
+                    truncated=True,
+                )
                 self._log_debug(
                     f"Context truncated for {category.value} prompt: {result.chunks_included} chunks included"
                 )
 
+            log_data_transformation(
+                "enhanced_prompt_builder",
+                "prompt_generation",
+                f"Input: query + {len(context_chunks)} chunks",
+                f"Generated system ({len(result.system_prompt)} chars) + user ({len(result.user_prompt)} chars) prompts",
+                system_prompt_length=len(result.system_prompt),
+                user_prompt_length=len(result.user_prompt),
+                context_truncated=result.truncated,
+            )
+
+            logger.info(
+                "enhanced_prompt_builder",
+                "build_prompt",
+                f"Built {category.value} prompt: {len(result.system_prompt)}+{len(result.user_prompt)} chars, {result.chunks_included} chunks",
+            )
+
+            log_component_end(
+                "enhanced_prompt_builder",
+                "build_prompt",
+                f"Prompt built successfully for {category.value}",
+                category=category.value,
+                chunks_used=result.chunks_included,
+                truncated=result.truncated,
+            )
+
             return result.system_prompt, result.user_prompt
 
         except KeyError as e:
+            log_error_context(
+                "enhanced_prompt_builder",
+                "build_prompt",
+                e,
+                {"category": category.value, "available_categories": list(self._templates.keys())},
+            )
             self._log_error(f"Template not found: {e}")
+            log_component_end("enhanced_prompt_builder", "build_prompt", f"Failed: template not found - {e}")
             raise
 
     def get_followup_prompt(

@@ -10,6 +10,14 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
 
 from ..utils.config_models import QueryProcessingConfig
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
 
 if TYPE_CHECKING:
     from ..utils.config_protocol import ConfigProvider
@@ -361,26 +369,85 @@ class MultilingualQueryProcessor:
         Returns:
             ProcessedQuery with extracted information
         """
+        logger = get_system_logger()
+        log_component_start(
+            "query_processor",
+            "process_query",
+            query_length=len(query),
+            language=self.config.language,
+            query_preview=query[:50],
+        )
+
         context = context or {}
         original_query = query
 
         # Validate query length
         if len(query.strip()) < self.config.min_query_length:
+            log_decision_point(
+                "query_processor",
+                "length_validation",
+                f"Query too short: {len(query.strip())} < {self.config.min_query_length}",
+                "reject_query",
+                actual_length=len(query.strip()),
+                min_required=self.config.min_query_length,
+                result="rejected",
+            )
+            log_component_end("query_processor", "process_query", "Query rejected - too short")
             return self._create_empty_result(query)
+
+        log_data_transformation(
+            "query_processor",
+            "input_validation",
+            f"Input: Query with {len(query)} chars",
+            f"Query validated for {self.config.language} language processing",
+            original_length=len(query),
+            language=self.config.language,
+            spell_check_enabled=self.config.enable_spell_check,
+            synonym_expansion=self.config.expand_synonyms,
+        )
 
         # Step 1: Preprocess text using pure function
         processed_query = normalize_text(
             query, normalize_case=self.config.normalize_case, normalize_quotes=True, normalize_punctuation=True
         )
 
+        log_data_transformation(
+            "query_processor",
+            "text_normalization",
+            f"Input: '{original_query}' ({len(original_query)} chars)",
+            f"Output: '{processed_query}' ({len(processed_query)} chars)",
+            original_length=len(original_query),
+            processed_length=len(processed_query),
+            case_normalized=self.config.normalize_case,
+        )
+
         # Step 2: Spell check if enabled and available
         if self.config.enable_spell_check and self.spell_checker:
-            processed_query = self.spell_checker.check_and_correct(processed_query, self.config.language)
+            spell_corrected = self.spell_checker.check_and_correct(processed_query, self.config.language)
+            log_data_transformation(
+                "query_processor",
+                "spell_correction",
+                f"Input: '{processed_query}' ({len(processed_query)} chars)",
+                f"Output: '{spell_corrected}' ({len(spell_corrected)} chars)",
+                corrections_made=processed_query != spell_corrected,
+                language=self.config.language,
+            )
+            processed_query = spell_corrected
 
         # Step 3: Classify query type using pure function
         question_patterns = self._get_question_patterns()
         query_type_str = classify_query_by_patterns(processed_query, question_patterns)
         query_type = QueryType(query_type_str)
+
+        log_decision_point(
+            "query_processor",
+            "query_classification",
+            f"Classified as: {query_type.value}",
+            f"type_{query_type.value}",
+            query_type=query_type.value,
+            patterns_available=len(question_patterns),
+            is_general=query_type == QueryType.GENERAL,
+        )
 
         # Step 4: Extract keywords using pure function
         stop_words = self._get_stop_words()
@@ -391,6 +458,18 @@ class MultilingualQueryProcessor:
             remove_stopwords=self.config.remove_stopwords,
         )
 
+        log_performance_metric("query_processor", "process_query", "keywords_extracted", len(keywords))
+        log_data_transformation(
+            "query_processor",
+            "keyword_extraction",
+            f"Input: '{processed_query}' ({len(processed_query.split())} words)",
+            f"Output: {len(keywords)} keywords extracted",
+            keywords_count=len(keywords),
+            total_words=len(processed_query.split()),
+            stop_words_count=len(stop_words),
+            removal_enabled=self.config.remove_stopwords,
+        )
+
         # Step 5: Expand terms using pure function
         expanded_terms = []
         if self.config.expand_synonyms:
@@ -399,8 +478,31 @@ class MultilingualQueryProcessor:
                 keywords, synonym_groups=synonym_groups, max_expanded_terms=self.config.max_expanded_terms
             )
 
+            expansion_count = len(expanded_terms) - len(keywords)
+            log_performance_metric("query_processor", "process_query", "synonyms_added", expansion_count)
+            log_data_transformation(
+                "query_processor",
+                "synonym_expansion",
+                f"Input: {len(keywords)} keywords",
+                f"Output: {len(expanded_terms)} expanded terms (+{expansion_count} synonyms)",
+                original_terms=len(keywords),
+                expanded_terms=len(expanded_terms),
+                synonyms_added=expansion_count,
+                synonym_groups_available=len(synonym_groups),
+            )
+
         # Step 6: Generate filters using pure function
         filters = generate_query_filters(processed_query, context, filter_config=self.filter_config)
+
+        log_data_transformation(
+            "query_processor",
+            "filter_generation",
+            f"Input: query + context ({len(context)} items)",
+            f"Output: {len(filters)} filters generated",
+            filter_count=len(filters),
+            filter_types=list(filters.keys()),
+            context_provided=len(context),
+        )
 
         # Step 7: Calculate confidence using pure function
         confidence = calculate_query_confidence(
@@ -410,6 +512,8 @@ class MultilingualQueryProcessor:
             query_type=query_type_str,
             patterns_matched=1 if query_type != QueryType.GENERAL else 0,
         )
+
+        log_performance_metric("query_processor", "process_query", "processing_confidence", confidence)
 
         # Create metadata
         metadata = {
@@ -432,10 +536,38 @@ class MultilingualQueryProcessor:
             metadata=metadata,
         )
 
+        log_decision_point(
+            "query_processor",
+            "processing_complete",
+            f"Processing successful: type={query_type.value}, confidence={confidence:.3f}",
+            "processing_successful",
+            query_type=query_type.value,
+            confidence=confidence,
+            keywords_count=len(keywords),
+            expanded_count=len(expanded_terms),
+            filters_count=len(filters),
+        )
+
         self.logger.info(
             f"Processed query: '{original_query[:50]}...' "
             f"-> {len(keywords)} keywords, type: {query_type.value}, "
             f"confidence: {confidence:.2f}"
+        )
+
+        logger.info(
+            "query_processor",
+            "process_query",
+            f"Successfully processed query: {len(keywords)} keywords, type: {query_type.value}, confidence: {confidence:.3f}",
+        )
+
+        log_component_end(
+            "query_processor",
+            "process_query",
+            f"Query processed successfully: {query_type.value}",
+            query_type=query_type.value,
+            keywords_count=len(keywords),
+            confidence=confidence,
+            processing_steps=len(metadata["processing_steps"]),
         )
 
         return result

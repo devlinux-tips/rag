@@ -7,6 +7,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_error_context,
+    log_performance_metric,
+)
+
 # ================================
 # STANDARD PROVIDERS
 # ================================
@@ -17,9 +25,26 @@ class ConfigProvider:
 
     def get_extraction_config(self) -> dict[str, Any]:
         """Get extraction configuration from TOML files."""
-        from ..utils.config_loader import get_extraction_config
+        logger = get_system_logger()
+        log_component_start("config_provider", "get_extraction_config")
 
-        return get_extraction_config()
+        try:
+            from ..utils.config_loader import get_extraction_config
+
+            logger.debug("config_provider", "get_extraction_config", "Loading extraction configuration")
+            config = get_extraction_config()
+
+            logger.debug(
+                "config_provider", "get_extraction_config", f"Loaded extraction config with {len(config)} keys"
+            )
+            logger.trace("config_provider", "get_extraction_config", f"Extraction config keys: {list(config.keys())}")
+
+            log_component_end("config_provider", "get_extraction_config", "Extraction config loaded")
+            return config
+
+        except Exception as e:
+            log_error_context("config_provider", "get_extraction_config", e, {})
+            raise
 
 
 class FileSystemProvider:
@@ -27,19 +52,71 @@ class FileSystemProvider:
 
     def file_exists(self, file_path: Path) -> bool:
         """Check if file exists."""
-        return file_path.exists()
+        logger = get_system_logger()
+        logger.trace("filesystem_provider", "file_exists", f"Checking existence: {file_path}")
+
+        exists = file_path.exists()
+        logger.trace("filesystem_provider", "file_exists", f"File exists: {exists}")
+        return exists
 
     def get_file_size_mb(self, file_path: Path) -> float:
         """Get file size in MB."""
-        return file_path.stat().st_size / (1024 * 1024)
+        logger = get_system_logger()
+        log_component_start("filesystem_provider", "get_file_size_mb", file_path=str(file_path))
+
+        try:
+            size_bytes = file_path.stat().st_size
+            size_mb = size_bytes / (1024 * 1024)
+
+            logger.debug("filesystem_provider", "get_file_size_mb", f"File size: {size_bytes} bytes = {size_mb:.2f} MB")
+            log_performance_metric("filesystem_provider", "get_file_size_mb", "file_size_mb", size_mb)
+
+            log_component_end("filesystem_provider", "get_file_size_mb", f"File size calculated: {size_mb:.2f} MB")
+            return size_mb
+
+        except Exception as e:
+            log_error_context("filesystem_provider", "get_file_size_mb", e, {"file_path": str(file_path)})
+            raise
 
     def open_binary(self, file_path: Path) -> bytes:
         """Open file in binary mode."""
-        return file_path.read_bytes()
+        logger = get_system_logger()
+        log_component_start("filesystem_provider", "open_binary", file_path=str(file_path))
+
+        try:
+            logger.debug("filesystem_provider", "open_binary", f"Reading binary file: {file_path}")
+            content = file_path.read_bytes()
+
+            logger.debug("filesystem_provider", "open_binary", f"Read {len(content)} bytes")
+            log_performance_metric("filesystem_provider", "open_binary", "content_size_bytes", len(content))
+
+            log_component_end("filesystem_provider", "open_binary", f"Binary file read: {len(content)} bytes")
+            return content
+
+        except Exception as e:
+            log_error_context("filesystem_provider", "open_binary", e, {"file_path": str(file_path)})
+            raise
 
     def open_text(self, file_path: Path, encoding: str) -> str:
         """Open file in text mode with specified encoding."""
-        return file_path.read_text(encoding=encoding)
+        logger = get_system_logger()
+        log_component_start("filesystem_provider", "open_text", file_path=str(file_path), encoding=encoding)
+
+        try:
+            logger.debug("filesystem_provider", "open_text", f"Reading text file with {encoding} encoding: {file_path}")
+            content = file_path.read_text(encoding=encoding)
+
+            logger.debug("filesystem_provider", "open_text", f"Read {len(content)} characters")
+            log_performance_metric("filesystem_provider", "open_text", "content_size_chars", len(content))
+
+            log_component_end("filesystem_provider", "open_text", f"Text file read: {len(content)} chars")
+            return content
+
+        except Exception as e:
+            log_error_context(
+                "filesystem_provider", "open_text", e, {"file_path": str(file_path), "encoding": encoding}
+            )
+            raise
 
 
 class LoggerProvider:

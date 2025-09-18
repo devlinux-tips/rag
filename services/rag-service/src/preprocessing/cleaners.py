@@ -10,6 +10,15 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
+
 
 @dataclass
 class CleaningResult:
@@ -538,7 +547,22 @@ class MultilingualTextCleaner:
         Returns:
             CleaningResult with cleaned text and metadata
         """
-        self._log_debug(f"Cleaning text of length {len(text) if text else 0}")
+        logger = get_system_logger()
+        log_component_start(
+            "text_cleaner",
+            "clean_text",
+            input_length=len(text) if text else 0,
+            preserve_structure=preserve_structure,
+            language=self.language,
+        )
+
+        if not text:
+            logger.debug("text_cleaner", "clean_text", "Empty input text - returning empty result")
+            result = CleaningResult(
+                text="", original_length=0, cleaned_length=0, operations_performed=[], is_meaningful=False
+            )
+            log_component_end("text_cleaner", "clean_text", "Empty input handled")
+            return result
 
         result = clean_text_comprehensive(
             text=text,
@@ -548,8 +572,31 @@ class MultilingualTextCleaner:
             preserve_structure=preserve_structure,
         )
 
-        self._log_debug(f"Cleaned text length: {result.cleaned_length}")
+        log_data_transformation(
+            "text_cleaner",
+            "text_processing",
+            f"text[{result.original_length}chars]",
+            f"cleaned[{result.cleaned_length}chars]",
+            operations=result.operations_performed,
+            reduction_pct=round((1 - result.cleaned_length / result.original_length) * 100, 1)
+            if result.original_length > 0
+            else 0,
+        )
 
+        log_performance_metric(
+            "text_cleaner",
+            "clean_text",
+            "text_reduction_ratio",
+            result.cleaned_length / result.original_length if result.original_length > 0 else 0,
+        )
+
+        logger.debug(
+            "text_cleaner",
+            "clean_text",
+            f"Applied {len(result.operations_performed)} cleaning operations: {', '.join(result.operations_performed)}",
+        )
+
+        log_component_end("text_cleaner", "clean_text", f"Cleaned successfully: {result.cleaned_length} chars")
         return result
 
     def extract_sentences(self, text: str) -> list[str]:
@@ -578,12 +625,21 @@ class MultilingualTextCleaner:
 
     def detect_language_content(self, text: str) -> float:
         """Detect how much content matches the current language."""
+        logger = get_system_logger()
+        log_component_start(
+            "language_detector", "detect_content", text_length=len(text) if text else 0, language=self.language
+        )
+
         if not text:
+            logger.debug("language_detector", "detect_content", "Empty text - returning 0.0 score")
+            log_component_end("language_detector", "detect_content", "Empty input handled")
             return 0.0
 
         # Simple language detection based on character patterns and stopwords
         words = text.lower().split()
         if not words:
+            logger.debug("language_detector", "detect_content", "No words found - returning 0.0 score")
+            log_component_end("language_detector", "detect_content", "No words detected")
             return 0.0
 
         # Check for language-specific characters
@@ -597,15 +653,37 @@ class MultilingualTextCleaner:
             language_chars = len("".join(matches))
 
         char_ratio = language_chars / total_chars if total_chars > 0 else 0.0
+        logger.trace(
+            "language_detector",
+            "detect_content",
+            f"Character analysis: {language_chars}/{total_chars} = {char_ratio:.3f}",
+        )
 
         # Check for stopwords if available
         stopword_ratio = 0.0
         if hasattr(self.shared_config, "stopwords") and self.shared_config.stopwords:
             matching_stopwords = sum(1 for word in words if word in self.shared_config.stopwords)
             stopword_ratio = matching_stopwords / len(words) if words else 0.0
+            logger.trace(
+                "language_detector",
+                "detect_content",
+                f"Stopword analysis: {matching_stopwords}/{len(words)} = {stopword_ratio:.3f}",
+            )
 
         # Combined score
-        return (char_ratio * 0.6) + (stopword_ratio * 0.4)
+        final_score = (char_ratio * 0.6) + (stopword_ratio * 0.4)
+
+        log_decision_point(
+            "language_detector",
+            "detect_content",
+            f"char_ratio={char_ratio:.3f},stopword_ratio={stopword_ratio:.3f}",
+            f"final_score={final_score:.3f}",
+        )
+
+        log_performance_metric("language_detector", "detect_content", "language_confidence", final_score)
+        log_component_end("language_detector", "detect_content", f"Language confidence: {final_score:.3f}")
+
+        return final_score
 
     def preserve_encoding(self, text: Any) -> str:
         """Preserve proper text encoding for the language."""

@@ -9,6 +9,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from ..utils.logging_factory import get_system_logger, log_data_transformation
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,11 +31,31 @@ def normalize_whitespace(text: str) -> str:
     Raises:
         ValueError: If text is not string
     """
+    logger = get_system_logger()
+    logger.trace(
+        "response_parser",
+        "normalize_whitespace",
+        f"Normalizing text: {len(text) if isinstance(text, str) else 'invalid'} chars",
+    )
+
     if not isinstance(text, str):
+        logger.error("response_parser", "normalize_whitespace", f"Invalid input type: {type(text)}")
         raise ValueError(f"Text must be string, got {type(text)}")
 
     # Replace multiple whitespace with single space
     normalized = re.sub(r"\s+", " ", text.strip())
+
+    if len(normalized) != len(text):
+        logger.trace(
+            "response_parser", "normalize_whitespace", f"Whitespace normalized: {len(text)} -> {len(normalized)} chars"
+        )
+        log_data_transformation(
+            "response_parser",
+            "normalize_whitespace",
+            f"text ({len(text)} chars)",
+            f"normalized ({len(normalized)} chars)",
+        )
+
     return normalized
 
 
@@ -58,17 +80,40 @@ def remove_prefixes(text: str, prefixes: list[str]) -> str:
     if not isinstance(prefixes, list):
         raise ValueError(f"Prefixes must be list, got {type(prefixes)}")
 
-    result = text
+    logger = get_system_logger()
+    logger.trace("response_parser", "remove_prefixes", f"Removing {len(prefixes)} prefixes from {len(text)} chars")
 
-    for pattern in prefixes:
+    result = text
+    removed_count = 0
+
+    for i, pattern in enumerate(prefixes):
         if not isinstance(pattern, str):
-            continue  # Skip invalid patterns
+            logger.trace("response_parser", "remove_prefixes", f"Skipping invalid pattern {i}: {type(pattern)}")
+            continue
 
         try:
+            before_len = len(result)
             result = re.sub(pattern, "", result, flags=re.IGNORECASE)
-        except re.error:
-            # Skip invalid regex patterns
+            after_len = len(result)
+
+            if before_len != after_len:
+                removed_count += 1
+                logger.trace(
+                    "response_parser",
+                    "remove_prefixes",
+                    f"Pattern '{pattern}' removed text: {before_len} -> {after_len} chars",
+                )
+        except re.error as e:
+            logger.trace("response_parser", "remove_prefixes", f"Invalid regex pattern '{pattern}': {e}")
             continue
+
+    if removed_count > 0:
+        log_data_transformation(
+            "response_parser",
+            "remove_prefixes",
+            f"text ({len(text)} chars)",
+            f"cleaned ({len(result)} chars, {removed_count} prefixes removed)",
+        )
 
     return result
 

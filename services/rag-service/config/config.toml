@@ -295,19 +295,35 @@ bm25_b = 0.75
 # GENERATION CONFIGURATION
 # ============================================================================
 [ollama]
-# Ollama LLM configuration - OPTIMIZED FOR PERFORMANCE
+# Local Ollama LLM configuration - Using Qwen2.5 7B model
 base_url = "http://localhost:11434"
-model = "qwen2.5:7b-instruct"  # Fast multilingual model with good quality
+model = "qwen2.5:7b-instruct"  # Local Qwen2.5 7B model
 timeout = 120.0                # Connection and response timeout in seconds
 temperature = 0.7
 max_tokens = 800               # Reduced from 2000 for faster generation
 top_p = 0.9
 top_k = 40                     # Specific to generation (different from search top_k)
 stream = true
-keep_alive = "5m"
+keep_alive = "5m"              # Keep model loaded for 5 minutes
 num_predict = 800              # Cap token generation
 repeat_penalty = 1.1
 seed = -1
+api_key = ""                   # No API key needed for local Ollama
+response_format = "ollama"     # Response format: "ollama" or "openai"
+
+# API endpoints configuration for different LLM providers
+[ollama.endpoints]
+# Local Ollama endpoints (default configuration)
+health_check = "/api/version"               # Endpoint to check service availability
+chat_completions = "/api/generate"          # Endpoint for chat/text generation
+models_list = "/api/tags"                   # Endpoint to list available models
+streaming_chat = "/api/generate"            # Endpoint for streaming responses
+
+# Alternative OpenRouter endpoints (for remote API)
+# health_check = "/models"
+# chat_completions = "/chat/completions"
+# models_list = "/models"
+# streaming_chat = "/chat/completions"
 
 [prompts]
 # Prompt configuration

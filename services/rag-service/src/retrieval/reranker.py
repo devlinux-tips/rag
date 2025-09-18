@@ -10,6 +10,14 @@ from typing import Any, Protocol
 import numpy as np
 
 from ..utils.config_models import ReRankingConfig
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_decision_point,
+    log_performance_metric,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +432,16 @@ class MultilingualReranker:
         Raises:
             ValueError: If inputs are invalid
         """
+        get_system_logger()
+        log_component_start(
+            "multilingual_reranker",
+            "rerank",
+            query_length=len(query),
+            documents_count=len(documents),
+            top_k=top_k,
+            model_name=self.config.model_name,
+        )
+
         if not isinstance(query, str):
             raise ValueError(f"Query must be string, got {type(query)}")
 
@@ -437,6 +455,7 @@ class MultilingualReranker:
             raise ValueError("Top k must be positive integer or None")
 
         if not documents:
+            log_component_end("multilingual_reranker", "rerank", "No documents to rerank", results_count=0)
             return []
 
         try:
@@ -444,14 +463,36 @@ class MultilingualReranker:
             doc_contents = [doc.content for doc in documents]
             pairs = create_query_document_pairs(query, doc_contents)
 
+            log_data_transformation(
+                "multilingual_reranker",
+                "pair_creation",
+                f"Input: {len(documents)} documents",
+                f"Created {len(pairs)} query-document pairs",
+                document_count=len(documents),
+                pairs_count=len(pairs),
+            )
+
             # Calculate relevance scores
             scores = self.score_calculator.calculate_scores(
                 query_document_pairs=pairs, batch_size=self.config.batch_size
             )
 
+            log_performance_metric("multilingual_reranker", "rerank", "initial_scores_count", len(scores))
+
             # Normalize scores if requested
             if self.config.normalize_scores:
                 scores = normalize_scores_to_range(scores, 0.0, 1.0)
+                log_decision_point(
+                    "multilingual_reranker",
+                    "score_normalization",
+                    "enabled",
+                    "Applied score normalization to 0.0-1.0 range",
+                    normalized_range="0.0-1.0",
+                )
+            else:
+                log_decision_point(
+                    "multilingual_reranker", "score_normalization", "disabled", "Using raw scores without normalization"
+                )
 
             # Sort by scores to get new ranking
             sorted_docs, sorted_scores, original_indices = sort_by_scores(
@@ -476,14 +517,56 @@ class MultilingualReranker:
                     results.append(result)
 
             # Apply top_k limit
+            filtered_count = len(results)
             if top_k is not None:
                 results = results[:top_k]
+                log_decision_point(
+                    "multilingual_reranker",
+                    "top_k_filtering",
+                    "applied",
+                    f"Limited results from {filtered_count} to {len(results)}",
+                    top_k=top_k,
+                    before_count=filtered_count,
+                    after_count=len(results),
+                )
+            else:
+                log_decision_point(
+                    "multilingual_reranker",
+                    "top_k_filtering",
+                    "skipped",
+                    "No top_k limit applied",
+                    results_count=len(results),
+                )
 
-            self.logger.debug(f"Reranked {len(documents)} documents, returning {len(results)} results")
+            # Calculate performance metrics
+            if results:
+                avg_score = sum(r.score for r in results) / len(results)
+                score_range = max(r.score for r in results) - min(r.score for r in results)
+                log_performance_metric("multilingual_reranker", "rerank", "avg_score", avg_score)
+                log_performance_metric("multilingual_reranker", "rerank", "score_range", score_range)
+
+            log_data_transformation(
+                "multilingual_reranker",
+                "final_reranking",
+                f"Input: {len(documents)} documents",
+                f"Output: {len(results)} reranked results",
+                input_count=len(documents),
+                output_count=len(results),
+                threshold_filtered=len(documents) - filtered_count,
+            )
+
+            log_component_end(
+                "multilingual_reranker",
+                "rerank",
+                f"Successfully reranked {len(documents)} documents to {len(results)} results",
+                results_count=len(results),
+                model_name=self.config.model_name,
+            )
+
             return results
 
         except Exception as e:
-            self.logger.error(f"Failed to rerank documents: {e}")
+            log_component_end("multilingual_reranker", "rerank", f"Failed to rerank: {e}")
             raise
 
     def calculate_reranking_quality(self, results: list[RerankingResult]) -> dict[str, float]:

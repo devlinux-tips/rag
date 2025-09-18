@@ -5,6 +5,13 @@ Production and mock providers for testable hierarchical retrieval system.
 
 from typing import Any
 
+from ..utils.logging_factory import (
+    get_system_logger,
+    log_component_end,
+    log_component_start,
+    log_data_transformation,
+    log_performance_metric,
+)
 from .categorization import CategoryMatch, CategoryType, QueryComplexity
 from .hierarchical_retriever import ProcessedQuery, RetrievalConfig, SearchResult
 
@@ -445,6 +452,15 @@ def create_hierarchical_retriever(
     Returns:
         HierarchicalRetriever instance
     """
+    logger = get_system_logger()
+    log_component_start(
+        "hierarchical_retriever_providers",
+        "create_hierarchical_retriever",
+        language=language,
+        has_reranker=reranker is not None,
+        performance_tracking=enable_performance_tracking,
+    )
+
     # Import the actual HierarchicalRetriever class
     from .hierarchical_retriever import HierarchicalRetriever
 
@@ -496,8 +512,22 @@ def create_hierarchical_retriever(
         performance_tracking=enable_performance_tracking,
     )
 
+    log_data_transformation(
+        "hierarchical_retriever_providers",
+        "component_assembly",
+        f"Input: search engine + language '{language}'",
+        f"Output: HierarchicalRetriever with {len(config.similarity_thresholds)} strategies",
+        language=language,
+        strategies_count=len(config.similarity_thresholds),
+        has_reranker=reranker is not None,
+    )
+
+    log_performance_metric(
+        "hierarchical_retriever_providers", "create_hierarchical_retriever", "max_results", config.default_max_results
+    )
+
     # Create and return the actual HierarchicalRetriever instance
-    return HierarchicalRetriever(
+    retriever = HierarchicalRetriever(
         query_processor=query_processor,
         categorizer=categorizer,
         search_engine=search_engine_adapter,
@@ -505,6 +535,16 @@ def create_hierarchical_retriever(
         reranker=reranker_adapter,
         logger_provider=logger,
     )
+
+    log_component_end(
+        "hierarchical_retriever_providers",
+        "create_hierarchical_retriever",
+        f"Successfully created HierarchicalRetriever for language '{language}'",
+        language=language,
+        component_type="production",
+    )
+
+    return retriever
 
 
 def create_test_config(max_results: int = 5, performance_tracking: bool = True) -> RetrievalConfig:
