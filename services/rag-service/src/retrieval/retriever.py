@@ -119,22 +119,25 @@ class QueryProcessor(Protocol):
 class SearchEngine(Protocol):
     """Protocol for search operations."""
 
-    async def search(
-        self,
-        query: str,
-        top_k: int,
-        method: str = "semantic",
-        filters: dict[str, Any] | None = None,
-        similarity_threshold: float = 0.0,
-    ) -> list[dict[str, Any]]:
-        """Execute search and return results."""
+    async def search_by_text(
+        self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
+    ) -> dict[str, Any]:
+        """Search for documents by text."""
+        ...
+
+    async def search_by_embedding(
+        self, query_embedding: Any, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
+    ) -> dict[str, Any]:
+        """Search for documents by embedding."""
         ...
 
 
 class ResultRanker(Protocol):
     """Protocol for result ranking and reordering."""
 
-    def rank_results(self, query: RetrievalQuery, documents: list[RetrievedDocument]) -> list[RetrievedDocument]:
+    def rank_documents(
+        self, documents: list[dict[str, Any]], query: Any, context: dict[str, Any] | None = None
+    ) -> list[Any]:
         """Rank documents by relevance."""
         ...
 
@@ -638,42 +641,38 @@ class DocumentRetriever:
         elif strategy == RetrievalStrategy.MULTI_PASS:
             return await self._multi_pass_retrieval(query)
         else:
-            self.logger.warning(f"Unknown strategy {strategy}, falling back to semantic")
+            logger = get_system_logger()
+            logger.warning(
+                "document_retriever", "retrieve_strategy", f"Unknown strategy {strategy}, falling back to semantic"
+            )
             return await self._semantic_retrieval(query)
 
     async def _semantic_retrieval(self, query: RetrievalQuery) -> list[RetrievedDocument]:
         """Execute semantic similarity retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
-        results = await self.search_engine.search(
-            query=query.processed_text,
-            top_k=top_k,
-            method="semantic",
-            filters=query.filters,
-            similarity_threshold=query.similarity_threshold,
+        results = await self.search_engine.search_by_text(
+            query_text=query.processed_text, top_k=top_k, filters=query.filters
         )
 
         documents = []
-        for result in results:
-            # Validate required fields - fail fast if missing
-            if "id" not in result:
-                raise ValueError("Search result missing required 'id' field")
-            if "content" not in result:
-                raise ValueError("Search result missing required 'content' field")
-            if "score" not in result:
-                raise ValueError("Search result missing required 'score' field")
-            if "metadata" not in result:
-                raise ValueError("Search result missing required 'metadata' field")
+        # Transform Chroma format results to individual objects
+        if "ids" in results and results["ids"] and results["ids"][0]:
+            ids = results["ids"][0]
+            docs = results["documents"][0] if "documents" in results else []
+            metadatas = results["metadatas"][0] if "metadatas" in results else []
+            distances = results["distances"][0] if "distances" in results else []
 
-            documents.append(
-                RetrievedDocument(
-                    id=result["id"],
-                    content=result["content"],
-                    score=result["score"],
-                    metadata=result["metadata"],
-                    retrieval_method="semantic",
+            for i, doc_id in enumerate(ids):
+                documents.append(
+                    RetrievedDocument(
+                        id=doc_id,
+                        content=docs[i] if i < len(docs) else "",
+                        score=1.0 - distances[i] if i < len(distances) else 0.0,  # Convert distance to similarity
+                        metadata=metadatas[i] if i < len(metadatas) else {},
+                        retrieval_method="semantic",
+                    )
                 )
-            )
 
         return documents
 
@@ -681,40 +680,34 @@ class DocumentRetriever:
         """Execute keyword-based retrieval."""
         top_k = calculate_adaptive_top_k(query, query.max_results)
 
-        results = await self.search_engine.search(
-            query=query.processed_text,
-            top_k=top_k,
-            method="keyword",
-            filters=query.filters,
-            similarity_threshold=query.similarity_threshold,
+        results = await self.search_engine.search_by_text(
+            query_text=query.processed_text, top_k=top_k, filters=query.filters
         )
 
         documents = []
-        for result in results:
-            # Validate required fields - fail fast if missing
-            if "id" not in result:
-                raise ValueError("Keyword search result missing required 'id' field")
-            if "content" not in result:
-                raise ValueError("Keyword search result missing required 'content' field")
-            if "score" not in result:
-                raise ValueError("Keyword search result missing required 'score' field")
-            if "metadata" not in result:
-                raise ValueError("Keyword search result missing required 'metadata' field")
+        # Transform Chroma format results to individual objects
+        if "ids" in results and results["ids"] and results["ids"][0]:
+            ids = results["ids"][0]
+            docs = results["documents"][0] if "documents" in results else []
+            metadatas = results["metadatas"][0] if "metadatas" in results else []
+            distances = results["distances"][0] if "distances" in results else []
 
-            documents.append(
-                RetrievedDocument(
-                    id=result["id"],
-                    content=result["content"],
-                    score=result["score"],
-                    metadata=result["metadata"],
-                    retrieval_method="keyword",
+            for i, doc_id in enumerate(ids):
+                documents.append(
+                    RetrievedDocument(
+                        id=doc_id,
+                        content=docs[i] if i < len(docs) else "",
+                        score=1.0 - distances[i] if i < len(distances) else 0.0,  # Convert distance to similarity
+                        metadata=metadatas[i] if i < len(metadatas) else {},
+                        retrieval_method="keyword",
+                    )
                 )
-            )
 
         return documents
 
     async def _hybrid_retrieval(self, query: RetrievalQuery) -> list[RetrievedDocument]:
         """Execute hybrid retrieval combining semantic and keyword approaches."""
+        logger = get_system_logger()
         calculate_adaptive_top_k(query, query.max_results)
 
         # Execute both approaches concurrently
@@ -725,11 +718,11 @@ class DocumentRetriever:
 
         # Handle exceptions
         if isinstance(semantic_docs, Exception):
-            self.logger.warning(f"Semantic retrieval failed: {semantic_docs}")
+            logger.warning("document_retriever", "hybrid_retrieval", f"Semantic retrieval failed: {semantic_docs}")
             semantic_docs = []
 
         if isinstance(keyword_docs, Exception):
-            self.logger.warning(f"Keyword retrieval failed: {keyword_docs}")
+            logger.warning("document_retriever", "hybrid_retrieval", f"Keyword retrieval failed: {keyword_docs}")
             keyword_docs = []
 
         # Get weights from config - validate required keys
@@ -802,8 +795,31 @@ class DocumentRetriever:
         # Add query match analysis
         documents = add_query_match_analysis(query, documents)
 
-        # Apply result ranking
-        documents = self.result_ranker.rank_results(query, documents)
+        # Apply result ranking - convert RetrievedDocument objects to dicts
+        document_dicts = [
+            {
+                "id": doc.id,
+                "content": doc.content,
+                "score": doc.score,
+                "metadata": doc.metadata,
+                "retrieval_method": doc.retrieval_method,
+                "query_match_info": doc.query_match_info,
+            }
+            for doc in documents
+        ]
+        ranked_docs = self.result_ranker.rank_documents(document_dicts, query)
+        # Convert back to RetrievedDocument objects (assuming rank_documents returns dicts)
+        documents = [
+            RetrievedDocument(
+                id=doc.get("id", ""),
+                content=doc.get("content", ""),
+                score=doc.get("score", 0.0),
+                metadata=doc.get("metadata", {}),
+                retrieval_method=doc.get("retrieval_method", "unknown"),
+                query_match_info=doc.get("query_match_info"),
+            )
+            for doc in ranked_docs
+        ]
 
         # Apply final filtering
         documents = filter_results_by_threshold(documents, query.similarity_threshold)
@@ -828,7 +844,7 @@ def create_retrieval_query(
 
 
 def create_document_retriever(
-    query_processor: QueryProcessor, search_engine: SearchEngine, result_ranker: ResultRanker, config: RetrievalConfig
+    query_processor: QueryProcessor, search_engine: SearchEngine, result_ranker: ResultRanker, config: Any
 ) -> DocumentRetriever:
     """Factory function to create DocumentRetriever."""
     return DocumentRetriever(

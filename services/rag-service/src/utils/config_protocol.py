@@ -61,8 +61,8 @@ class ConfigProvider(Protocol):
         ...
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real TOML files."""
+class DefaultConfigProvider:
+    """Default configuration provider using TOML files."""
 
     def __init__(self):
         # Import at runtime to avoid circular dependencies
@@ -316,7 +316,7 @@ class MockConfigProvider:
 
 
 # Global default provider - can be overridden for testing
-_default_provider: ConfigProvider = ProductionConfigProvider()
+_default_provider: ConfigProvider = DefaultConfigProvider()
 
 
 def set_config_provider(provider: ConfigProvider) -> None:
@@ -331,6 +331,6 @@ def get_config_provider() -> ConfigProvider:
 
 
 def reset_config_provider() -> None:
-    """Reset to production configuration provider."""
+    """Reset to default configuration provider."""
     global _default_provider
-    _default_provider = ProductionConfigProvider()
+    _default_provider = DefaultConfigProvider()

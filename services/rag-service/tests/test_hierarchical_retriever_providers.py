@@ -483,7 +483,7 @@ class TestQueryProcessor(unittest.TestCase):
 
         processor = QueryProcessor("hr")
 
-        mock_create.assert_called_once_with(main_config={}, language="hr")
+        mock_create.assert_called_once_with(main_config=unittest.mock.ANY, language="hr", config_provider=unittest.mock.ANY)
         self.assertEqual(processor._processor, mock_processor)
 
     @patch('src.retrieval.query_processor.create_query_processor')
@@ -500,7 +500,7 @@ class TestQueryProcessor(unittest.TestCase):
         processor = QueryProcessor("en")
 
         mock_create_config.assert_called_once_with(language="en")
-        mock_processor_class.assert_called_once_with(config=mock_config)
+        mock_processor_class.assert_called_once_with(config=mock_config, filter_config=unittest.mock.ANY)
         self.assertEqual(processor._processor, mock_processor)
 
     @patch('src.retrieval.query_processor.create_query_processor')
@@ -641,16 +641,18 @@ class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_with_search_result_objects(self):
         """Test search adaptation with SearchResult-like objects."""
-        mock_result = Mock()
-        mock_result.content = "test content"
-        mock_result.metadata = {"source": "test"}
-        mock_result.similarity_score = 0.85
-        self.mock_search_engine.search.return_value = [mock_result]
+        # Mock ChromaDB-style response format
+        mock_raw_results = {
+            "documents": [["test content"]],
+            "metadatas": [[{"source": "test"}]],
+            "distances": [[0.15]]  # Distance, will be converted to similarity
+        }
+        self.mock_search_engine.search_by_text.return_value = mock_raw_results
 
         results = await self.adapter.search("test query", k=3, similarity_threshold=0.5)
 
-        self.mock_search_engine.search.assert_called_once_with(
-            query_text="test query", k=3, similarity_threshold=0.5
+        self.mock_search_engine.search_by_text.assert_called_once_with(
+            query_text="test query", top_k=3, filters=None, include_metadata=True
         )
         self.assertEqual(len(results), 1)
         self.assertIsInstance(results[0], SearchResult)
@@ -661,12 +663,13 @@ class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_with_dict_results(self):
         """Test search adaptation with dictionary results."""
-        mock_result = {
-            "content": "dict content",
-            "metadata": {"type": "dict"},
-            "similarity_score": 0.75
+        # Mock ChromaDB-style response format
+        mock_raw_results = {
+            "documents": [["dict content"]],
+            "metadatas": [[{"type": "dict"}]],
+            "distances": [[0.25]]  # Distance, will be converted to similarity 0.75
         }
-        self.mock_search_engine.search.return_value = [mock_result]
+        self.mock_search_engine.search_by_text.return_value = mock_raw_results
 
         results = await self.adapter.search("test")
 
@@ -677,7 +680,13 @@ class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_with_string_results(self):
         """Test search adaptation with string results."""
-        self.mock_search_engine.search.return_value = ["string result"]
+        # Mock ChromaDB-style response format
+        mock_raw_results = {
+            "documents": [["string result"]],
+            "metadatas": [[{}]],
+            "distances": [[0.5]]  # Distance, will be converted to similarity 0.5
+        }
+        self.mock_search_engine.search_by_text.return_value = mock_raw_results
 
         results = await self.adapter.search("test")
 
@@ -688,9 +697,13 @@ class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_missing_attributes(self):
         """Test search adaptation with objects missing some attributes."""
-        mock_result = Mock(spec=["content"])  # Only has content attribute
-        mock_result.content = "minimal content"
-        self.mock_search_engine.search.return_value = [mock_result]
+        # Mock ChromaDB-style response with minimal metadata
+        mock_raw_results = {
+            "documents": [["minimal content"]],
+            "metadatas": [[{}]],  # Empty metadata
+            "distances": [[0.5]]  # Distance, will be converted to similarity 0.5
+        }
+        self.mock_search_engine.search_by_text.return_value = mock_raw_results
 
         results = await self.adapter.search("test")
 
@@ -701,7 +714,13 @@ class TestSearchEngineAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_empty_results(self):
         """Test search adaptation with empty results."""
-        self.mock_search_engine.search.return_value = []
+        # Mock ChromaDB-style response with empty results
+        mock_raw_results = {
+            "documents": [[]],
+            "metadatas": [[]],
+            "distances": [[]]
+        }
+        self.mock_search_engine.search_by_text.return_value = mock_raw_results
 
         results = await self.adapter.search("test")
 
@@ -804,14 +823,17 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertIn("keyword", config.boost_weights)
         self.assertTrue(config.performance_tracking)
 
+    @patch('src.retrieval.hierarchical_retriever.HierarchicalRetriever')
     @patch('src.retrieval.hierarchical_retriever_providers.QueryProcessor')
     @patch('src.retrieval.hierarchical_retriever_providers.Categorizer')
     @patch('src.retrieval.hierarchical_retriever_providers.SearchEngineAdapter')
     @patch('src.retrieval.hierarchical_retriever_providers.RerankerAdapter')
-    def test_create_hierarchical_retriever_with_reranker(self, mock_reranker_class, mock_search_class, mock_cat_class, mock_query_class):
+    def test_create_hierarchical_retriever_with_reranker(self, mock_reranker_class, mock_search_class, mock_cat_class, mock_query_class, mock_hierarchical_class):
         """Test creating production setup with reranker."""
         mock_search_engine = Mock()
         mock_reranker = Mock()
+        mock_retriever = Mock()
+        mock_hierarchical_class.return_value = mock_retriever
 
         mock_query_processor = Mock()
         mock_categorizer = Mock()
@@ -825,31 +847,44 @@ class TestFactoryFunctions(unittest.TestCase):
 
         result = create_hierarchical_retriever(mock_search_engine, "hr", mock_reranker, True)
 
-        self.assertEqual(len(result), 6)
-        query_processor, categorizer, search_engine, reranker, logger, config = result
+        # Should return HierarchicalRetriever instance
+        self.assertEqual(result, mock_retriever)
 
+        # Verify component creation
         mock_query_class.assert_called_once_with("hr")
         mock_cat_class.assert_called_once_with("hr")
         mock_search_class.assert_called_once_with(mock_search_engine)
         mock_reranker_class.assert_called_once_with(mock_reranker, "hr")
 
-        self.assertEqual(query_processor, mock_query_processor)
-        self.assertEqual(categorizer, mock_categorizer)
-        self.assertEqual(search_engine, mock_search_adapter)
-        self.assertEqual(reranker, mock_reranker_adapter)
+        # Verify HierarchicalRetriever creation
+        mock_hierarchical_class.assert_called_once()
+        call_kwargs = mock_hierarchical_class.call_args[1]
+        self.assertEqual(call_kwargs['query_processor'], mock_query_processor)
+        self.assertEqual(call_kwargs['categorizer'], mock_categorizer)
+        self.assertEqual(call_kwargs['search_engine'], mock_search_adapter)
+        self.assertEqual(call_kwargs['reranker'], mock_reranker_adapter)
 
+    @patch('src.retrieval.hierarchical_retriever.HierarchicalRetriever')
     @patch('src.retrieval.hierarchical_retriever_providers.QueryProcessor')
     @patch('src.retrieval.hierarchical_retriever_providers.Categorizer')
     @patch('src.retrieval.hierarchical_retriever_providers.SearchEngineAdapter')
-    def test_create_hierarchical_retriever_without_reranker(self, mock_search_class, mock_cat_class, mock_query_class):
+    def test_create_hierarchical_retriever_without_reranker(self, mock_search_class, mock_cat_class, mock_query_class, mock_hierarchical_class):
         """Test creating production setup without reranker."""
         mock_search_engine = Mock()
+        mock_retriever = Mock()
+        mock_hierarchical_class.return_value = mock_retriever
 
         result = create_hierarchical_retriever(mock_search_engine, "en", None, False)
 
-        query_processor, categorizer, search_engine, reranker, logger, config = result
+        # Should return HierarchicalRetriever instance
+        self.assertEqual(result, mock_retriever)
 
-        self.assertIsNone(reranker)
+        # Verify HierarchicalRetriever creation with None reranker and performance_tracking=False
+        mock_hierarchical_class.assert_called_once()
+        call_kwargs = mock_hierarchical_class.call_args[1]
+        self.assertIsNone(call_kwargs['reranker'])
+        # Config should have performance_tracking=False
+        config = call_kwargs['config']
         self.assertFalse(config.performance_tracking)
 
     def test_create_test_config_default(self):

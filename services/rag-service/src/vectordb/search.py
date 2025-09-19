@@ -8,7 +8,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -100,6 +100,7 @@ class SearchMethod(Enum):
 
 
 # Protocol-based Dependencies (testable interfaces)
+@runtime_checkable
 class EmbeddingProvider(Protocol):
     """Protocol for embedding generation."""
 
@@ -108,6 +109,7 @@ class EmbeddingProvider(Protocol):
         ...
 
 
+@runtime_checkable
 class VectorSearchProvider(Protocol):
     """Protocol for vector database search operations."""
 
@@ -132,6 +134,7 @@ class VectorSearchProvider(Protocol):
         ...
 
 
+@runtime_checkable
 class ConfigProvider(Protocol):
     """Protocol for search configuration."""
 

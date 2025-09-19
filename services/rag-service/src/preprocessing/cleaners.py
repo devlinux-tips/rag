@@ -556,6 +556,10 @@ class MultilingualTextCleaner:
             language=self.language,
         )
 
+        # Use injected logger for debug messages if available
+        if self._logger:
+            self._logger.debug(f"Cleaning text with length {len(text)} for language {self.language}")
+
         if not text:
             logger.debug("text_cleaner", "clean_text", "Empty input text - returning empty result")
             result = CleaningResult(

@@ -128,7 +128,7 @@ class MockLoggerProvider:
 # ================================
 
 
-class ProductionConfigProvider:
+class DefaultConfigProvider:
     """Production configuration provider using real config system."""
 
     def __init__(self):
@@ -216,7 +216,7 @@ class ProductionConfigProvider:
             ) from e
 
 
-class ProductionPatternProvider:
+class DefaultPatternProvider:
     """Production pattern provider using real config system."""
 
     def __init__(self):
@@ -306,7 +306,7 @@ class ProductionPatternProvider:
                         f"FAILED: Pattern loading for language {lang_code}",
                         error_type=type(e).__name__,
                         stack_trace=str(e),
-                        language=lang_code,
+                        metadata={"language": lang_code},
                     )
                     raise ConfigurationError(
                         f"Failed to load patterns for language '{lang_code}': {e}. "
@@ -405,7 +405,7 @@ def create_mock_setup(
     return config_provider, pattern_provider, logger_provider
 
 
-def create_production_setup(logger_name: str | None = None) -> tuple:
+def create_default_setup(logger_name: str | None = None) -> tuple:
     """
     Create production setup with real components.
 
@@ -415,11 +415,17 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
     Returns:
         Tuple of (config_provider, pattern_provider, logger_provider)
     """
-    config_provider = ProductionConfigProvider()
-    pattern_provider = ProductionPatternProvider()
+    config_provider = DefaultConfigProvider()
+    pattern_provider = DefaultPatternProvider()
     logger_provider = StandardLoggerProvider(logger_name or __name__)
 
     return config_provider, pattern_provider, logger_provider
+
+
+# Backward compatibility aliases
+ProductionConfigProvider = DefaultConfigProvider
+ProductionPatternProvider = DefaultPatternProvider
+create_production_setup = create_default_setup
 
 
 def create_test_settings(

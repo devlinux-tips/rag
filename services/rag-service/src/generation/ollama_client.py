@@ -645,8 +645,8 @@ class MultilingualOllamaClient:
                 generated_text = parse_streaming_response(json_lines)
             else:
                 logger.debug("ollama_client", "generate_text_async", "Making non-streaming request")
-                response = await self.http_client.post(url, ollama_request, self.config.timeout)
-                generated_text = parse_non_streaming_response(response.json())
+                http_response = await self.http_client.post(url, ollama_request, self.config.timeout)
+                generated_text = parse_non_streaming_response(http_response.json())
 
             generation_time = time.time() - start_time
             log_performance_metric("ollama_client", "generate_text_async", "generation_time_sec", generation_time)
@@ -780,13 +780,13 @@ class MultilingualOllamaClient:
         if await self.is_model_available(target_model):
             return True
 
-        self.logger.info(f"Pulling model {target_model}...")
+        self.logger.info("ollama_client", "pull_model", f"Pulling model {target_model}...")
 
         url = f"{self.config.base_url}/api/pull"
         payload = {"name": target_model}
 
         await self.http_client.post(url, payload, self.config.timeout)
-        self.logger.info(f"Successfully pulled {target_model}")
+        self.logger.info("ollama_client", "pull_model", f"Successfully pulled {target_model}")
         return True
 
     def generate_response(
@@ -864,7 +864,11 @@ class MultilingualOllamaClient:
             return prompts_config["question_answering_system"]
 
         except Exception as e:
-            self.logger.error(f"Failed to get language-specific system prompt for language '{request.language}': {e}")
+            self.logger.error(
+                "ollama_client",
+                "get_system_prompt",
+                f"Failed to get language-specific system prompt for language '{request.language}': {e}",
+            )
             raise ConfigError(
                 f"System prompt configuration missing or invalid for language '{request.language}'"
             ) from e
@@ -940,7 +944,10 @@ def create_ollama_client(
 
     if config is None:
         system_logger.debug("ollama_factory", "create_client", "Creating default OllamaConfig")
-        config = OllamaConfig()
+        from ..utils.config_loader import load_config
+
+        main_config = load_config("config")
+        config = OllamaConfig.from_validated_config(main_config)
 
     system_logger.debug("ollama_factory", "create_client", f"Creating client for model: {config.model}")
 

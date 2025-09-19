@@ -553,10 +553,9 @@ class TestConfigProvider(unittest.TestCase):
 
         self.assertIsNone(provider._config_cache)
 
-    @pytest.mark.skip(reason="Mocking patterns changed - test needs updating")
     def test_get_folder_config_caches_result(self):
         """Test get_folder_config caches the result."""
-        mock_get_shared_config = MagicMock(return_value={
+        mock_get_paths_config = MagicMock(return_value={
             "data_base_dir": "/prod/data",
             "models_base_dir": "/prod/models",
             "system_dir": "/prod/system",
@@ -572,7 +571,7 @@ class TestConfigProvider(unittest.TestCase):
 
         with patch.dict('sys.modules', {
             'src.utils.config_loader': MagicMock(
-                get_shared_config=mock_get_shared_config
+                get_paths_config=mock_get_paths_config
             )
         }):
             provider = ProductionConfigProvider()
@@ -585,12 +584,11 @@ class TestConfigProvider(unittest.TestCase):
             # Should be same object (cached)
             self.assertIs(result1, result2)
             # Mock should only be called once due to caching
-            mock_get_shared_config.assert_called_once()
+            mock_get_paths_config.assert_called_once()
 
-    @pytest.mark.skip(reason="Mocking patterns changed - test needs updating")
     def test_load_config_from_system_success(self):
         """Test successful loading of config from system."""
-        mock_get_shared_config = MagicMock(return_value={
+        mock_get_paths_config = MagicMock(return_value={
             "data_base_dir": "/prod/data",
             "models_base_dir": "/prod/models",
             "system_dir": "/prod/system",
@@ -606,7 +604,7 @@ class TestConfigProvider(unittest.TestCase):
 
         with patch.dict('sys.modules', {
             'src.utils.config_loader': MagicMock(
-                get_shared_config=mock_get_shared_config
+                get_paths_config=mock_get_paths_config
             )
         }):
             provider = ProductionConfigProvider()
@@ -617,14 +615,13 @@ class TestConfigProvider(unittest.TestCase):
             self.assertEqual(result.models_base_dir, "/prod/models")
             self.assertEqual(result.system_dir, "/prod/system")
 
-    @pytest.mark.skip(reason="Mocking patterns changed - test needs updating")
     def test_load_config_from_system_handles_exceptions(self):
         """Test that exceptions from config system are properly handled."""
-        mock_get_shared_config = MagicMock(side_effect=RuntimeError("Config error"))
+        mock_get_paths_config = MagicMock(side_effect=RuntimeError("Config error"))
 
         with patch.dict('sys.modules', {
             'src.utils.config_loader': MagicMock(
-                get_shared_config=mock_get_shared_config
+                get_paths_config=mock_get_paths_config
             )
         }):
             provider = ProductionConfigProvider()

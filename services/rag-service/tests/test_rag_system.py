@@ -36,6 +36,7 @@ from src.pipeline.rag_system import (
     calculate_overall_health,
     create_rag_system,
 )
+from src.retrieval.categorization import CategoryType
 from tests.fixtures.mock_rag_system import (
     MockDocumentExtractor,
     MockTextCleaner,
@@ -738,7 +739,7 @@ class TestRAGSystemIntegration:
         self.retriever = MockRetriever()
         self.hierarchical_retriever = MockRetriever()
         self.ranker = Mock()
-        self.generation_client = MockGenerationClient()
+        self.generation_client = MockGenerationClient(available_models=["test-llm"])  # Match ollama_config.model
         self.response_parser = MockResponseParser()
         self.prompt_builder = MockPromptBuilder()
 
@@ -932,8 +933,25 @@ class TestRAGSystemIntegration:
         """Test successful query execution."""
         query = RAGQuery(text="What is machine learning?", language="hr")
 
+        # Mock language config to return minimal required structure
+        mock_config = {
+            'prompts': {
+                'system_base': 'You are a helpful assistant.',
+                'context_intro': 'Based on the following context:',
+                'answer_intro': 'Answer:',
+                'no_context_response': 'Not enough information to answer.',
+                'question_answering_system': 'You are a helpful assistant that answers questions in Croatian.',
+                'question_answering_user': 'Question: {query}\n\nProvide a detailed answer:',
+                'question_answering_context': 'Contextual information:\n{context}\n\n',
+            },
+            'shared': {
+                'response_language': 'croatian',
+                'error_message': 'Error processing query'
+            }
+        }
+
         with patch('src.utils.config_loader.load_config'), \
-             patch('src.utils.config_loader.get_language_config'), \
+             patch('src.utils.config_loader.get_language_config', return_value=mock_config), \
              patch('src.utils.config_validator.ConfigValidator'):
 
             response = await self.rag_system.query(query)
@@ -966,12 +984,28 @@ class TestRAGSystemIntegration:
                 "final_score": 0.8
             },
         ]
-        mock_results.category = Mock()
-        mock_results.category.value = "technical"
+        mock_results.category = CategoryType.GENERAL  # Use real CategoryType enum
         self.hierarchical_retriever.retrieve = AsyncMock(return_value=mock_results)
 
+        # Mock language config to return minimal required structure
+        mock_config = {
+            'prompts': {
+                'system_base': 'You are a helpful assistant.',
+                'context_intro': 'Based on the following context:',
+                'answer_intro': 'Answer:',
+                'no_context_response': 'Not enough information to answer.',
+                'question_answering_system': 'You are a helpful assistant that answers questions.',
+                'question_answering_user': 'Question: {query}\n\nProvide a detailed answer:',
+                'question_answering_context': 'Contextual information:\n{context}\n\n',
+            },
+            'shared': {
+                'response_language': 'english',
+                'error_message': 'Error processing query'
+            }
+        }
+
         with patch('src.utils.config_loader.load_config'), \
-             patch('src.utils.config_loader.get_language_config'), \
+             patch('src.utils.config_loader.get_language_config', return_value=mock_config), \
              patch('src.utils.config_validator.ConfigValidator'):
 
             response = await self.rag_system.query(query, return_sources=True)
@@ -988,8 +1022,25 @@ class TestRAGSystemIntegration:
         # Make hierarchical retriever raise exception
         self.hierarchical_retriever.retrieve = AsyncMock(side_effect=RuntimeError("Retrieval error"))
 
+        # Mock language config to return Croatian error message
+        mock_config = {
+            'prompts': {
+                'system_base': 'Ti si pomoćni asistent.',
+                'context_intro': 'Na temelju sljedećeg konteksta:',
+                'answer_intro': 'Odgovor:',
+                'no_context_response': 'Nema dovoljno informacija u kontekstu.',
+                'question_answering_system': 'Ti si pomoćni asistent koji odgovara na hrvatskom jeziku.',
+                'question_answering_user': 'Pitanje: {query}\n\nDaj mi detaljan odgovor:',
+                'question_answering_context': 'Kontekstualne informacije:\n{context}\n\n',
+            },
+            'shared': {
+                'response_language': 'croatian',
+                'error_message': 'Žao mi je, dogodila se greška pri obradi pitanja'
+            }
+        }
+
         with patch('src.utils.config_loader.load_config'), \
-             patch('src.utils.config_loader.get_language_config'), \
+             patch('src.utils.config_loader.get_language_config', return_value=mock_config), \
              patch('src.utils.config_validator.ConfigValidator'):
 
             response = await self.rag_system.query(query)
@@ -1002,9 +1053,9 @@ class TestRAGSystemIntegration:
     @pytest.mark.asyncio
     async def test_health_check_all_healthy(self):
         """Test health check when all components are healthy."""
-        # Ensure generation client returns healthy status
-        self.generation_client.health_check = Mock(return_value=True)
-        self.generation_client.get_available_models = Mock(return_value=["test-llm"])
+        # Ensure generation client returns healthy status (must be async)
+        self.generation_client.health_check = AsyncMock(return_value=True)
+        self.generation_client.get_available_models = AsyncMock(return_value=["test-llm"])
 
         with patch('src.utils.config_loader.load_config'), \
              patch('src.utils.config_loader.get_language_config'), \
@@ -1023,8 +1074,8 @@ class TestRAGSystemIntegration:
     async def test_health_check_degraded(self):
         """Test health check with degraded components."""
         # Make Ollama healthy but model missing
-        self.generation_client.health_check = Mock(return_value=True)
-        self.generation_client.get_available_models = Mock(return_value=["other-model"])
+        self.generation_client.health_check = AsyncMock(return_value=True)
+        self.generation_client.get_available_models = AsyncMock(return_value=["other-model"])
 
         with patch('src.utils.config_loader.load_config'), \
              patch('src.utils.config_loader.get_language_config'), \

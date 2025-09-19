@@ -30,6 +30,8 @@ class TestSentenceTransformerLoader:
         """Test successful model loading."""
         # Setup mocks
         mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 384
+        mock_model.max_seq_length = 512
         mock_sentence_transformer.return_value = mock_model
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
@@ -145,14 +147,19 @@ class TestSentenceTransformerAdapter:
 
     def test_encode_default_parameters(self):
         """Test encode with default parameters."""
+        # Setup mock return value
+        expected_embeddings = np.array([[0.1, 0.2]])
+        self.mock_model.encode.return_value = expected_embeddings
+
         texts = ["text1"]
-        self.adapter.encode(texts)
+        result = self.adapter.encode(texts)
 
         self.mock_model.encode.assert_called_once_with(
             texts,
             batch_size=32,
             normalize_embeddings=True
         )
+        np.testing.assert_array_equal(result, expected_embeddings)
 
     def test_device_property(self):
         """Test device property."""

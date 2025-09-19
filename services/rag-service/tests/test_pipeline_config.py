@@ -141,6 +141,7 @@ class TestRAGConfigComponents(unittest.TestCase):
             use_safetensors=True,
             trust_remote_code=False,
             torch_dtype="float32",
+            cache_dir="cache/embeddings",
         )
 
         assert config.model_name == "BAAI/bge-m3"
@@ -206,6 +207,8 @@ class TestRAGConfigComponents(unittest.TestCase):
             num_predict=2048,
             repeat_penalty=1.1,
             seed=-1,
+            endpoints={"generate": "/api/generate", "chat": "/api/chat"},
+            response_format={"type": "json_object"},
         )
 
         assert config.base_url == "http://localhost:11434"
@@ -306,6 +309,7 @@ class TestConfigIntegration(unittest.TestCase):
             "use_safetensors": True,
             "trust_remote_code": False,
             "torch_dtype": "float32",
+            "cache_dir": "cache/embeddings",
         }
 
         # Test object creation
@@ -352,6 +356,7 @@ class TestConfigIntegration(unittest.TestCase):
             use_safetensors=True,
             trust_remote_code=False,
             torch_dtype="float32",
+            cache_dir="cache/embeddings",
         )
 
         retrieval_config = RetrievalConfig(
@@ -378,6 +383,8 @@ class TestConfigIntegration(unittest.TestCase):
             num_predict=2048,
             repeat_penalty=1.1,
             seed=-1,
+            endpoints={"generate": "/api/generate", "chat": "/api/chat"},
+            response_format={"type": "json_object"},
         )
 
         # Test that configs work together logically

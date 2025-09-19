@@ -36,6 +36,12 @@
 - **No "AI cargo culting"** - don't fix for the sake of fixing
 
 #### **5. Code Quality Standards (MANDATORY)**
+- **MYPY COMPLIANCE BY DEFAULT**: ALL new code MUST pass MyPy type checking
+  - **Write proper type annotations** from the start - never add them later
+  - **Use correct Protocol implementations** - match method signatures exactly
+  - **Handle None types explicitly** - no silent `.get()` fallbacks
+  - **Import types correctly** - use proper `from typing import` statements
+  - **Test MyPy compliance** before claiming code is complete
 - **NEVER exclude files from flake8** unless they contain intentional alignment patterns (E221 only)
 - **Fix all quality issues properly**:
   - **F811** (redefinition): Rename variables or remove duplicates
@@ -44,7 +50,7 @@
 - **Acceptable E221 exceptions** (alignment patterns only):
   - `dependency_analyzer.py` - Complex dependency tables
   - `validate_language_configs.py` - Configuration matrices
-- **Quality workflow**: `format_code.py` → `git add .` → `git commit` (all pre-commit hooks must pass)
+- **Quality workflow**: `format_code.py` → `mypy src/` → `git add .` → `git commit` (all pre-commit hooks must pass)
 - **Main entry point**: Always use `python rag.py` - never use module imports or internal paths
 - **Push critical thinking** - force explicit discussion of pros/cons
 
@@ -158,6 +164,63 @@ try:
 except KeyError:
     model = "default-model"  # Hides configuration problems
 ```
+
+---
+
+## AI-Specific Debugging Infrastructure
+
+### **AI-Friendly Repository Notice**
+This codebase is designed for AI implementation and debugging. Logging and error messages prioritize AI pattern recognition over human readability.
+
+### **AI Debugging Logging Patterns**
+
+#### **Mock Detection (Critical for Test Debugging)**
+```python
+def log_mock_detection(component: str, operation: str, obj: Any, expected_type: str = None):
+    """Log when dealing with mock vs real objects - critical for AI test debugging."""
+    is_mock = isinstance(obj, Mock) or 'Mock' in str(type(obj)) or hasattr(obj, '_mock_name')
+    logger = get_system_logger()
+    logger.trace("mock_detection", operation,
+        f"obj={type(obj).__name__} | is_mock={is_mock} | expected={expected_type} | obj_id={id(obj)}")
+```
+
+#### **Test Assertion Context (For Systematic Fixing)**
+```python
+def log_assertion_context(test_name: str, component: str, expected: Any, actual: Any, assertion_type: str = "equality"):
+    """Detailed assertion context for AI pattern recognition."""
+    logger = get_system_logger()
+    logger.error("test_assertion", test_name,
+        f"ASSERTION_FAIL | component={component} | type={assertion_type} | "
+        f"expected_type={type(expected).__name__} | actual_type={type(actual).__name__} | "
+        f"expected_value={repr(expected)[:100]} | actual_value={repr(actual)[:100]}")
+```
+
+#### **API Contract Validation (For Provider Issues)**
+```python
+def log_api_mismatch(component: str, method: str, expected_sig: str, actual_call: dict):
+    """Track API signature mismatches for systematic provider fixing."""
+    logger = get_system_logger()
+    logger.error("api_contract", f"{component}.{method}",
+        f"SIGNATURE_MISMATCH | expected={expected_sig} | actual_params={list(actual_call.keys())} | "
+        f"missing_params={set(expected_sig.split(',')) - set(actual_call.keys())}")
+```
+
+#### **Config Schema Evolution (For Backward Compatibility)**
+```python
+def log_config_evolution(key_path: str, old_format: Any, new_format: Any, compat_action: str):
+    """Track configuration schema changes and compatibility decisions."""
+    logger = get_system_logger()
+    logger.info("config_evolution", "schema_change",
+        f"path={key_path} | old_type={type(old_format).__name__} | new_type={type(new_format).__name__} | "
+        f"compat_action={compat_action} | migration_needed={old_format != new_format}")
+```
+
+### **AI Debugging Commandments**
+1. **Every error must include object type information**
+2. **Every mock interaction must be logged with is_mock flag**
+3. **Every config access must log format detection**
+4. **Every test failure must include expected vs actual context**
+5. **Every provider call must validate API contract**
 
 ---
 

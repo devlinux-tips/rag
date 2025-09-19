@@ -432,6 +432,12 @@ class MultilingualReranker:
         Raises:
             ValueError: If inputs are invalid
         """
+        if not isinstance(query, str):
+            raise ValueError(f"Query must be string, got {type(query)}")
+
+        if not isinstance(documents, list):
+            raise ValueError(f"Documents must be list, got {type(documents)}")
+
         get_system_logger()
         log_component_start(
             "multilingual_reranker",
@@ -441,12 +447,6 @@ class MultilingualReranker:
             top_k=top_k,
             model_name=self.config.model_name,
         )
-
-        if not isinstance(query, str):
-            raise ValueError(f"Query must be string, got {type(query)}")
-
-        if not isinstance(documents, list):
-            raise ValueError(f"Documents must be list, got {type(documents)}")
 
         if not all(isinstance(doc, DocumentItem) for doc in documents):
             raise ValueError("All documents must be DocumentItem instances")

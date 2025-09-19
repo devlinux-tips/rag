@@ -3,11 +3,29 @@ Error handling utilities for the RAG system.
 Provides fail-fast error handling following system governance.
 """
 
+import logging
 import sys
 import traceback
 from typing import Any
 
 from .logging_factory import get_system_logger, log_error_context
+
+
+def get_logger(name: str | None = None) -> logging.Logger:
+    """
+    Get a logger instance.
+
+    Args:
+        name: Logger name, if None uses this module's __name__
+
+    Returns:
+        Logger instance
+    """
+    if not name:
+        # Use this module's __name__ as default
+        name = __name__
+
+    return logging.getLogger(name)
 
 
 class RAGError(Exception):

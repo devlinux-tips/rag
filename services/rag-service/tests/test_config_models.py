@@ -150,6 +150,7 @@ class TestEmbeddingConfig(unittest.TestCase):
             use_safetensors=True,
             trust_remote_code=False,
             torch_dtype="float32",
+            cache_dir="models/embeddings",
         )
 
         self.assertEqual(config.model_name, "BAAI/bge-large-en-v1.5")
@@ -173,6 +174,9 @@ class TestEmbeddingConfig(unittest.TestCase):
                 "use_safetensors": False,
                 "trust_remote_code": True,
                 "torch_dtype": "float16",
+            },
+            "shared": {
+                "cache_dir": "test/cache"
             }
         }
 
@@ -199,6 +203,9 @@ class TestEmbeddingConfig(unittest.TestCase):
                 "use_safetensors": False,
                 "trust_remote_code": True,
                 "torch_dtype": "float16",
+            },
+            "shared": {
+                "cache_dir": "test/cache"
             }
         }
 
@@ -458,6 +465,13 @@ class TestComplexConfigs(unittest.TestCase):
                 "num_predict": 512,
                 "repeat_penalty": "1.1",
                 "seed": 42,
+                "response_format": "ollama",
+                "endpoints": {
+                    "health_check": "/api/tags",
+                    "chat_completions": "/api/chat",
+                    "models_list": "/api/tags",
+                    "streaming_chat": "/api/chat"
+                }
             }
         }
 
@@ -673,6 +687,13 @@ class TestSystemConfig(unittest.TestCase):
                 "num_predict": 512,
                 "repeat_penalty": 1.1,
                 "seed": 42,
+                "response_format": "ollama",
+                "endpoints": {
+                    "health_check": "/api/tags",
+                    "chat_completions": "/api/chat",
+                    "models_list": "/api/tags",
+                    "streaming_chat": "/api/chat"
+                }
             },
             "processing": {
                 "sentence_chunk_overlap": 50,
@@ -717,6 +738,9 @@ class TestSystemConfig(unittest.TestCase):
                 "confidence_threshold": 0.8,
                 "response_format": "json",
                 "include_metadata": True,
+            },
+            "shared": {
+                "cache_dir": "test/cache"
             },
         }
 

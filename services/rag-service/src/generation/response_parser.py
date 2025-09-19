@@ -512,7 +512,7 @@ class ParsingConfig:
 class ConfigProvider(Protocol):
     """Protocol for parsing configuration providers."""
 
-    def get_parsing_config(self, language: str) -> ParsingConfig:
+    def get_parsing_config(self, language: str) -> dict[str, Any]:
         """Get parsing configuration for language."""
         ...
 
@@ -689,7 +689,7 @@ def create_mock_config_provider(
     """
 
     class MockConfigProvider:
-        def get_parsing_config(self, language: str) -> ParsingConfig:
+        def get_parsing_config(self, language: str) -> dict[str, Any]:
             default_no_answer = ["ne znam", "ne mogu", "nema podataka", "don't know", "no information"]
             default_source = [r"izvor:", r"prema:", r"dokumentu:", r"source:", r"according to:"]
             default_confidence = {
@@ -710,13 +710,13 @@ def create_mock_config_provider(
                 "sources_prefix": "Sources",
             }
 
-            return ParsingConfig(
-                no_answer_patterns=no_answer_patterns or default_no_answer,
-                source_patterns=source_patterns or default_source,
-                confidence_indicators=confidence_indicators or default_confidence,
-                language_patterns=language_patterns or default_language,
-                cleaning_prefixes=cleaning_prefixes or default_prefixes,
-                display_settings=display_settings or default_display,
-            )
+            return {
+                "no_answer_patterns": no_answer_patterns or default_no_answer,
+                "source_patterns": source_patterns or default_source,
+                "confidence_indicators": confidence_indicators or default_confidence,
+                "language_patterns": language_patterns or default_language,
+                "cleaning_prefixes": cleaning_prefixes or default_prefixes,
+                "display_settings": display_settings or default_display,
+            }
 
     return MockConfigProvider()

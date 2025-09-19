@@ -162,7 +162,7 @@ class TestAsyncHttpxClient:
             result = await client.post("http://test.com/api", json_data, timeout=60.0)
 
             mock_httpx_client.post.assert_called_once_with(
-                "http://test.com/api", json=json_data, timeout=60.0
+                "http://test.com/api", json=json_data, timeout=60.0, headers=None
             )
             assert result.status_code == 201
             assert result.json_data == {"created": "success"}
@@ -214,7 +214,7 @@ class TestAsyncHttpxClient:
             result = await client.stream_post("http://test.com/stream", json_data)
 
             mock_httpx_client.stream.assert_called_once_with(
-                "POST", "http://test.com/stream", json=json_data, timeout=30.0
+                "POST", "http://test.com/stream", json=json_data, timeout=30.0, headers=None
             )
             assert result == [
                 '{"response": "Hello", "done": false}',

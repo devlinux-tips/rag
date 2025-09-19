@@ -265,7 +265,7 @@ class QueryProcessor:
                     enable_spell_check=False,
                 )
                 # Create minimal filter config to avoid the missing topic_patterns error
-                minimal_filter_config = {"topic_filters": {}}
+                minimal_filter_config: dict[str, Any] = {"topic_filters": {}}
                 self._processor = MultilingualQueryProcessor(config=minimal_config, filter_config=minimal_filter_config)
 
     def process_query(self, query: str, context: dict[str, Any] | None = None) -> ProcessedQuery:
@@ -452,7 +452,7 @@ def create_hierarchical_retriever(
     Returns:
         HierarchicalRetriever instance
     """
-    logger = get_system_logger()
+    get_system_logger()
     log_component_start(
         "hierarchical_retriever_providers",
         "create_hierarchical_retriever",
@@ -470,7 +470,7 @@ def create_hierarchical_retriever(
     search_engine_adapter = SearchEngineAdapter(search_engine)
     reranker_adapter = RerankerAdapter(reranker, language) if reranker else None
 
-    # Use Python's standard logger
+    # Use Python's standard logger for HierarchicalRetriever (different from structured logger)
     import logging
 
     class StandardLoggerProvider:
@@ -486,7 +486,7 @@ def create_hierarchical_retriever(
         def error(self, message: str) -> None:
             self.logger.error(message)
 
-    logger = StandardLoggerProvider()
+    hierarchical_logger = StandardLoggerProvider()
 
     # Create production configuration
     config = RetrievalConfig(
@@ -533,7 +533,7 @@ def create_hierarchical_retriever(
         search_engine=search_engine_adapter,
         config=config,
         reranker=reranker_adapter,
-        logger_provider=logger,
+        logger_provider=hierarchical_logger,
     )
 
     log_component_end(

@@ -10,6 +10,7 @@ from typing import Any
 
 from src.retrieval.categorization_providers import (
     ConfigProvider,
+    DefaultConfigProvider,
     MockConfigProvider,
     NoOpLoggerProvider,
     MockLoggerProvider,
@@ -25,7 +26,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_init_imports_config_loader(self):
         """Test initialization properly imports config_loader."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         # Verify that _config_loader is set and has the expected method
         self.assertTrue(hasattr(provider._config_loader, 'get_language_specific_config'))
 
@@ -37,19 +38,19 @@ class TestConfigProvider(unittest.TestCase):
             "patterns": {"general": ["test"]}
         }
 
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
-        # Mock the config loader after initialization
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_language_specific_config.return_value = expected_config
-        provider._config_loader = mock_config_loader
+        # Mock the config provider from config_protocol
+        mock_main_provider = MagicMock()
+        mock_main_provider.get_categorization_config.return_value = expected_config
 
-        # Execute
-        result = provider.get_categorization_config("hr")
+        with patch('src.utils.config_protocol.get_config_provider', return_value=mock_main_provider):
+            # Execute
+            result = provider.get_categorization_config("hr")
 
-        # Verify
-        self.assertEqual(result, expected_config)
-        mock_config_loader.get_language_specific_config.assert_called_once_with("categorization", "hr")
+            # Verify
+            self.assertEqual(result, expected_config)
+            mock_main_provider.get_categorization_config.assert_called_once_with("hr")
 
     def test_get_categorization_config_different_languages(self):
         """Test configuration retrieval for different languages."""
@@ -57,38 +58,38 @@ class TestConfigProvider(unittest.TestCase):
         hr_config = {"patterns": {"cultural": ["hrvatski"]}}
         en_config = {"patterns": {"cultural": ["english"]}}
 
-        def mock_get_config(section, language):
+        def mock_get_config(language):
             if language == "hr":
                 return hr_config
             elif language == "en":
                 return en_config
             return {}
 
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
-        # Mock the config loader after initialization
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_language_specific_config.side_effect = mock_get_config
-        provider._config_loader = mock_config_loader
+        # Mock the config provider from config_protocol
+        mock_main_provider = MagicMock()
+        mock_main_provider.get_categorization_config.side_effect = mock_get_config
 
-        # Execute and verify
-        self.assertEqual(provider.get_categorization_config("hr"), hr_config)
-        self.assertEqual(provider.get_categorization_config("en"), en_config)
+        with patch('src.utils.config_protocol.get_config_provider', return_value=mock_main_provider):
+            # Execute and verify
+            self.assertEqual(provider.get_categorization_config("hr"), hr_config)
+            self.assertEqual(provider.get_categorization_config("en"), en_config)
 
     def test_get_categorization_config_handles_exceptions(self):
         """Test that exceptions from config_loader are propagated."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
-        # Mock the config loader after initialization
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_language_specific_config.side_effect = ValueError("Config error")
-        provider._config_loader = mock_config_loader
+        # Mock the config provider from config_protocol to raise exception
+        mock_main_provider = MagicMock()
+        mock_main_provider.get_categorization_config.side_effect = ValueError("Config error")
 
-        # Execute and verify exception is raised
-        with self.assertRaises(ValueError) as context:
-            provider.get_categorization_config("hr")
+        with patch('src.utils.config_protocol.get_config_provider', return_value=mock_main_provider):
+            # Execute and verify exception is raised
+            with self.assertRaises(ValueError) as context:
+                provider.get_categorization_config("hr")
 
-        self.assertEqual(str(context.exception), "Config error")
+            self.assertEqual(str(context.exception), "Config error")
 
 
 class TestMockConfigProvider(unittest.TestCase):
@@ -399,7 +400,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
         self.assertIsInstance(provider, MockConfigProvider)
 
-    @patch('src.retrieval.categorization_providers.ConfigProvider')
+    @patch('src.retrieval.categorization_providers.DefaultConfigProvider')
     def test_create_config_provider_production_mode(self, mock_production_class):
         """Test create_config_provider with production mode."""
         mock_instance = MagicMock()
@@ -412,7 +413,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
     def test_create_config_provider_default_is_production(self):
         """Test create_config_provider defaults to production mode."""
-        with patch('src.retrieval.categorization_providers.ConfigProvider') as mock_production:
+        with patch('src.retrieval.categorization_providers.DefaultConfigProvider') as mock_production:
             mock_instance = MagicMock()
             mock_production.return_value = mock_instance
 

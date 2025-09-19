@@ -403,9 +403,9 @@ class TestApplyOcrCorrections:
         config = {"fix_spaced_capitals": True}  # Missing other keys
         text = "H R V A T S K A , test ."
 
-        # Should handle missing keys gracefully with KeyError
-        with pytest.raises(KeyError):
-            apply_ocr_corrections(text, config)
+        # Should handle missing keys gracefully with defaults
+        result = apply_ocr_corrections(text, config)
+        assert result == "HRVATSKA , test ."  # Only spaced capitals should be fixed, punctuation stays spaced
 
     def test_language_parameter_passed_through(self):
         """Test that language parameter is passed to diacritic fixes."""

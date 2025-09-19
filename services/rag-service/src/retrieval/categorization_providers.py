@@ -9,54 +9,46 @@ from ..utils.logging_factory import get_system_logger, log_component_end, log_co
 from .categorization import ConfigProvider
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real TOML configuration."""
+class DefaultConfigProvider:
+    """Default configuration provider using TOML configuration files."""
 
     def __init__(self):
         logger = get_system_logger()
-        log_component_start("production_config_provider", "init")
+        log_component_start("config_provider", "init")
 
         # Import at runtime to avoid circular dependencies
         from ..utils import config_loader
 
         self._config_loader = config_loader
 
-        logger.debug("production_config_provider", "init", "Production config provider initialized")
-        log_component_end("production_config_provider", "init", "Production config provider ready")
+        logger.debug("config_provider", "init", "Config provider initialized")
+        log_component_end("config_provider", "init", "Config provider ready")
 
     def get_categorization_config(self, language: str) -> dict[str, Any]:
         """Get categorization configuration for specified language."""
         logger = get_system_logger()
-        log_component_start("production_config_provider", "get_categorization_config", language=language)
+        log_component_start("config_provider", "get_categorization_config", language=language)
 
         try:
             # Use the main config provider to get properly merged categorization config
             from ..utils.config_protocol import get_config_provider
 
             logger.debug(
-                "production_config_provider",
-                "get_categorization_config",
-                f"Loading categorization config for {language}",
+                "config_provider", "get_categorization_config", f"Loading categorization config for {language}"
             )
             main_provider = get_config_provider()
             config = main_provider.get_categorization_config(language)
 
-            logger.debug(
-                "production_config_provider", "get_categorization_config", f"Loaded config with {len(config)} keys"
-            )
-            logger.trace(
-                "production_config_provider", "get_categorization_config", f"Config keys: {list(config.keys())}"
-            )
+            logger.debug("config_provider", "get_categorization_config", f"Loaded config with {len(config)} keys")
+            logger.trace("config_provider", "get_categorization_config", f"Config keys: {list(config.keys())}")
 
             log_component_end(
-                "production_config_provider",
-                "get_categorization_config",
-                f"Categorization config loaded for {language}",
+                "config_provider", "get_categorization_config", f"Categorization config loaded for {language}"
             )
             return config
 
         except Exception as e:
-            log_error_context("production_config_provider", "get_categorization_config", e, {"language": language})
+            log_error_context("config_provider", "get_categorization_config", e, {"language": language})
             raise
 
 
@@ -191,7 +183,7 @@ def create_config_provider(use_mock: bool = False) -> ConfigProvider:
     if use_mock:
         return MockConfigProvider()
     else:
-        return ProductionConfigProvider()
+        return DefaultConfigProvider()
 
 
 def create_test_categorization_setup(

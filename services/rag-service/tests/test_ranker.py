@@ -663,7 +663,7 @@ class TestDocumentRanker:
         )
 
         # Configure mocks
-        self.mock_config_provider.get_shared_config.return_value = {
+        self.mock_config_provider.load_config.return_value = {
             "ranking": {
                 "method": "language_enhanced",
                 "enable_diversity": True,
@@ -803,7 +803,7 @@ class TestFactoryFunctions:
         mock_lang_provider.return_value = mock_language
 
         # Mock the config provider behavior
-        mock_config.get_shared_config.return_value = {
+        mock_config.load_config.return_value = {
             "ranking": {
                 "method": "language_enhanced",
                 "enable_diversity": True,
@@ -842,7 +842,7 @@ class TestFactoryFunctions:
         mock_lang_provider.return_value = mock_language
 
         # Mock the config provider behavior
-        mock_config.get_shared_config.return_value = {
+        mock_config.load_config.return_value = {
             "ranking": {
                 "method": "language_enhanced",
                 "enable_diversity": True,
@@ -882,7 +882,7 @@ class TestFactoryFunctions:
         mock_lang_provider.return_value = mock_language
 
         # Mock the config provider behavior
-        mock_config.get_shared_config.return_value = {
+        mock_config.load_config.return_value = {
             "ranking": {
                 "method": "language_enhanced",
                 "enable_diversity": True,

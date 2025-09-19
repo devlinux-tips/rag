@@ -158,7 +158,12 @@ class ChromaDBCollection(VectorCollection):
 
             # Convert ChromaDB QueryResult to dict for compatibility
             results_dict = dict(results)
-            num_results = len(results_dict.get("ids", [[]])[0]) if results_dict.get("ids") else 0
+            ids_data = results_dict.get("ids", [[]])
+            if ids_data and isinstance(ids_data, (list, tuple)) and len(ids_data) > 0:
+                first_item = ids_data[0]
+                num_results = len(first_item) if hasattr(first_item, "__len__") else 0
+            else:
+                num_results = 0
 
             log_performance_metric("chroma_collection", "query", "results_returned", num_results)
             log_component_end("chroma_collection", "query", f"Query returned {num_results} results")
@@ -252,6 +257,12 @@ class ChromaDBCollection(VectorCollection):
     def metadata(self) -> dict[str, Any]:
         """Get collection metadata."""
         return self._collection.metadata or {}
+
+    def create_collection(self) -> None:
+        """No-op since collection is already created."""
+        # Collection is already created when this object is instantiated
+        # This method exists to satisfy the VectorStorage protocol
+        pass
 
 
 class ChromaDBDatabase(VectorDatabase):

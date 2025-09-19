@@ -719,9 +719,9 @@ def EnhancedPromptBuilder(
         Configured _EnhancedPromptBuilder instance
     """
     if config_provider is None or logger_provider is None:
-        from .enhanced_prompt_templates_providers import create_production_setup
+        from .enhanced_prompt_templates_providers import create_prompt_builder
 
-        config_provider, logger_provider = create_production_setup()
+        config_provider, logger_provider = create_prompt_builder()
 
     # Ensure providers are not None after potential defaults
     assert config_provider is not None, "ConfigProvider must not be None"

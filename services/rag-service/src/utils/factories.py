@@ -221,7 +221,7 @@ def create_tenant_and_user_from_cli_args(tenant: str, user: str) -> tuple[Tenant
     """Create Tenant and User objects from CLI arguments."""
     tenant_obj = Tenant(id=f"tenant_{tenant}", name=tenant.replace("_", " ").title(), slug=tenant)
 
-    user_obj = User(id=f"user_{user}", username=user, tenant_id=tenant_obj.id, tenant_slug=tenant_obj.slug)
+    user_obj = User(id=f"user_{user}", username=user, tenant_id=tenant_obj.id, email=f"{user}@{tenant}.local")
 
     return tenant_obj, user_obj
 

@@ -154,7 +154,9 @@ def apply_ocr_corrections(text: str, config: dict[str, Any], language: str | Non
         Text with OCR corrections applied
     """
     logger = get_system_logger()
-    log_component_start("ocr_correction", "apply_ocr_corrections", language=language, text_length=len(text))
+    log_component_start(
+        "ocr_correction", "apply_ocr_corrections", language=language, text_length=len(text) if text else 0
+    )
 
     if not text or not config:
         logger.warning("ocr_correction", "apply_ocr_corrections", "Empty text or config, returning original text")
@@ -163,28 +165,52 @@ def apply_ocr_corrections(text: str, config: dict[str, Any], language: str | Non
     original_text = text
     corrections_applied = []
 
+    # Handle legacy config format (word mappings only) vs new format (with flags)
+    if all(isinstance(v, str) for v in config.values()):
+        # Legacy format: config is just word mappings, enable all OCR corrections by default
+        ocr_flags = {
+            "fix_spaced_capitals": True,
+            "fix_spaced_punctuation": True,
+            "fix_common_ocr_errors": True,
+            "fix_character_spacing": True,
+            "word_replacements": config,
+        }
+    else:
+        # New format: config contains flags
+        ocr_flags = config
+
     # Apply corrections based on config flags
-    if config["fix_spaced_capitals"]:
+    if ocr_flags.get("fix_spaced_capitals", False):
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced capitals correction")
         text = fix_spaced_capitals(text)
         corrections_applied.append("spaced_capitals")
 
-    if config["fix_spaced_punctuation"]:
+    if ocr_flags.get("fix_spaced_punctuation", False):
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced punctuation correction")
         text = fix_spaced_punctuation(text)
         corrections_applied.append("spaced_punctuation")
 
-    if config["fix_common_ocr_errors"]:
+    if ocr_flags.get("fix_common_ocr_errors", False):
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying common OCR errors correction")
         text = fix_common_ocr_errors(text)
         corrections_applied.append("common_ocr_errors")
 
-    if config["fix_spaced_diacritics"]:
+    if ocr_flags.get("fix_spaced_diacritics", False):
         logger.debug(
             "ocr_correction", "apply_ocr_corrections", f"Applying spaced diacritics correction for language: {language}"
         )
         text = fix_spaced_diacritics(text, language)
         corrections_applied.append("spaced_diacritics")
+
+    # Apply word replacements (both legacy and new format)
+    word_replacements_raw = ocr_flags.get("word_replacements", {})
+    if word_replacements_raw and isinstance(word_replacements_raw, dict):
+        word_replacements: dict[str, str] = word_replacements_raw
+        logger.debug("ocr_correction", "apply_ocr_corrections", f"Applying {len(word_replacements)} word replacements")
+        for old_word, new_word in word_replacements.items():
+            if old_word in text:
+                text = text.replace(old_word, new_word)
+        corrections_applied.append("word_replacements")
 
     if text != original_text:
         stats = get_ocr_correction_stats(original_text, text)

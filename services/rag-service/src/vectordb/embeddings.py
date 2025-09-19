@@ -5,7 +5,7 @@ Implements dependency injection and pure functions for robust embedding generati
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, Union
 
 import numpy as np
 
@@ -272,9 +272,7 @@ def normalize_embeddings_array(embeddings: np.ndarray) -> np.ndarray:
     norms = np.maximum(norms, 1e-12)  # Avoid division by zero
     normalized = embeddings / norms
 
-    log_performance_metric(
-        "embedding_normalizer", "normalize_embeddings", "norm_stability", f"min_norm={np.min(norms):.6f}"
-    )
+    log_performance_metric("embedding_normalizer", "normalize_embeddings", "min_norm", float(np.min(norms)))
     log_component_end("embedding_normalizer", "normalize_embeddings", f"Normalized {embeddings.shape[0]} embeddings")
     return normalized
 
@@ -701,6 +699,19 @@ class MultilingualEmbeddingGenerator:
             )
             raise RuntimeError(f"Failed to generate embeddings: {e}") from e
 
+    def encode_text(self, text: str) -> list[float]:
+        """
+        Encode a single text into embedding vector.
+
+        Args:
+            text: Input text to encode
+
+        Returns:
+            Embedding vector as list of floats
+        """
+        result = self.generate_embeddings([text])
+        return result.embeddings[0]
+
     def get_embedding_dimension(self) -> int:
         """
         Get the embedding dimension of the loaded model.
@@ -788,7 +799,7 @@ class MultilingualEmbeddingGenerator:
 
 # Factory function for convenient creation
 def create_embedding_generator(
-    config: EmbeddingConfig | None = None,
+    config: Union[EmbeddingConfig, "Any"] | None = None,
     model_loader: ModelLoader | None = None,
     device_detector: DeviceDetector | None = None,
     logger: logging.Logger | None = None,

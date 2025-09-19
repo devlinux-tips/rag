@@ -319,27 +319,38 @@ def build_complete_prompt(
     Raises:
         ValueError: If templates are invalid
     """
+    # Validate all inputs first
+    if not isinstance(system_prompt, str):
+        raise ValueError("system_prompt must be string")
+
+    if not isinstance(user_template, str):
+        raise ValueError("user_template must be string")
+
+    if not isinstance(query, str):
+        raise ValueError("query must be string")
+
+    if context_text is not None and not isinstance(context_text, str):
+        raise ValueError("context_text must be string or None")
+
+    if context_template is not None and not isinstance(context_template, str):
+        raise ValueError("context_template must be string or None")
+
+    if "{query}" not in user_template:
+        raise ValueError("user_template must contain {query} placeholder")
+
+    if context_text and context_template and "{context}" not in context_template:
+        raise ValueError("context_template must contain {context} placeholder")
+
+    # Log after validation
     logger = get_system_logger()
     log_component_start(
         "prompt_builder",
         "build_complete",
         system_length=len(system_prompt),
         query_length=len(query),
-        context_length=len(context_text),
+        context_length=len(context_text) if context_text else 0,
         has_context=bool(context_text),
     )
-
-    if not isinstance(system_prompt, str):
-        logger.error("prompt_builder", "build_complete", "system_prompt must be string")
-        raise ValueError("system_prompt must be string")
-
-    if not isinstance(user_template, str):
-        logger.error("prompt_builder", "build_complete", "user_template must be string")
-        raise ValueError("user_template must be string")
-
-    if "{query}" not in user_template:
-        logger.error("prompt_builder", "build_complete", "user_template must contain {query} placeholder")
-        raise ValueError("user_template must contain {query} placeholder")
 
     # Build user prompt
     user_prompt_parts = []
@@ -348,13 +359,6 @@ def build_complete_prompt(
     # Add context if provided
     if context_text:
         logger.debug("prompt_builder", "build_complete", f"Adding context: {len(context_text)} chars")
-        if not isinstance(context_template, str):
-            logger.error("prompt_builder", "build_complete", "context_template must be string")
-            raise ValueError("context_template must be string")
-
-        if "{context}" not in context_template:
-            logger.error("prompt_builder", "build_complete", "context_template must contain {context} placeholder")
-            raise ValueError("context_template must contain {context} placeholder")
 
         try:
             formatted_context = context_template.format(context=context_text)

@@ -68,7 +68,7 @@ class MockConfigProvider(ConfigProvider):
 
     def get_language_specific_config(self, section: str, language: str) -> dict[str, Any]:
         """Get language-specific configuration for testing."""
-        return self.language_configs[language]
+        return self.language_configs.get(language, {})
 
 
 class MockLanguageProvider(LanguageProvider):
@@ -202,11 +202,11 @@ class MockLanguageProvider(LanguageProvider):
 # ===== PRODUCTION PROVIDERS =====
 
 
-class ProductionConfigProvider(ConfigProvider):
-    """Production configuration provider using config_loader."""
+class DefaultConfigProvider(ConfigProvider):
+    """Default configuration provider using config_loader."""
 
     def __init__(self):
-        """Initialize production config provider."""
+        """Initialize default config provider."""
         # Import here to avoid circular imports
         from ..utils.config_loader import get_language_specific_config, get_ranking_config
 
@@ -260,8 +260,7 @@ class ProductionConfigProvider(ConfigProvider):
                 f"FAILED: Missing {section} configuration for {language}",
                 error_type="ConfigurationError",
                 stack_trace=f"No {section} configuration found for language '{language}'",
-                section=section,
-                language=language,
+                metadata={"section": section, "language": language},
             )
             raise ValueError(f"Missing {section} configuration for language '{language}'")
 
@@ -287,8 +286,8 @@ class ProductionConfigProvider(ConfigProvider):
         return config
 
 
-class ProductionLanguageProvider(LanguageProvider):
-    """Production language provider using config system."""
+class DefaultLanguageProvider(LanguageProvider):
+    """Default language provider using config system."""
 
     def __init__(self, config_provider: ConfigProvider):
         """
@@ -329,7 +328,7 @@ class ProductionLanguageProvider(LanguageProvider):
                     f"FAILED: Missing morphology section for {language}",
                     error_type="ConfigurationError",
                     stack_trace=f"Missing 'morphology' section in language config for '{language}'",
-                    language=language,
+                    metadata={"language": language},
                 )
                 raise ValueError(f"Missing 'morphology' section in language config for '{language}'")
             morphology = language_config["morphology"]
@@ -366,7 +365,7 @@ class ProductionLanguageProvider(LanguageProvider):
                 f"FAILED: Language features loading error for {language}",
                 error_type=type(e).__name__,
                 stack_trace=str(e),
-                language=language,
+                metadata={"language": language},
             )
             raise
 
@@ -478,7 +477,7 @@ class ProductionLanguageProvider(LanguageProvider):
                 "innovative",
             },
         }
-        return defaults[language]
+        return defaults.get(language, set())
 
     def _get_default_quality_positive(self, language: str) -> list[str]:
         """Get default positive quality indicators."""
@@ -494,7 +493,7 @@ class ProductionLanguageProvider(LanguageProvider):
                 r"\b(current|recent|new|updated)\b",
             ],
         }
-        return defaults[language]
+        return defaults.get(language, [])
 
     def _get_default_quality_negative(self, language: str) -> list[str]:
         """Get default negative quality indicators."""
@@ -510,7 +509,7 @@ class ProductionLanguageProvider(LanguageProvider):
                 r"\b(brief|superficial|incomplete|fragmentary)\b",
             ],
         }
-        return defaults[language]
+        return defaults.get(language, [])
 
     def _get_default_cultural_patterns(self, language: str) -> list[str]:
         """Get default cultural patterns."""
@@ -526,7 +525,7 @@ class ProductionLanguageProvider(LanguageProvider):
                 r"\b(technology|science|research|development|innovation)\b",
             ],
         }
-        return defaults[language]
+        return defaults.get(language, [])
 
     def _get_default_grammar_patterns(self, language: str) -> list[str]:
         """Get default grammar patterns."""
@@ -534,7 +533,7 @@ class ProductionLanguageProvider(LanguageProvider):
             "hr": [r"\b\w+ić\b", r"\b\w+ović\b", r"\b\w+ski\b", r"\b\w+nja\b"],
             "en": [r"\b\w+ing\b", r"\b\w+ly\b", r"\b\w+tion\b", r"\b\w+ness\b"],
         }
-        return defaults[language]
+        return defaults.get(language, [])
 
     def detect_language_content(self, text: str) -> dict[str, Any]:
         """Detect language from content."""
@@ -566,17 +565,17 @@ class ProductionLanguageProvider(LanguageProvider):
 
 
 def create_config_provider() -> ConfigProvider:
-    """Create production configuration provider."""
-    from ..utils.config_protocol import ProductionConfigProvider as FullProductionConfigProvider
+    """Create default configuration provider."""
+    from ..utils.config_protocol import DefaultConfigProvider as FullDefaultConfigProvider
 
-    return FullProductionConfigProvider()
+    return FullDefaultConfigProvider()
 
 
 def create_language_provider(config_provider: ConfigProvider | None = None) -> LanguageProvider:
-    """Create production language provider."""
+    """Create default language provider."""
     if config_provider is None:
         config_provider = create_config_provider()
-    return ProductionLanguageProvider(config_provider)
+    return DefaultLanguageProvider(config_provider)
 
 
 def create_mock_config_provider(config_dict: dict[str, Any] | None = None) -> ConfigProvider:
@@ -584,6 +583,23 @@ def create_mock_config_provider(config_dict: dict[str, Any] | None = None) -> Co
     from ..utils.config_protocol import MockConfigProvider as FullMockConfigProvider
 
     provider = FullMockConfigProvider()
+
+    # Set default main config with ranking section
+    default_main_config = {
+        "ranking": {
+            "method": "semantic_hybrid",
+            "enable_diversity": True,
+            "diversity_threshold": 0.8,
+            "boost_recent": True,
+            "boost_authoritative": True,
+            "content_length_factor": True,
+            "keyword_density_factor": True,
+            "language_specific_boost": True,
+        }
+    }
+
+    provider.set_config("config", default_main_config)
+
     if config_dict:
         for key, value in config_dict.items():
             provider.set_config(key, value)

@@ -55,7 +55,9 @@ class MockEmbeddingProvider(EmbeddingProvider):
             embedding = np.random.normal(0, 1, self.dimension).astype(np.float32)
             embedding = embedding / np.linalg.norm(embedding)
 
-        self.logger.debug(f"Generated embedding for text (length: {len(text)})")
+        self.logger.debug(
+            "search_providers", "text_to_embedding", f"Generated embedding for text (length: {len(text)})"
+        )
         return embedding
 
 
@@ -409,11 +411,15 @@ class ChromaDBSearchProvider(VectorSearchProvider):
                     query_kwargs["where"] = filters
 
                 results = await loop.run_in_executor(None, lambda: self.collection.query(**query_kwargs))
-                self.logger.debug(f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results")
+                self.logger.debug(
+                    "search_providers",
+                    "text_search",
+                    f"ChromaDB text search returned {len(results.get('ids', [[]])[0])} results",
+                )
                 return results
 
         except Exception as e:
-            self.logger.error(f"ChromaDB text search failed: {e}")
+            self.logger.error("search_providers", "text_search", f"ChromaDB text search failed: {e}")
             raise
 
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
@@ -444,22 +450,21 @@ class ChromaDBSearchProvider(VectorSearchProvider):
             return None
 
 
-class ConfigProvider(ConfigProvider):
-    """Production configuration provider using config files."""
+class DefaultConfigProvider(ConfigProvider):
+    """Default configuration provider using config files."""
 
-    def __init__(self, config_loader_func=None):
-        """
-        Initialize production config provider.
-
-        Args:
-            config_loader_func: Function to load configuration
-        """
-        if config_loader_func:
-            self.config_loader = config_loader_func
+    def __init__(self, config_loader=None):
+        """Initialize default config provider."""
+        # Use provided config loader or default
+        if config_loader is not None:
+            self.config_loader = config_loader
+            self.get_search_config_func = getattr(config_loader, "get_search_config", None)
+            self.get_shared_config_func = getattr(config_loader, "get_shared_config", None)
         else:
             # Use default config loader
             from ..utils.config_loader import get_search_config, get_shared_config
 
+            self.config_loader = None
             self.get_search_config_func = get_search_config
             self.get_shared_config_func = get_shared_config
 
@@ -524,5 +529,5 @@ def create_vector_search_provider(collection, embedding_provider=None) -> Vector
 
 
 def create_config_provider(config_loader_func=None) -> ConfigProvider:
-    """Create production configuration provider."""
-    return ConfigProvider(config_loader_func=config_loader_func)
+    """Create default configuration provider."""
+    return DefaultConfigProvider(config_loader=config_loader_func)

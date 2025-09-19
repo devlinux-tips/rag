@@ -239,7 +239,7 @@ def prepare_storage_batch(
         )
         raise ValueError("Documents, embeddings, and metadata lists must have same length")
 
-    batches = []
+    batches: list[dict[str, Any]] = []
     total_items = len(documents)
     expected_batches = (total_items + batch_size - 1) // batch_size
     logger.debug(
@@ -636,7 +636,7 @@ class VectorStorage:
             raise ValueError("Either ids or filter_metadata must be provided")
 
         self.collection.delete(ids=ids, where=filter_metadata)
-        self.logger.info("Documents deleted successfully")
+        self.logger.info("vector_storage", "delete_documents", "Documents deleted successfully")
 
 
 # Factory functions

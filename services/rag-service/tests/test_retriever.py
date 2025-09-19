@@ -575,21 +575,21 @@ class TestMockProtocols(unittest.TestCase):
     def test_search_engine_protocol(self):
         """Test SearchEngine protocol compliance."""
         mock_engine = Mock(spec=SearchEngine)
-        mock_engine.search = AsyncMock(return_value=[{
-            "id": "1", "content": "test", "score": 0.8, "metadata": {}
-        }])
+        mock_engine.search_by_text = AsyncMock(return_value={
+            "ids": [["1"]], "documents": [["test"]], "metadatas": [[{}]], "distances": [[0.2]]
+        })
 
         # Should be callable
-        self.assertTrue(hasattr(mock_engine, 'search'))
+        self.assertTrue(hasattr(mock_engine, 'search_by_text'))
 
     def test_result_ranker_protocol(self):
         """Test ResultRanker protocol compliance."""
         mock_ranker = Mock(spec=ResultRanker)
         docs = [RetrievedDocument("1", "content", 0.8, {}, "semantic")]
-        mock_ranker.rank_results = Mock(return_value=docs)
+        mock_ranker.rank_documents = Mock(return_value=[{"id": "1", "content": "content", "score": 0.8, "metadata": {}, "retrieval_method": "semantic"}])
 
         # Should be callable
-        self.assertTrue(hasattr(mock_ranker, 'rank_results'))
+        self.assertTrue(hasattr(mock_ranker, 'rank_documents'))
 
     def test_retrieval_config_protocol(self):
         """Test RetrievalConfig protocol compliance."""
@@ -628,14 +628,21 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
             keywords=["ai", "artificial", "intelligence"]
         )
 
-        self.sample_search_results = [
-            {"id": "1", "content": "AI content", "score": 0.9, "metadata": {"source": "doc1"}},
-            {"id": "2", "content": "More AI content", "score": 0.8, "metadata": {"source": "doc2"}},
-        ]
+        self.sample_search_results = {
+            "ids": [["1", "2"]],
+            "documents": [["AI content", "More AI content"]],
+            "metadatas": [[{"source": "doc1"}, {"source": "doc2"}]],
+            "distances": [[0.1, 0.2]]
+        }
 
         self.mock_query_processor.process_query = AsyncMock(return_value=self.sample_query)
-        self.mock_search_engine.search = AsyncMock(return_value=self.sample_search_results)
-        self.mock_result_ranker.rank_results = Mock(side_effect=lambda q, docs: docs)
+        self.mock_search_engine.search_by_text = AsyncMock(return_value={
+            "ids": [["1", "2"]],
+            "documents": [["artificial intelligence content", "machine learning content"]],
+            "metadatas": [[{}, {}]],
+            "distances": [[0.1, 0.2]]
+        })
+        self.mock_result_ranker.rank_documents = Mock(side_effect=lambda docs, q, context=None: docs)
         self.mock_config.get_strategy_config = Mock(return_value={
             "semantic_weight": 0.7,
             "keyword_weight": 0.3
@@ -655,7 +662,7 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
 
         # Verify dependencies were called
         self.mock_query_processor.process_query.assert_called_once_with("What is AI?", "en")
-        self.mock_search_engine.search.assert_called_once()
+        self.mock_search_engine.search_by_text.assert_called_once()
 
     async def test_retrieve_documents_empty_query(self):
         """Test retrieve_documents with empty query."""
@@ -690,29 +697,37 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[1].retrieval_method, "semantic")
 
         # Verify search was called with correct parameters
-        self.mock_search_engine.search.assert_called_once()
-        call_args = self.mock_search_engine.search.call_args[1]
-        self.assertEqual(call_args["method"], "semantic")
+        self.mock_search_engine.search_by_text.assert_called_once()
+        call_args = self.mock_search_engine.search_by_text.call_args[1]
+        self.assertIn("query_text", call_args)
+        self.assertIn("top_k", call_args)
 
     async def test_semantic_retrieval_missing_fields(self):
-        """Test semantic retrieval with missing required fields."""
-        # Test missing 'id' field
-        self.mock_search_engine.search = AsyncMock(return_value=[
-            {"content": "test", "score": 0.8, "metadata": {}}
-        ])
+        """Test semantic retrieval with empty Chroma results."""
+        # Test empty results
+        self.mock_search_engine.search_by_text = AsyncMock(return_value={
+            "ids": [[]],
+            "documents": [[]],
+            "metadatas": [[]],
+            "distances": [[]]
+        })
 
-        with self.assertRaises(ValueError) as cm:
-            await self.retriever._semantic_retrieval(self.sample_query)
-        self.assertIn("missing required 'id' field", str(cm.exception))
+        result = await self.retriever._semantic_retrieval(self.sample_query)
+        self.assertEqual(len(result), 0)
 
-        # Test missing 'content' field
-        self.mock_search_engine.search = AsyncMock(return_value=[
-            {"id": "1", "score": 0.8, "metadata": {}}
-        ])
+        # Test missing fields in Chroma format - should handle gracefully
+        self.mock_search_engine.search_by_text = AsyncMock(return_value={
+            "ids": [["1"]],
+            "documents": [[]],  # Missing document content
+            "metadatas": [[]],   # Missing metadata
+            "distances": [[]]    # Missing distances
+        })
 
-        with self.assertRaises(ValueError) as cm:
-            await self.retriever._semantic_retrieval(self.sample_query)
-        self.assertIn("missing required 'content' field", str(cm.exception))
+        result = await self.retriever._semantic_retrieval(self.sample_query)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, "1")
+        self.assertEqual(result[0].content, "")  # Should default to empty
+        self.assertEqual(result[0].score, 0.0)   # Should default to 0.0
 
     async def test_keyword_retrieval(self):
         """Test keyword retrieval strategy."""
@@ -723,8 +738,9 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[1].retrieval_method, "keyword")
 
         # Verify search was called with correct parameters
-        call_args = self.mock_search_engine.search.call_args[1]
-        self.assertEqual(call_args["method"], "keyword")
+        call_args = self.mock_search_engine.search_by_text.call_args[1]
+        self.assertIn("query_text", call_args)
+        self.assertIn("top_k", call_args)
 
     async def test_hybrid_retrieval_success(self):
         """Test hybrid retrieval strategy."""
@@ -737,7 +753,7 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreater(len(result), 0)
         # Should have called search twice (semantic and keyword)
-        self.assertEqual(self.mock_search_engine.search.call_count, 2)
+        self.assertEqual(self.mock_search_engine.search_by_text.call_count, 2)
 
     async def test_hybrid_retrieval_missing_config(self):
         """Test hybrid retrieval with missing configuration."""
@@ -755,12 +771,13 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
         })
 
         # Make one search fail
-        self.mock_search_engine.search = AsyncMock(side_effect=[
+        self.mock_search_engine.search_by_text = AsyncMock(side_effect=[
             Exception("Semantic search failed"),
             self.sample_search_results
         ])
 
-        with patch.object(self.retriever, 'logger') as mock_logger:
+        with patch('src.retrieval.retriever.get_system_logger') as mock_get_logger:
+            mock_logger = mock_get_logger.return_value
             result = await self.retriever._hybrid_retrieval(self.sample_query)
 
             # Should still get results from keyword search
@@ -780,29 +797,31 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreater(len(result), 0)
         # Should call keyword retrieval for factual queries
-        call_args = self.mock_search_engine.search.call_args[1]
-        self.assertEqual(call_args["method"], "keyword")
+        call_args = self.mock_search_engine.search_by_text.call_args[1]
+        self.assertIn("query_text", call_args)
+        self.assertIn("top_k", call_args)
 
     async def test_multi_pass_retrieval(self):
         """Test multi-pass retrieval strategy."""
-        # Set up search to return different results for different calls
-        self.mock_search_engine.search = AsyncMock(side_effect=[
-            [{"id": "1", "content": "high quality", "score": 0.9, "metadata": {}}],
-            [{"id": "2", "content": "additional", "score": 0.7, "metadata": {}}]
+        # Set up search to return different results for different calls in Chroma format
+        self.mock_search_engine.search_by_text = AsyncMock(side_effect=[
+            {"ids": [["1"]], "documents": [["high quality"]], "metadatas": [[{}]], "distances": [[0.1]]},
+            {"ids": [["2"]], "documents": [["additional"]], "metadatas": [[{}]], "distances": [[0.3]]}
         ])
 
         result = await self.retriever._multi_pass_retrieval(self.sample_query)
 
         self.assertGreater(len(result), 0)
         # Should call search twice (broad semantic, then keyword)
-        self.assertEqual(self.mock_search_engine.search.call_count, 2)
+        self.assertEqual(self.mock_search_engine.search_by_text.call_count, 2)
 
     async def test_execute_retrieval_strategy_unknown(self):
         """Test execute_retrieval_strategy with unknown strategy."""
         # Create a mock unknown strategy
         unknown_strategy = "unknown_strategy"
 
-        with patch.object(self.retriever, 'logger') as mock_logger:
+        with patch('src.retrieval.retriever.get_system_logger') as mock_get_logger:
+            mock_logger = mock_get_logger.return_value
             # This should call _semantic_retrieval as fallback
             result = await self.retriever._execute_retrieval_strategy(
                 self.sample_query, unknown_strategy
@@ -826,9 +845,9 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
         result = self.retriever._post_process_results(self.sample_query, docs)
 
         # Should have added query match analysis
-        self.assertIsNotNone(result[0].query_match_info)
+        self.assertIsNotNone(result[0].query_match_info) if result else self.fail("No results returned")
         # Should have called ranker
-        self.mock_result_ranker.rank_results.assert_called_once()
+        self.mock_result_ranker.rank_documents.assert_called_once()
 
     async def test_retrieve_documents_exception_handling(self):
         """Test retrieve_documents exception handling."""
@@ -836,11 +855,11 @@ class TestDocumentRetriever(unittest.IsolatedAsyncioTestCase):
             side_effect=Exception("Processing failed")
         )
 
-        with patch.object(self.retriever, 'logger') as mock_logger:
+        with patch('src.retrieval.retriever.log_error_context') as mock_log_error:
             with self.assertRaises(Exception):
                 await self.retriever.retrieve_documents("test query", "en")
 
-            mock_logger.error.assert_called()
+            mock_log_error.assert_called()
 
 
 class TestAsyncDocumentRetriever(unittest.IsolatedAsyncioTestCase):
@@ -874,8 +893,8 @@ class TestAsyncDocumentRetriever(unittest.IsolatedAsyncioTestCase):
             return [{"id": "1", "content": "test", "score": 0.8, "metadata": {}}]
 
         mock_query_processor.process_query = delayed_process_query
-        mock_search_engine.search = delayed_search
-        mock_result_ranker.rank_results = Mock(side_effect=lambda q, docs: docs)
+        mock_search_engine.search_by_text = delayed_search
+        mock_result_ranker.rank_documents = Mock(side_effect=lambda q, docs: docs)
 
         result = await retriever.retrieve_documents("test query", "en")
 

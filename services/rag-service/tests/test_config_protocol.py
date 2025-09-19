@@ -12,7 +12,7 @@ from typing import Any
 
 from src.utils.config_protocol import (
     ConfigProvider,
-    ConfigProvider,
+    DefaultConfigProvider,
     MockConfigProvider,
     set_config_provider,
     get_config_provider,
@@ -56,9 +56,9 @@ class TestConfigProvider:
     """Test cases for ConfigProvider."""
 
     def test_production_config_provider_initialization(self):
-        """Test ConfigProvider initializes correctly."""
-        with patch.object(ConfigProvider, '__init__', lambda self: None):
-            provider = ConfigProvider()
+        """Test DefaultConfigProvider initializes correctly."""
+        with patch.object(DefaultConfigProvider, '__init__', lambda self: None):
+            provider = DefaultConfigProvider()
             # Can't test _config_loader assignment without actual initialization
             assert hasattr(provider, '__class__')
 
@@ -68,7 +68,7 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.load_config.return_value = {'test': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.load_config('test_config', True)
 
             mock_config_loader.load_config.assert_called_once_with('test_config', True)
@@ -79,7 +79,7 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.load_config.return_value = {'test': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             provider.load_config('test_config')
 
             mock_config_loader.load_config.assert_called_once_with('test_config', True)
@@ -89,7 +89,7 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.get_config_section.return_value = {'section': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_config_section('test_config', 'test_section')
 
             mock_config_loader.get_config_section.assert_called_once_with('test_config', 'test_section')
@@ -100,7 +100,7 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.get_shared_config.return_value = {'shared': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_shared_config()
 
             mock_config_loader.get_shared_config.assert_called_once()
@@ -111,7 +111,7 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.get_language_config.return_value = {'language': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_language_config('hr')
 
             mock_config_loader.get_language_config.assert_called_once_with('hr')
@@ -122,15 +122,15 @@ class TestConfigProvider:
         with patch('src.utils.config_loader') as mock_config_loader:
             mock_config_loader.get_language_specific_config.return_value = {'lang_section': 'data'}
 
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_language_specific_config('section', 'hr')
 
             mock_config_loader.get_language_specific_config.assert_called_once_with('section', 'hr')
             assert result == {'lang_section': 'data'}
 
     def test_production_provider_implements_protocol(self):
-        """Test that ConfigProvider implements ConfigProvider protocol."""
-        provider = ConfigProvider()
+        """Test that DefaultConfigProvider implements ConfigProvider protocol."""
+        provider = DefaultConfigProvider()
         assert isinstance(provider, ConfigProvider)
 
 
@@ -311,9 +311,9 @@ class TestGlobalProviderManagement:
         reset_config_provider()
 
     def test_default_provider_is_production(self):
-        """Test that default provider is ConfigProvider."""
+        """Test that default provider is DefaultConfigProvider."""
         provider = get_config_provider()
-        assert isinstance(provider, ConfigProvider)
+        assert isinstance(provider, DefaultConfigProvider)
 
     def test_set_config_provider(self):
         """Test set_config_provider changes the global provider."""
@@ -336,7 +336,7 @@ class TestGlobalProviderManagement:
         assert retrieved_provider is mock_provider
 
     def test_reset_config_provider(self):
-        """Test reset_config_provider restores ConfigProvider."""
+        """Test reset_config_provider restores DefaultConfigProvider."""
         # Set a mock provider
         mock_provider = MockConfigProvider()
         set_config_provider(mock_provider)
@@ -345,7 +345,7 @@ class TestGlobalProviderManagement:
         # Reset should restore production provider
         reset_config_provider()
         provider = get_config_provider()
-        assert isinstance(provider, ConfigProvider)
+        assert isinstance(provider, DefaultConfigProvider)
 
     def test_multiple_provider_changes(self):
         """Test multiple provider changes work correctly."""
@@ -362,7 +362,7 @@ class TestGlobalProviderManagement:
 
         # Reset to production
         reset_config_provider()
-        assert isinstance(get_config_provider(), ConfigProvider)
+        assert isinstance(get_config_provider(), DefaultConfigProvider)
 
     def test_provider_persists_across_calls(self):
         """Test that set provider persists across multiple get calls."""
@@ -385,12 +385,12 @@ class TestConfigProtocolIntegration:
         """Test that the module can be imported without errors."""
         import src.utils.config_protocol
         assert hasattr(src.utils.config_protocol, 'ConfigProvider')
-        assert hasattr(src.utils.config_protocol, 'ConfigProvider')
+        assert hasattr(src.utils.config_protocol, 'DefaultConfigProvider')
         assert hasattr(src.utils.config_protocol, 'MockConfigProvider')
 
     def test_all_providers_implement_protocol(self):
         """Test that all provider classes implement the protocol."""
-        production_provider = ConfigProvider()
+        production_provider = DefaultConfigProvider()
         mock_provider = MockConfigProvider()
 
         assert isinstance(production_provider, ConfigProvider)

@@ -109,7 +109,7 @@ class DocumentExtractorProtocol(Protocol):
 class TextCleanerProtocol(Protocol):
     """Protocol for multilingual text cleaning."""
 
-    def clean_text(self, text: str) -> str: ...
+    def clean_text(self, text: str, preserve_structure: bool = ...) -> Any: ...
 
     def setup_language_environment(self) -> None: ...
 
@@ -125,6 +125,8 @@ class EmbeddingModelProtocol(Protocol):
 
     def encode_text(self, text: str) -> Any: ...
 
+    def generate_embeddings(self, texts: list[str]) -> Any: ...
+
     def initialize(self) -> None: ...
 
 
@@ -132,6 +134,8 @@ class VectorStorageProtocol(Protocol):
     """Protocol for vector storage operations."""
 
     def add_documents(self, documents: list[str], metadatas: list[dict], embeddings: list) -> None: ...
+
+    def add(self, ids: list[str], documents: list[str], metadatas: list[dict], embeddings: list) -> None: ...
 
     def create_collection(self) -> None: ...
 
@@ -169,9 +173,9 @@ class GenerationClientProtocol(Protocol):
 
     async def generate_text_async(self, request: Any) -> Any: ...
 
-    def health_check(self) -> bool: ...
+    async def health_check(self) -> bool: ...
 
-    def get_available_models(self) -> list[str]: ...
+    async def get_available_models(self) -> list[str]: ...
 
     async def close(self) -> None: ...
 
@@ -185,7 +189,14 @@ class ResponseParserProtocol(Protocol):
 class PromptBuilderProtocol(Protocol):
     """Protocol for prompt building."""
 
-    def build_prompt(self, query: str, context_chunks: list[str], **kwargs) -> tuple[str, str]: ...
+    def build_prompt(
+        self,
+        query: str,
+        context_chunks: list[str],
+        category: Any = ...,
+        max_context_length: int = ...,
+        include_source_attribution: bool = ...,
+    ) -> tuple[str, str]: ...
 
 
 # Pure functions for business logic
@@ -523,16 +534,16 @@ def evaluate_component_health(component_name: str, components: list[Any], detail
     return ComponentHealth(status=status, details=details)
 
 
-def evaluate_ollama_health(client: GenerationClientProtocol | None, model_name: str) -> ComponentHealth:
+async def evaluate_ollama_health(client: GenerationClientProtocol | None, model_name: str) -> ComponentHealth:
     """Evaluate Ollama service health."""
     if not client:
         return ComponentHealth(status="unhealthy", details="Ollama client not initialized")
 
-    ollama_healthy = client.health_check()
+    ollama_healthy = await client.health_check()
     if not ollama_healthy:
         return ComponentHealth(status="unhealthy", details="Ollama service not available")
 
-    available_models = client.get_available_models()
+    available_models = await client.get_available_models()
     model_available = model_name in available_models
 
     status = "healthy" if model_available else "degraded"
@@ -642,6 +653,9 @@ class RAGSystem:
         system_logger.info(
             "rag_system", "post_init", f"Embedding model initialized: {self.embedding_config.model_name}"
         )
+
+        self._vector_storage.create_collection()
+        system_logger.debug("rag_system", "post_init", "Vector storage collection created")
 
         self._initialized = True
         log_component_end("rag_system", "post_init", "All components initialized successfully")
@@ -1097,7 +1111,7 @@ class RAGSystem:
 
             # Check generation components
             model_name = self.ollama_config.model if self.ollama_config else "unknown"
-            generation_health = evaluate_ollama_health(self._generation_client, model_name)
+            generation_health = await evaluate_ollama_health(self._generation_client, model_name)
 
             components = {
                 "preprocessing": preprocessing_health,
@@ -1167,10 +1181,10 @@ def create_rag_system(
     text_cleaner: TextCleanerProtocol,
     document_chunker: DocumentChunkerProtocol,
     embedding_model: EmbeddingModelProtocol,
-    vector_storage: VectorStorageProtocol,
+    vector_storage: Any,
     search_engine: SearchEngineProtocol,
     query_processor: QueryProcessorProtocol,
-    retriever: RetrieverProtocol,
+    retriever: Any,
     hierarchical_retriever: RetrieverProtocol,
     ranker: RankerProtocol,
     generation_client: GenerationClientProtocol,

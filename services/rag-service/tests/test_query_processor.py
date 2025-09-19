@@ -22,19 +22,18 @@ from src.retrieval.query_processor import (
     QueryType,
     ProcessedQuery,
 
-    # Protocols
-    LanguageDataProvider,
+    # Protocols (type definitions only)
     SpellChecker,
 
     # Main class
     MultilingualQueryProcessor,
-
-    # Production implementation
-    LanguageDataProvider,
-
-    # Factory function
-    create_query_processor,
 )
+
+# Import concrete implementations
+from src.retrieval.query_processor_providers import LanguageDataProvider
+
+# Import factory function
+from src.retrieval.query_processor import create_query_processor
 
 from src.utils.config_models import QueryProcessingConfig
 
@@ -716,8 +715,8 @@ class TestLanguageDataProvider:
     def mock_config_provider(self):
         """Create mock configuration provider."""
         provider = Mock()
-        provider.get_language_config.return_value = {
-            "stopwords": {"words": ["the", "a", "an"]},
+        provider.get_language_specific_config.return_value = {
+            "stop_words": ["the", "a", "an"],
             "question_patterns": {
                 "factual": [r"\b(what|who)\b"],
                 "explanatory": [r"\b(how|why)\b"]
@@ -744,14 +743,12 @@ class TestLanguageDataProvider:
         assert "a" in stop_words
 
     def test_get_stop_words_error_fallback(self, mock_config_provider):
-        """Test stop words retrieval with error fallback."""
-        mock_config_provider.get_language_config.side_effect = KeyError("Missing config")
+        """Test stop words retrieval with missing config raises ValueError."""
+        mock_config_provider.get_language_specific_config.return_value = {}  # Missing stop_words key
         provider = LanguageDataProvider(mock_config_provider)
 
-        stop_words = provider.get_stop_words("en")
-
-        assert isinstance(stop_words, set)
-        assert len(stop_words) == 0
+        with pytest.raises(ValueError, match="Missing 'stop_words' in language configuration"):
+            provider.get_stop_words("en")
 
     def test_get_question_patterns_success(self, mock_config_provider):
         """Test successful question patterns retrieval."""
@@ -791,19 +788,19 @@ class TestLanguageDataProvider:
         stop_words2 = provider.get_stop_words("en")
 
         # Should only call config provider once due to caching
-        assert mock_config_provider.get_language_config.call_count == 1
+        assert mock_config_provider.get_language_specific_config.call_count == 1
         assert stop_words1 == stop_words2
 
     def test_missing_synonym_groups_error(self, mock_config_provider):
         """Test error handling when synonym_groups missing."""
-        # Make config provider raise an exception
-        mock_config_provider.get_language_config.side_effect = KeyError("Missing config")
+        # Set mock to return config without synonym_groups
+        mock_config_provider.get_language_specific_config.return_value = {}
 
         provider = LanguageDataProvider(mock_config_provider)
 
-        # Should fallback to empty dict when config provider fails
-        synonyms = provider.get_synonym_groups("en")
-        assert synonyms == {}
+        # Should raise ValueError when synonym_groups missing
+        with pytest.raises(ValueError, match="Missing 'synonym_groups' in language configuration"):
+            provider.get_synonym_groups("en")
 
 
 # Test Factory Function
@@ -856,7 +853,11 @@ class TestCreateQueryProcessor:
 
         assert isinstance(processor, MultilingualQueryProcessor)
         assert processor.config.language == "hr"
-        assert isinstance(processor.language_data_provider, LanguageDataProvider)
+        # Check that the language_data_provider implements the expected interface
+        assert hasattr(processor.language_data_provider, 'get_stop_words')
+        assert hasattr(processor.language_data_provider, 'get_question_patterns')
+        assert hasattr(processor.language_data_provider, 'get_synonym_groups')
+        assert hasattr(processor.language_data_provider, 'get_morphological_patterns')
 
     def test_create_with_config_provider_error(self, main_config):
         """Test factory with config provider error handling."""

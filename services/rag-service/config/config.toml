@@ -80,7 +80,8 @@ temp_dir = "./temp"
 use_language_subdirs = true
 
 [logging]
-level = "INFO"
+backends = ["console"]
+level = "TRACE"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 log_to_file = true
 

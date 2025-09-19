@@ -12,8 +12,8 @@ from src.utils.language_manager_providers import (
     MockConfigProvider,
     MockPatternProvider,
     MockLoggerProvider,
-    ProductionConfigProvider,
-    ProductionPatternProvider,
+    DefaultConfigProvider,
+    DefaultPatternProvider,
     StandardLoggerProvider,
     create_mock_setup,
     create_production_setup,
@@ -316,12 +316,12 @@ class TestMockLoggerProvider(unittest.TestCase):
         self.assertEqual(result, [])
 
 
-class TestProductionConfigProvider(unittest.TestCase):
+class TestDefaultConfigProvider(unittest.TestCase):
     """Test production configuration provider functionality."""
 
     def test_init_creates_cache(self):
         """Test initialization creates settings cache."""
-        provider = ProductionConfigProvider()
+        provider = DefaultConfigProvider()
 
         self.assertIsNone(provider._settings_cache)
 
@@ -342,7 +342,7 @@ class TestProductionConfigProvider(unittest.TestCase):
                 get_shared_config=mock_get_shared_config
             )
         }):
-            provider = ProductionConfigProvider()
+            provider = DefaultConfigProvider()
 
             # First call should load and cache
             result1 = provider.get_language_settings()
@@ -378,7 +378,7 @@ class TestProductionConfigProvider(unittest.TestCase):
                 get_shared_config=mock_get_shared_config
             )
         }):
-            provider = ProductionConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_language_settings()
 
             self.assertIsInstance(result, LanguageSettings)
@@ -392,7 +392,7 @@ class TestProductionConfigProvider(unittest.TestCase):
         mock_config_loader.get_supported_languages.side_effect = ValueError("Config error")
 
         with patch.dict('sys.modules', {'src.utils.config_loader': mock_config_loader}):
-            provider = ProductionConfigProvider()
+            provider = DefaultConfigProvider()
 
             with self.assertRaises(ConfigurationError) as context:
                 provider.get_language_settings()
@@ -400,12 +400,12 @@ class TestProductionConfigProvider(unittest.TestCase):
             self.assertIn("Failed to load language settings", str(context.exception))
 
 
-class TestProductionPatternProvider(unittest.TestCase):
+class TestDefaultPatternProvider(unittest.TestCase):
     """Test production pattern provider functionality."""
 
     def test_init_creates_cache(self):
         """Test initialization creates patterns cache."""
-        provider = ProductionPatternProvider()
+        provider = DefaultPatternProvider()
 
         self.assertIsNone(provider._patterns_cache)
 
@@ -426,7 +426,7 @@ class TestProductionPatternProvider(unittest.TestCase):
                 get_language_config=mock_get_language_config
             )
         }):
-            provider = ProductionPatternProvider()
+            provider = DefaultPatternProvider()
 
             # First call should load and cache
             result1 = provider.get_language_patterns()
@@ -466,7 +466,7 @@ class TestProductionPatternProvider(unittest.TestCase):
                 get_language_config=mock_get_language_config
             )
         }):
-            provider = ProductionPatternProvider()
+            provider = DefaultPatternProvider()
             result = provider.get_language_patterns()
 
             self.assertIsInstance(result, LanguagePatterns)
@@ -486,7 +486,7 @@ class TestProductionPatternProvider(unittest.TestCase):
                 get_language_config=mock_get_language_config
             )
         }):
-            provider = ProductionPatternProvider()
+            provider = DefaultPatternProvider()
 
             with self.assertRaises(ConfigurationError) as context:
                 provider.get_language_patterns()
@@ -502,7 +502,7 @@ class TestProductionPatternProvider(unittest.TestCase):
                 get_supported_languages=mock_get_supported_languages
             )
         }):
-            provider = ProductionPatternProvider()
+            provider = DefaultPatternProvider()
 
             with self.assertRaises(ConfigurationError) as context:
                 provider.get_language_patterns()
@@ -615,8 +615,8 @@ class TestFactoryFunctions(unittest.TestCase):
         """Test create_production_setup with default logger name."""
         config_provider, pattern_provider, logger_provider = create_production_setup()
 
-        self.assertIsInstance(config_provider, ProductionConfigProvider)
-        self.assertIsInstance(pattern_provider, ProductionPatternProvider)
+        self.assertIsInstance(config_provider, DefaultConfigProvider)
+        self.assertIsInstance(pattern_provider, DefaultPatternProvider)
         self.assertIsInstance(logger_provider, StandardLoggerProvider)
 
     def test_create_production_setup_with_custom_logger_name(self):
@@ -701,8 +701,8 @@ class TestIntegrationHelpers(unittest.TestCase):
 
             # Check that it was called with production providers
             call_kwargs = mock_create.call_args[1]
-            self.assertIsInstance(call_kwargs["config_provider"], ProductionConfigProvider)
-            self.assertIsInstance(call_kwargs["pattern_provider"], ProductionPatternProvider)
+            self.assertIsInstance(call_kwargs["config_provider"], DefaultConfigProvider)
+            self.assertIsInstance(call_kwargs["pattern_provider"], DefaultPatternProvider)
             self.assertIsInstance(call_kwargs["logger_provider"], StandardLoggerProvider)
 
     def test_create_test_language_manager_with_defaults(self):

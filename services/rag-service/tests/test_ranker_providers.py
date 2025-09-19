@@ -9,13 +9,14 @@ from unittest.mock import MagicMock, patch
 from src.retrieval.ranker_providers import (
     MockConfigProvider,
     MockLanguageProvider,
-    ConfigProvider,
-    ProductionLanguageProvider,
+    DefaultConfigProvider,
+    DefaultLanguageProvider,
     create_config_provider,
     create_language_provider,
     create_mock_config_provider,
     create_mock_language_provider,
 )
+from src.retrieval.ranker import ConfigProvider
 from src.retrieval.ranker import LanguageFeatures
 
 
@@ -230,7 +231,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_initialization(self):
         """Test provider initializes correctly."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         # Mock the methods after initialization
         mock_get_ranking = MagicMock()
@@ -245,7 +246,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_ranking_config_success(self):
         """Test successful ranking config retrieval."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         expected_config = {
             "method": "language_enhanced",
@@ -265,7 +266,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_ranking_config_missing_config(self):
         """Test ranking config retrieval when config is missing."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         # Mock to return None/empty config
         mock_get_ranking = MagicMock()
@@ -279,7 +280,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_language_specific_config_success(self):
         """Test successful language-specific config retrieval."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         expected_config = {
             "morphology": {
@@ -300,7 +301,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_language_specific_config_missing_config(self):
         """Test language-specific config when config is missing."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         # Mock to return None/empty config
         mock_get_language = MagicMock()
@@ -313,13 +314,13 @@ class TestConfigProvider(unittest.TestCase):
         self.assertIn("Missing retrieval configuration for language 'hr'", str(context.exception))
 
 
-class TestProductionLanguageProvider(unittest.TestCase):
+class TestDefaultLanguageProvider(unittest.TestCase):
     """Test production language provider."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.mock_config_provider = MagicMock()
-        self.provider = ProductionLanguageProvider(self.mock_config_provider)
+        self.provider = DefaultLanguageProvider(self.mock_config_provider)
 
     def test_initialization(self):
         """Test provider initializes correctly."""
@@ -517,7 +518,7 @@ class TestProductionLanguageProvider(unittest.TestCase):
 class TestFactoryFunctions(unittest.TestCase):
     """Test factory functions."""
 
-    @patch('src.utils.config_protocol.ConfigProvider')
+    @patch('src.utils.config_protocol.DefaultConfigProvider')
     def test_create_config_provider(self, mock_full_provider):
         """Test config provider creation."""
         mock_instance = MagicMock()
@@ -534,7 +535,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
         result = create_language_provider(mock_config)
 
-        self.assertIsInstance(result, ProductionLanguageProvider)
+        self.assertIsInstance(result, DefaultLanguageProvider)
         self.assertIs(result.config_provider, mock_config)
 
     @patch('src.retrieval.ranker_providers.create_config_provider')
@@ -545,7 +546,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
         result = create_language_provider()
 
-        self.assertIsInstance(result, ProductionLanguageProvider)
+        self.assertIsInstance(result, DefaultLanguageProvider)
         self.assertIs(result.config_provider, mock_config)
         mock_create_config.assert_called_once()
 
@@ -559,8 +560,8 @@ class TestFactoryFunctions(unittest.TestCase):
 
         self.assertIs(result, mock_instance)
         mock_full_provider.assert_called_once()
-        # Should not call set_config
-        mock_instance.set_config.assert_not_called()
+        # Should call set_config once for default config
+        mock_instance.set_config.assert_called_once_with("config", unittest.mock.ANY)
 
     @patch('src.utils.config_protocol.MockConfigProvider')
     def test_create_mock_config_provider_with_config(self, mock_full_provider):
@@ -573,10 +574,11 @@ class TestFactoryFunctions(unittest.TestCase):
 
         self.assertIs(result, mock_instance)
         mock_full_provider.assert_called_once()
-        # Should call set_config for each key-value pair
+        # Should call set_config for default config plus each key-value pair
         mock_instance.set_config.assert_any_call("key1", "value1")
         mock_instance.set_config.assert_any_call("key2", "value2")
-        self.assertEqual(mock_instance.set_config.call_count, 2)
+        # Default config + 2 custom configs = 3 total calls
+        self.assertEqual(mock_instance.set_config.call_count, 3)
 
     def test_create_mock_language_provider(self):
         """Test mock language provider creation."""

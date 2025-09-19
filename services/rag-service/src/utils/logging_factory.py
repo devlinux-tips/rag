@@ -120,10 +120,10 @@ class ElasticsearchLoggingBackend(LoggingBackend):
         self.es_client = None
         self._init_elasticsearch()
 
-    def _init_elasticsearch(self):
+    def _init_elasticsearch(self) -> None:
         """Initialize Elasticsearch client."""
         try:
-            from elasticsearch import Elasticsearch
+            from elasticsearch import Elasticsearch  # type: ignore[import-not-found]
 
             self.es_client = Elasticsearch(
                 hosts=self.es_config.get("hosts", ["localhost:9200"]),
@@ -133,7 +133,7 @@ class ElasticsearchLoggingBackend(LoggingBackend):
             )
 
             # Test connection
-            if not self.es_client.ping():
+            if self.es_client and not self.es_client.ping():
                 raise ConnectionError("Cannot connect to Elasticsearch")
 
         except ImportError as e:
@@ -380,4 +380,59 @@ def log_error_context(component: str, operation: str, error: Exception, context:
         error_type=type(error).__name__,
         stack_trace=str(error),
         metadata=context,
+    )
+
+
+# AI-Specific Debugging Functions for Test Failures
+def log_mock_detection(component: str, operation: str, obj: Any, expected_type: str | None = None) -> None:
+    """Log when dealing with mock vs real objects - critical for AI test debugging."""
+    from unittest.mock import Mock
+
+    is_mock = isinstance(obj, Mock) or "Mock" in str(type(obj)) or hasattr(obj, "_mock_name")
+    logger = get_system_logger()
+    logger.trace(
+        "mock_detection",
+        operation,
+        f"obj={type(obj).__name__} | is_mock={is_mock} | expected={expected_type} | obj_id={id(obj)} | component={component}",
+    )
+
+
+def log_assertion_context(
+    test_name: str, component: str, expected: Any, actual: Any, assertion_type: str = "equality"
+) -> None:
+    """Detailed assertion context for AI pattern recognition."""
+    logger = get_system_logger()
+    logger.error(
+        "test_assertion",
+        test_name,
+        f"ASSERTION_FAIL | component={component} | type={assertion_type} | "
+        f"expected_type={type(expected).__name__} | actual_type={type(actual).__name__} | "
+        f"expected_value={repr(expected)[:100]} | actual_value={repr(actual)[:100]}",
+    )
+
+
+def log_api_mismatch(component: str, method: str, expected_sig: str, actual_call: dict) -> None:
+    """Track API signature mismatches for systematic provider fixing."""
+    logger = get_system_logger()
+    expected_params = [p.strip() for p in expected_sig.split(",") if p.strip()]
+    actual_params = list(actual_call.keys())
+    missing_params = set(expected_params) - set(actual_params)
+    extra_params = set(actual_params) - set(expected_params)
+
+    logger.error(
+        "api_contract",
+        f"{component}.{method}",
+        f"SIGNATURE_MISMATCH | expected={expected_params} | actual={actual_params} | "
+        f"missing={list(missing_params)} | extra={list(extra_params)}",
+    )
+
+
+def log_config_evolution(key_path: str, old_format: Any, new_format: Any, compat_action: str) -> None:
+    """Track configuration schema changes and compatibility decisions."""
+    logger = get_system_logger()
+    logger.info(
+        "config_evolution",
+        "schema_change",
+        f"path={key_path} | old_type={type(old_format).__name__} | new_type={type(new_format).__name__} | "
+        f"compat_action={compat_action} | migration_needed={old_format != new_format}",
     )

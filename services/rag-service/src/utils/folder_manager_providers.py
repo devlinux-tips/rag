@@ -168,11 +168,11 @@ class MockLoggerProvider:
 # ================================
 
 
-class ProductionFileSystemProvider:
-    """Production filesystem provider using real filesystem operations."""
+class DefaultFileSystemProvider:
+    """Default filesystem provider using real filesystem operations."""
 
     def __init__(self):
-        """Initialize production filesystem provider."""
+        """Initialize default filesystem provider."""
         self.logger = logging.getLogger(__name__)
 
     def create_folder(self, folder_path: Path) -> bool:
@@ -300,11 +300,11 @@ class ProductionFileSystemProvider:
         return stats
 
 
-class ProductionConfigProvider:
-    """Production configuration provider using real config system."""
+class DefaultConfigProvider:
+    """Default configuration provider using real config system."""
 
     def __init__(self):
-        """Initialize production config provider."""
+        """Initialize default config provider."""
         self._config_cache: FolderConfig | None = None
 
     def get_folder_config(self) -> FolderConfig:
@@ -453,9 +453,9 @@ def create_mock_setup(
     return config_provider, filesystem_provider, logger_provider
 
 
-def create_production_setup(logger_name: str | None = None) -> tuple:
+def create_default_setup(logger_name: str | None = None) -> tuple:
     """
-    Create production setup with real components.
+    Create default setup with real components.
 
     Args:
         logger_name: Optional logger name override
@@ -463,8 +463,8 @@ def create_production_setup(logger_name: str | None = None) -> tuple:
     Returns:
         Tuple of (config_provider, filesystem_provider, logger_provider)
     """
-    config_provider = ProductionConfigProvider()
-    filesystem_provider = ProductionFileSystemProvider()
+    config_provider = DefaultConfigProvider()
+    filesystem_provider = DefaultFileSystemProvider()
     logger_provider = StandardLoggerProvider(logger_name or __name__)
 
     return config_provider, filesystem_provider, logger_provider
@@ -498,10 +498,17 @@ def create_development_folder_manager():
     """Create folder manager configured for development/testing."""
     from .folder_manager import create_tenant_folder_manager
 
-    config_provider, filesystem_provider, logger_provider = create_production_setup()
+    config_provider, filesystem_provider, logger_provider = create_default_setup()
+
     return create_tenant_folder_manager(
         config_provider=config_provider, filesystem_provider=filesystem_provider, logger_provider=logger_provider
     )
+
+
+# Backward compatibility aliases
+ProductionFileSystemProvider = DefaultFileSystemProvider
+ProductionConfigProvider = DefaultConfigProvider
+create_production_setup = create_default_setup
 
 
 def create_test_folder_manager(

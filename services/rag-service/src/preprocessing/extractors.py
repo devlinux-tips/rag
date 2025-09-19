@@ -389,8 +389,9 @@ class DocumentExtractor:
 
         is_valid, error_msg = validate_file_format(file_path, self._config.supported_formats)
         if not is_valid:
-            logger.error("document_extractor", "extract_text", error_msg)
-            raise ValueError(error_msg)
+            error_message = error_msg or "File format validation failed"
+            logger.error("document_extractor", "extract_text", error_message)
+            raise ValueError(error_message)
 
         self._log_info(f"Extracting text from {file_path}")
 

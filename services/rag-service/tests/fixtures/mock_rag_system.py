@@ -7,6 +7,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from src.retrieval.categorization import CategoryType
+
 
 class MockDocumentExtractor:
     """Mock document extractor for testing."""
@@ -62,12 +64,41 @@ class MockEmbeddingModel:
     def load_model(self) -> None:
         pass
 
+    def initialize(self) -> None:
+        """Initialize the mock embedding model."""
+        self.load_model()
+
+    def generate_embeddings(self, texts: list[str]) -> Any:
+        """Generate mock embeddings for multiple texts."""
+        import numpy as np
+
+        # Create mock embedding vectors
+        embeddings_list = [self.encode_text(text) for text in texts]
+        embeddings_array = np.array(embeddings_list)
+
+        # Return an object with .embeddings attribute like the real system
+        class MockEmbeddingResult:
+            def __init__(self, embeddings: np.ndarray, texts: list[str]):
+                self.embeddings = embeddings
+                self.input_texts = texts
+                self.model_name = "mock-embedding-model"
+                self.embedding_dim = len(embeddings_list[0]) if embeddings_list else 0
+                self.processing_time = 0.1
+                self.metadata = {}
+
+        return MockEmbeddingResult(embeddings_array, texts)
+
 
 class MockVectorStorage:
     """Mock vector storage for testing."""
 
     def __init__(self):
         self._documents = []
+
+    def add(self, ids: list[str], documents: list[str], metadatas: list[dict], embeddings: list) -> None:
+        """Add documents with embeddings to storage."""
+        for doc_id, doc, meta, emb in zip(ids, documents, metadatas, embeddings, strict=False):
+            self._documents.append({"id": doc_id, "content": doc, "metadata": meta, "embedding": emb})
 
     def add_documents(
         self, documents: list[str], metadatas: list[dict], embeddings: list
@@ -102,10 +133,10 @@ class MockGenerationClient:
 
         return MockResponse()
 
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         return self.healthy
 
-    def get_available_models(self) -> list[str]:
+    async def get_available_models(self) -> list[str]:
         return self.available_models
 
     async def close(self) -> None:
@@ -142,14 +173,11 @@ class MockRetriever:
     async def retrieve(
         self, query: str, max_results: int = 5, context: dict | None = None
     ) -> Any:
-        class MockCategory:
-            value = "general"
-
         class MockStrategy:
             value = "standard"
 
         class MockResults:
-            category = MockCategory()
+            category = CategoryType.GENERAL  # Use real CategoryType enum
             strategy_used = MockStrategy()
             confidence = 0.8
             routing_metadata = {}

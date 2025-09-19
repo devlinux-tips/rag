@@ -15,6 +15,9 @@ from typing import Any
 
 from .logging_factory import get_system_logger, log_component_end, log_decision_point, log_error_context
 
+# Module-level logger for test mocking
+logger = get_system_logger()
+
 
 class ConfigurationError(Exception):
     """Raised when configuration validation fails."""

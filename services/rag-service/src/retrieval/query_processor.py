@@ -221,6 +221,9 @@ def generate_query_filters(
         Dictionary of filters
     """
     filters = {}
+
+    # Remember if filter_config was explicitly provided (even if empty)
+    filter_config_provided = filter_config is not None
     filter_config = filter_config or {}
 
     # Language filter from context
@@ -241,11 +244,14 @@ def generate_query_filters(
         topic_patterns = filter_config["topic_patterns"]
     elif "topic_filters" in filter_config:
         topic_patterns = filter_config["topic_filters"]
-    elif isinstance(filter_config, dict) and all(isinstance(v, list) for v in filter_config.values()):
+    elif isinstance(filter_config, dict) and filter_config and all(isinstance(v, list) for v in filter_config.values()):
         # Direct topic patterns dictionary (history: [...], tourism: [...], etc.)
         topic_patterns = filter_config
+    elif filter_config_provided:
+        # filter_config was explicitly provided but no topic patterns found - this is an error
+        raise ValueError("Missing 'topic_patterns' in filter configuration")
     else:
-        # No topic filtering available - just return current filters
+        # No filter_config provided - just return current filters
         return filters
     query_lower = query.lower()
 
@@ -567,7 +573,9 @@ class MultilingualQueryProcessor:
             query_type=query_type.value,
             keywords_count=len(keywords),
             confidence=confidence,
-            processing_steps=len(metadata["processing_steps"]),
+            processing_steps=len(metadata["processing_steps"])
+            if hasattr(metadata["processing_steps"], "__len__")
+            else 0,
         )
 
         return result
@@ -675,7 +683,7 @@ def create_query_processor(
     # Create language data provider (can be mocked in tests)
     language_data_provider = None
     if config_provider:
-        language_data_provider = ProductionLanguageDataProvider(config_provider)
+        language_data_provider = DefaultLanguageDataProvider(config_provider)
 
     # Get filter configuration
     filter_config = {}
@@ -698,7 +706,7 @@ def create_query_processor(
 # Production implementation of language data provider (optional)
 
 
-class ProductionLanguageDataProvider:
+class DefaultLanguageDataProvider:
     """Production implementation of LanguageDataProvider."""
 
     def __init__(self, config_provider: "ConfigProvider"):
@@ -765,3 +773,7 @@ class ProductionLanguageDataProvider:
                 self._cache[cache_key] = {}
 
         return cast(dict[str, Any], self._cache[cache_key])
+
+
+# Backward compatibility alias
+ProductionLanguageDataProvider = DefaultLanguageDataProvider

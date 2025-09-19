@@ -677,7 +677,7 @@ class HierarchicalRetriever:
         if self._strategy_stats is not None:
             self._update_strategy_stats(strategy_type, retrieval_time)
 
-        result = HierarchicalRetrievalResult(
+        final_result = HierarchicalRetrievalResult(
             documents=result_dicts,
             category=categorization.category.value,
             strategy_used=strategy_type.value,
@@ -723,7 +723,7 @@ class HierarchicalRetriever:
             confidence=overall_confidence,
         )
 
-        return result
+        return final_result
 
     def _map_retrieval_strategy(self, strategy_name: str) -> RetrievalStrategyType:
         """Map strategy name to RetrievalStrategyType."""

@@ -41,16 +41,18 @@ def normalize_text_for_bm25(text: str, stop_words: set, min_token_length: int = 
     Raises:
         ValueError: If inputs are invalid
     """
-    system_logger = get_system_logger()
-    system_logger.trace(
-        "bm25_normalizer", "normalize_text", f"Processing text[{len(text)}] with {len(stop_words)} stop words"
-    )
-
+    # Validate inputs first
     if not isinstance(text, str):
         raise ValueError(f"Text must be string, got {type(text)}")
 
     if not isinstance(stop_words, set):
         raise ValueError(f"Stop words must be set, got {type(stop_words)}")
+
+    # Log after validation
+    system_logger = get_system_logger()
+    system_logger.trace(
+        "bm25_normalizer", "normalize_text", f"Processing text[{len(text)}] with {len(stop_words)} stop words"
+    )
 
     if not isinstance(min_token_length, int) or min_token_length < 1:
         raise ValueError(f"Min token length must be positive integer, got {min_token_length}")
@@ -602,11 +604,7 @@ class HybridRetriever:
         Raises:
             ValueError: If inputs are invalid or retriever not ready
         """
-        system_logger = get_system_logger()
-        log_component_start(
-            "hybrid_retriever", "retrieve", query_length=len(query), dense_results_count=len(dense_results), top_k=top_k
-        )
-
+        # Validate inputs first
         if not isinstance(query, str):
             raise ValueError(f"Query must be string, got {type(query)}")
 
@@ -615,6 +613,12 @@ class HybridRetriever:
 
         if not isinstance(top_k, int) or top_k < 1:
             raise ValueError(f"Top k must be positive integer, got {top_k}")
+
+        # Log after validation
+        system_logger = get_system_logger()
+        log_component_start(
+            "hybrid_retriever", "retrieve", query_length=len(query), dense_results_count=len(dense_results), top_k=top_k
+        )
 
         if not self.is_ready:
             raise ValueError("Retriever not ready. Call index_documents() first.")

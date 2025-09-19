@@ -19,7 +19,7 @@ from src.vectordb.search_providers import (
     # Production Providers
     SentenceTransformerEmbeddingProvider,
     ChromaDBSearchProvider,
-    ConfigProvider,
+    DefaultConfigProvider,
     # Factory Functions
     create_mock_embedding_provider,
     create_mock_search_provider,
@@ -446,6 +446,7 @@ class TestSentenceTransformerEmbeddingProvider(unittest.TestCase):
     def test_init_default_params(self, mock_sentence_transformer):
         """Test initialization with default parameters."""
         mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 1024
         mock_sentence_transformer.return_value = mock_model
 
         provider = SentenceTransformerEmbeddingProvider()
@@ -459,6 +460,7 @@ class TestSentenceTransformerEmbeddingProvider(unittest.TestCase):
     def test_init_custom_params(self, mock_sentence_transformer):
         """Test initialization with custom parameters."""
         mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 768
         mock_sentence_transformer.return_value = mock_model
 
         provider = SentenceTransformerEmbeddingProvider(
@@ -474,6 +476,7 @@ class TestSentenceTransformerEmbeddingProvider(unittest.TestCase):
         """Test successful text encoding."""
         mock_model = Mock()
         mock_model.encode.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+        mock_model.get_sentence_embedding_dimension.return_value = 3
         mock_sentence_transformer.return_value = mock_model
 
         provider = SentenceTransformerEmbeddingProvider()
@@ -500,6 +503,7 @@ class TestSentenceTransformerEmbeddingProvider(unittest.TestCase):
     def test_encode_text_2d_to_1d_conversion(self, mock_sentence_transformer):
         """Test 2D array conversion to 1D."""
         mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 3
         mock_sentence_transformer.return_value = mock_model
 
         provider = SentenceTransformerEmbeddingProvider()
@@ -524,6 +528,7 @@ class TestSentenceTransformerEmbeddingProvider(unittest.TestCase):
     def test_encode_text_error_handling(self, mock_sentence_transformer):
         """Test error handling during encoding."""
         mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 3
         mock_sentence_transformer.return_value = mock_model
 
         provider = SentenceTransformerEmbeddingProvider()
@@ -758,17 +763,17 @@ class TestConfigProvider(unittest.TestCase):
     def test_init_with_custom_loader(self):
         """Test initialization with custom config loader."""
         mock_loader = Mock()
-        provider = ConfigProvider(config_loader_func=mock_loader)
+        provider = DefaultConfigProvider(config_loader=mock_loader)
 
         self.assertEqual(provider.config_loader, mock_loader)
-        # When custom loader provided, get_search_config_func is not set
-        self.assertFalse(hasattr(provider, 'get_search_config_func'))
+        # When custom loader provided, get_search_config_func is set from loader
+        self.assertTrue(hasattr(provider, 'get_search_config_func'))
 
     @patch('src.utils.config_loader.get_search_config')
     @patch('src.utils.config_loader.get_shared_config')
     def test_init_with_default_loader(self, mock_get_shared, mock_get_search):
         """Test initialization with default config loader."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         self.assertEqual(provider.get_search_config_func, mock_get_search)
         self.assertEqual(provider.get_shared_config_func, mock_get_shared)
@@ -776,7 +781,7 @@ class TestConfigProvider(unittest.TestCase):
     def test_get_search_config_with_custom_loader_uses_fallback(self):
         """Test that custom loader actually uses fallback config."""
         mock_loader = Mock()
-        provider = ConfigProvider(config_loader_func=mock_loader)
+        provider = DefaultConfigProvider(config_loader=mock_loader)
 
         # Manually set get_search_config_func to None since it's not set in init when custom loader provided
         provider.get_search_config_func = None
@@ -797,7 +802,7 @@ class TestConfigProvider(unittest.TestCase):
         mock_get_search.return_value = mock_config
 
         with patch('src.utils.config_loader.get_shared_config'):
-            provider = ConfigProvider()
+            provider = DefaultConfigProvider()
             result = provider.get_search_config()
 
             self.assertEqual(result, mock_config)
@@ -805,7 +810,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_search_config_fallback(self):
         """Test getting search config with fallback."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         provider.get_search_config_func = None
 
         result = provider.get_search_config()
@@ -816,7 +821,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_scoring_weights_success(self):
         """Test getting scoring weights successfully."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         provider.get_search_config_func = Mock(return_value={
             "weights": {
                 "semantic_weight": 0.8,
@@ -831,7 +836,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_scoring_weights_missing_weights_section(self):
         """Test error when weights section is missing."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         provider.get_search_config_func = Mock(return_value={
             "default_method": "semantic"
         })
@@ -843,7 +848,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_scoring_weights_missing_semantic_weight(self):
         """Test error when semantic_weight is missing."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         provider.get_search_config_func = Mock(return_value={
             "weights": {"keyword_weight": 0.3}
         })
@@ -855,7 +860,7 @@ class TestConfigProvider(unittest.TestCase):
 
     def test_get_scoring_weights_missing_keyword_weight(self):
         """Test error when keyword_weight is missing."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
         provider.get_search_config_func = Mock(return_value={
             "weights": {"semantic_weight": 0.7}
         })
@@ -909,7 +914,9 @@ class TestFactoryFunctions(unittest.TestCase):
     @patch('sentence_transformers.SentenceTransformer')
     def test_create_embedding_provider(self, mock_sentence_transformer):
         """Test creating production embedding provider."""
-        mock_sentence_transformer.return_value = Mock()
+        mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 768
+        mock_sentence_transformer.return_value = mock_model
 
         provider = create_embedding_provider(
             model_name="custom/model", device="cuda"
@@ -922,7 +929,9 @@ class TestFactoryFunctions(unittest.TestCase):
     @patch('sentence_transformers.SentenceTransformer')
     def test_create_embedding_provider_default(self, mock_sentence_transformer):
         """Test creating production embedding provider with defaults."""
-        mock_sentence_transformer.return_value = Mock()
+        mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 1024
+        mock_sentence_transformer.return_value = mock_model
 
         provider = create_embedding_provider()
 
@@ -986,7 +995,9 @@ class TestProviderInterfaces(unittest.TestCase):
     @patch('sentence_transformers.SentenceTransformer')
     def test_production_embedding_provider_interface(self, mock_sentence_transformer):
         """Test SentenceTransformerEmbeddingProvider has required methods."""
-        mock_sentence_transformer.return_value = Mock()
+        mock_model = Mock()
+        mock_model.get_sentence_embedding_dimension.return_value = 1024
+        mock_sentence_transformer.return_value = mock_model
         provider = SentenceTransformerEmbeddingProvider()
 
         # Check required methods exist
@@ -1005,7 +1016,7 @@ class TestProviderInterfaces(unittest.TestCase):
 
     def test_production_config_provider_interface(self):
         """Test ConfigProvider has required methods."""
-        provider = ConfigProvider()
+        provider = DefaultConfigProvider()
 
         # Check required methods exist
         self.assertTrue(hasattr(provider, 'get_search_config'))
