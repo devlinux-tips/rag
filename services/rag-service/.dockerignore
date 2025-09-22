@@ -1,0 +1,88 @@
+# Python cache and build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation and markdown
+*.md
+docs/
+notebooks/
+
+# Test files and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.pytest_cache/
+cover/
+
+# Logs and temp files
+*.log
+*.tmp
+system/logs/
+system/temp/
+system/backups/
+
+# Data directories (will be mounted as volumes)
+data/
+models/
+
+# Development and test files
+test_*.py
+*_test.py
+research/
+scripts/
+
+# Configuration that should be mounted
+config/*.toml
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore

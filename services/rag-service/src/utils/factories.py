@@ -3,10 +3,147 @@ Component factory utilities for RAG system dependency injection.
 """
 
 from pathlib import Path
+from typing import Any
 
 from ..models.multitenant_models import DocumentScope, Tenant, User
 from ..pipeline.rag_system import create_rag_system
+from .json_logging import write_debug_json
 from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
+
+
+class ProviderAdapterClient:
+    """
+    Adapter class that bridges the new LLM provider system with the legacy RAGSystem interface.
+    Converts between GenerationRequest/Response and ChatRequest/Response formats.
+    """
+
+    def __init__(self, llm_manager):
+        """Initialize adapter with LLM provider manager."""
+        self.llm_manager = llm_manager
+        self.logger = get_system_logger()
+
+    async def generate_text_async(self, request) -> Any:
+        """Convert GenerationRequest to ChatRequest and call provider."""
+        import json
+        import os
+        from datetime import datetime
+
+        from ..generation.llm_provider import ChatMessage, MessageRole
+        from ..generation.ollama_client import GenerationResponse
+
+        # Convert GenerationRequest to ChatMessage format
+        messages = []
+        if hasattr(request, "context") and request.context:
+            context_text = "\n".join(request.context)
+            # Add token limit instruction to system message
+            system_content = f"Context: {context_text}\n\nCRITICAL: You have a strict limit of 1500 tokens maximum for your response. Write a complete, well-structured answer that covers the key points but MUST conclude properly before hitting the token limit. Prioritize the most important information and finish your sentences."
+            messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_content))
+
+        messages.append(ChatMessage(role=MessageRole.USER, content=request.prompt))
+
+        # Get model and max_tokens from primary provider config
+        primary_config = self.llm_manager.config[self.llm_manager.primary_provider]
+        model = primary_config.get("model", "default")
+        max_tokens = primary_config.get("max_tokens", 2000)
+
+        # Log and store RAG→LLM request details
+        rag_to_llm_request = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "RAG_TO_LLM_REQUEST",
+            "messages": [
+                {"role": msg.role.value if hasattr(msg.role, "value") else str(msg.role), "content": msg.content}
+                for msg in messages
+            ],
+            "model": model,
+            "provider": self.llm_manager.primary_provider,
+            "temperature": 0.7,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "original_prompt": request.prompt,
+            "context_chunks_count": len(request.context) if hasattr(request, "context") and request.context else 0,
+        }
+
+        # Store RAG→LLM request to file
+        os.makedirs("./logs/chat_debug", exist_ok=True)
+        rag_request_file = f"./logs/chat_debug/{datetime.now().strftime('%Y%m%d_%H%M%S')}_rag_to_llm_request.json"
+        with open(rag_request_file, "w", encoding="utf-8") as f:
+            json.dump(rag_to_llm_request, f, indent=2, ensure_ascii=False)
+
+        self.logger.trace(
+            "rag_adapter",
+            "llm_request",
+            f"RAG_TO_LLM_REQUEST: {json.dumps(rag_to_llm_request, indent=2, ensure_ascii=False)}",
+        )
+
+        # Get response from provider using the direct interface
+        chat_response = await self.llm_manager.chat_completion(
+            messages=messages, model=model, temperature=0.7, max_tokens=max_tokens, stream=False
+        )
+
+        # Log and store LLM→RAG response details
+        llm_to_rag_response = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "LLM_TO_RAG_RESPONSE",
+            "id": chat_response.id,
+            "content": chat_response.content,
+            "content_length": len(chat_response.content),
+            "model": chat_response.model,
+            "provider": chat_response.provider.value
+            if hasattr(chat_response.provider, "value")
+            else str(chat_response.provider),
+            "finish_reason": chat_response.finish_reason.value
+            if hasattr(chat_response.finish_reason, "value")
+            else str(chat_response.finish_reason),
+            "usage": {
+                "input_tokens": chat_response.usage.input_tokens,
+                "output_tokens": chat_response.usage.output_tokens,
+                "total_tokens": chat_response.usage.total_tokens,
+            },
+            "request_file": rag_request_file,
+        }
+
+        # Store LLM→RAG response to file with readable markdown formatting
+        rag_response_file = f"./logs/chat_debug/{datetime.now().strftime('%Y%m%d_%H%M%S')}_llm_to_rag_response.json"
+        write_debug_json(rag_response_file, llm_to_rag_response)
+
+        self.logger.trace(
+            "rag_adapter",
+            "llm_response",
+            f"LLM_TO_RAG_RESPONSE: {json.dumps(llm_to_rag_response, indent=2, ensure_ascii=False)}",
+        )
+
+        # Convert back to GenerationResponse format
+        return GenerationResponse(
+            text=chat_response.content,
+            model=chat_response.model,
+            tokens_used=chat_response.usage.total_tokens if chat_response.usage else 0,
+            generation_time=0.0,  # Not tracked in new system
+            confidence=1.0,  # Not available in new system
+            metadata={},
+        )
+
+    async def health_check(self) -> bool:
+        """Check if primary provider is healthy."""
+        try:
+            # Simple health check by getting available providers
+            available = self.llm_manager.get_available_providers()
+            return self.llm_manager.primary_provider in available
+        except Exception:
+            return False
+
+    async def get_available_models(self) -> list[str]:
+        """Get available models from primary provider."""
+        try:
+            # Return the configured model from primary provider
+            primary_config = self.llm_manager.config[self.llm_manager.primary_provider]
+            return [primary_config.get("model", "default")]
+        except Exception:
+            return []
+
+    async def close(self) -> None:
+        """Close provider connections."""
+        # LLM manager doesn't need explicit closing
+        pass
 
 
 def create_complete_rag_system(
@@ -77,7 +214,6 @@ def create_complete_rag_system(
 
         # Create individual components using their factories
         from ..generation.enhanced_prompt_templates import create_enhanced_prompt_builder
-        from ..generation.ollama_client import create_ollama_client
         from ..generation.response_parser import create_response_parser
         from ..preprocessing.chunkers import create_document_chunker
         from ..preprocessing.cleaners import MultilingualTextCleaner
@@ -166,8 +302,21 @@ def create_complete_rag_system(
         mock_score_calculator = create_mock_score_calculator()
         ranker = create_multilingual_reranker(model_loader=mock_model_loader, score_calculator=mock_score_calculator)
 
-        # Generation client
-        generation_client = create_ollama_client(config=ollama_config)
+        # Generation client - Use provider system with primary_provider setting
+        from ..generation.llm_provider import UnifiedLLMManager
+
+        # Get LLM config section with primary provider
+        llm_config_section = main_config["llm"]
+        llm_config = {
+            "ollama": main_config["ollama"],
+            "openrouter": main_config["openrouter"],
+            "primary_provider": llm_config_section["primary_provider"],
+            "fallback_order": llm_config_section["fallback_order"],
+        }
+
+        # Create provider-aware generation client
+        llm_manager = UnifiedLLMManager(llm_config)
+        generation_client = ProviderAdapterClient(llm_manager)
 
         # Response parser
         response_parser = create_response_parser(config_provider=config_provider, language=language)

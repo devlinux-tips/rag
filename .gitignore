@@ -248,6 +248,15 @@ claude-flow.ps1
 hive-mind-prompt-*.txt
 **/data/cache/**
 **/test_db
+**/logs/chat_debug/**
 
 crawler/data/**
+
+**/node_modules/**
+
+**/package-lock.json
+
+**/_build/**
+
+**/priv/static/**
 

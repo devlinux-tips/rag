@@ -1,0 +1,98 @@
+# Docker-specific RAG System Configuration
+# This file overrides config.toml settings for Docker deployment
+
+# ============================================================================
+# DATABASE CONFIGURATION (Docker Override)
+# ============================================================================
+[database]
+# Use PostgreSQL in Docker environment
+provider = "postgresql"
+
+[database.postgresql]
+host = "postgres"  # Docker service name
+port = 5432
+database = "ragdb"
+user = "raguser"
+password = "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+min_connections = 1
+max_connections = 10
+
+# ============================================================================
+# OLLAMA CONFIGURATION (Docker Override)
+# ============================================================================
+[ollama]
+# Docker Ollama service configuration
+base_url = "http://ollama:11434"  # Docker service name
+model = "qwen2.5:7b-instruct"
+timeout = 120.0
+temperature = 0.7
+max_tokens = 800
+top_p = 0.9
+top_k = 40
+stream = true
+keep_alive = "5m"
+num_predict = 800
+repeat_penalty = 1.1
+seed = -1
+api_key = ""
+response_format = "ollama"
+
+# ============================================================================
+# PATHS CONFIGURATION (Docker Override)
+# ============================================================================
+[paths]
+# Docker volume mount paths
+data_base_dir = "/app/data"
+models_base_dir = "/app/models"
+system_dir = "/app/system"
+temp_dir = "/app/system/temp"
+
+# Multi-tenant path templates for Docker
+tenant_root_template = "/app/data/{tenant_slug}"
+user_documents_template = "/app/data/{tenant_slug}/users/{user_id}/documents/{language}"
+tenant_shared_template = "/app/data/{tenant_slug}/shared/documents/{language}"
+user_processed_template = "/app/data/{tenant_slug}/users/{user_id}/processed/{language}"
+tenant_processed_template = "/app/data/{tenant_slug}/shared/processed/{language}"
+chromadb_path_template = "/app/data/chromadb/{tenant_slug}"
+models_path_template = "/app/models/{tenant_slug}/{language}"
+
+# ============================================================================
+# LOGGING CONFIGURATION (Docker Override)
+# ============================================================================
+[logging]
+backends = ["console"]  # Only console logging in Docker
+level = "INFO"  # Reduced verbosity for Docker
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_to_file = false  # Disable file logging in Docker (use container logs)
+
+# ============================================================================
+# STORAGE CONFIGURATION (Docker Override)
+# ============================================================================
+[storage]
+# Docker ChromaDB paths
+db_path_template = "/app/data/chromadb/{tenant_slug}"
+collection_name_template = "{tenant_slug}_{scope}_{language}"
+distance_metric = "cosine"
+persist = true
+allow_reset = false
+
+# ============================================================================
+# PERFORMANCE CONFIGURATION (Docker Override)
+# ============================================================================
+[performance]
+# Docker-optimized performance settings
+use_async_processing = true
+parallel_document_processing = true
+max_workers = 2  # Reduced for container resource limits
+batch_processing_size = 5  # Smaller batches for Docker
+memory_limit_mb = 1024  # Reduced memory limit for container
+enable_gpu_acceleration = false  # Disabled for Docker CPU deployment
+
+# ============================================================================
+# SYSTEM CONFIGURATION (Docker Override)
+# ============================================================================
+[system]
+log_level = "INFO"
+enable_caching = true
+max_concurrent_requests = 3  # Reduced for Docker
+enable_metrics = true

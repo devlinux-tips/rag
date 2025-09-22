@@ -42,8 +42,9 @@ def normalize_whitespace(text: str) -> str:
         logger.error("response_parser", "normalize_whitespace", f"Invalid input type: {type(text)}")
         raise ValueError(f"Text must be string, got {type(text)}")
 
-    # Replace multiple whitespace with single space
-    normalized = re.sub(r"\s+", " ", text.strip())
+    # Replace multiple consecutive spaces but preserve newlines and tabs
+    # This preserves markdown formatting including indentation while cleaning up extra spaces
+    normalized = re.sub(r" +", " ", text.strip())  # Only multiple spaces, preserve newlines and tabs
 
     if len(normalized) != len(text):
         logger.trace(

@@ -1,0 +1,60 @@
+# Production-Ready SurrealDB Setup
+version: '3.8'
+
+services:
+  # Production SurrealDB - Secure Configuration with Persistent Storage
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: surrealdb-production
+    restart: unless-stopped
+
+    # Run as container user 65532
+    user: "65532:65532"
+
+    command: >
+      start
+      --user admin
+      --pass ${SURREAL_ADMIN_PASSWORD:-ProductionAdminPass2024}
+      --bind 0.0.0.0:8000
+      --log info
+      --strict
+      rocksdb:///data/surreal.db
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./data:/data
+
+    environment:
+      - RUST_LOG=info
+
+    networks:
+      - surrealdb-net
+
+  # Simple Python Query Application
+  python-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: python-query-app
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      - SURREALDB_URL=http://surrealdb:8000
+      - SURREALDB_USER=admin
+      - SURREALDB_PASS=${SURREAL_ADMIN_PASSWORD:-ProductionAdminPass2024}
+      - PYTHONUNBUFFERED=1
+
+    depends_on:
+      - surrealdb
+
+    networks:
+      - surrealdb-net
+
+networks:
+  surrealdb-net:
+    driver: bridge

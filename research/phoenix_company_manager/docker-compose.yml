@@ -1,0 +1,49 @@
+# Phoenix + PostgreSQL Company Manager
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: company_manager_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: company_manager_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  # Phoenix LiveView Application
+  phoenix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company_manager_app
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/company_manager_dev
+      - PHX_HOST=localhost
+      - PHX_PORT=4000
+      - SECRET_KEY_BASE=py+vaHT2lwOfKkYqL+32ks5zsIufk+Atl5K7Qh0ly6eyP1bZm/qviOK4yrGStsJvQN3UUlFtVamiH1tt9EoEZg==
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+    volumes:
+      - .:/app
+      - /app/deps
+      - /app/_build
+
+volumes:
+  postgres_data:
+
+networks:
+  app_network:
+    driver: bridge

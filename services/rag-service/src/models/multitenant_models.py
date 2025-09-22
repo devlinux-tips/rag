@@ -92,6 +92,8 @@ class Tenant:
     settings: dict[str, Any] = field(default_factory=dict)
     business_context: BusinessContext = BusinessContext.BUSINESS
     subscription_tier: SubscriptionTier = SubscriptionTier.BASIC
+    language_preference: Language = Language.AUTO
+    cultural_context: BusinessContext = BusinessContext.BUSINESS
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -131,6 +133,7 @@ class User:
     role: UserRole = UserRole.MEMBER
     status: UserStatus = UserStatus.ACTIVE
     settings: dict[str, Any] = field(default_factory=dict)
+    language_preference: Language = Language.AUTO
     last_login_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -187,6 +190,10 @@ class Document:
     categories: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     chunk_count: int = 0
+    content: str = ""
+    source_path: str | None = None
+    mime_type: str | None = None
+    checksum: str | None = None
     processing_started_at: datetime | None = None
     processing_completed_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -227,6 +234,10 @@ class Chunk:
     vector_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     categories: list[str] = field(default_factory=list)
+    start_char: int = 0
+    end_char: int = 0
+    token_count: int = 0
+    embedding_dimension: int = 768
     created_at: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self):
@@ -462,6 +473,8 @@ DEFAULT_DEVELOPMENT_TENANT = Tenant(
     status=TenantStatus.ACTIVE,
     business_context=BusinessContext.BUSINESS,
     subscription_tier=SubscriptionTier.ENTERPRISE,
+    language_preference=Language.AUTO,
+    cultural_context=BusinessContext.BUSINESS,
     settings={
         "allow_user_document_promotion": True,
         "auto_detect_language": True,
@@ -480,6 +493,7 @@ DEFAULT_DEVELOPMENT_USER = User(
     password_hash="$2b$12$dummy_hash_for_development",
     role=UserRole.ADMIN,
     status=UserStatus.ACTIVE,
+    language_preference=Language.AUTO,
     settings={"preferred_categories": ["technical", "business"], "auto_categorize": True, "search_both_scopes": True},
 )
 

@@ -24,19 +24,17 @@ Notes
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import re
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-import json
 from typing import Iterable, Optional
-from urllib.parse import urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import urlencode, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import requests
-
 
 BASE = "https://narodne-novine.nn.hr"
 LISTING_PATH = "/search.aspx"
@@ -234,7 +232,7 @@ def crawl_issue(fetcher: PoliteFetcher, year: int, broj: int, out_dir: Path) -> 
             continue
 
         pdf_url: Optional[str] = None
-        if year >= 2023:
+        if year >= 2025:
             # Determine the PDF URL (prefer canonical ELI path inferred from HTML slug)
             pdf_url = derive_pdf_url_from_html_url(link)
             if not pdf_url:
@@ -287,7 +285,9 @@ def crawl_issue(fetcher: PoliteFetcher, year: int, broj: int, out_dir: Path) -> 
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Polite crawler for Narodne Novine listings")
+    p = argparse.ArgumentParser(
+        description="Polite crawler for Narodne Novine listings"
+    )
     p.add_argument("--year", type=int, required=True, help="Target year (godina)")
     p.add_argument(
         "--start-number",
@@ -307,10 +307,18 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         default=Path("crawler/data"),
         help="Output directory for saved HTML",
     )
-    p.add_argument("--delay", type=float, default=2.0, help="Delay between requests in seconds")
-    p.add_argument("--timeout", type=float, default=20.0, help="HTTP timeout in seconds")
-    p.add_argument("--max-retries", type=int, default=3, help="Max HTTP retries on failure")
-    p.add_argument("--user-agent", type=str, default=None, help="Custom User-Agent string")
+    p.add_argument(
+        "--delay", type=float, default=2.0, help="Delay between requests in seconds"
+    )
+    p.add_argument(
+        "--timeout", type=float, default=20.0, help="HTTP timeout in seconds"
+    )
+    p.add_argument(
+        "--max-retries", type=int, default=3, help="Max HTTP retries on failure"
+    )
+    p.add_argument(
+        "--user-agent", type=str, default=None, help="Custom User-Agent string"
+    )
 
     args = p.parse_args(list(argv) if argv is not None else None)
 

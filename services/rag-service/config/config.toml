@@ -301,12 +301,12 @@ base_url = "http://localhost:11434"
 model = "qwen2.5:7b-instruct"  # Local Qwen2.5 7B model
 timeout = 120.0                # Connection and response timeout in seconds
 temperature = 0.7
-max_tokens = 800               # Reduced from 2000 for faster generation
+max_tokens = 2000              # Increased back to allow complete responses
 top_p = 0.9
 top_k = 40                     # Specific to generation (different from search top_k)
 stream = true
 keep_alive = "5m"              # Keep model loaded for 5 minutes
-num_predict = 800              # Cap token generation
+num_predict = 2000             # Cap token generation
 repeat_penalty = 1.1
 seed = -1
 api_key = ""                   # No API key needed for local Ollama
@@ -320,11 +320,21 @@ chat_completions = "/api/generate"          # Endpoint for chat/text generation
 models_list = "/api/tags"                   # Endpoint to list available models
 streaming_chat = "/api/generate"            # Endpoint for streaming responses
 
-# Alternative OpenRouter endpoints (for remote API)
-# health_check = "/models"
-# chat_completions = "/chat/completions"
-# models_list = "/models"
-# streaming_chat = "/chat/completions"
+# OpenRouter configuration (cloud LLM API)
+[openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key = "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"
+model = "qwen/qwen3-30b-a3b-instruct-2507"  # Latest QWen3 model for better multilingual support
+timeout = 120.0
+temperature = 0.7
+max_tokens = 2000
+stream = true
+
+# Multi-provider LLM configuration
+[llm]
+primary_provider = "openrouter"  # Primary: "ollama" for local, "openrouter" for cloud
+fallback_order = []             # No fallbacks - swappable by configuration only
+auto_fallback = false           # Disabled - use explicit provider selection
 
 [prompts]
 # Prompt configuration
@@ -348,6 +358,56 @@ require_source_grounding = true
 confidence_threshold = 0.7
 response_format = "markdown"
 include_metadata = true
+
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+[database]
+# Database provider: "postgresql" for PostgreSQL, "surrealdb" for local/on-premise, "supabase" for cloud
+provider = "postgresql"
+
+# PostgreSQL configuration (local/cloud database)
+[database.postgresql]
+host = "localhost"
+port = 5432
+database = "ragdb"
+user = "raguser"
+password = 'x|B&h@p4F@o|k6t;~X]1A((Z.,RG'
+min_connections = 1
+max_connections = 10
+
+# SurrealDB configuration (local/on-premise database)
+[database.surrealdb]
+url = "ws://localhost:8001/rpc"
+namespace = "rag"
+database = "documents"
+# Authentication credentials for write permissions (temporarily disabled for testing)
+username = "root"
+password = "root"
+connection_timeout = 30
+max_connections = 10
+
+# Supabase configuration (cloud database)
+[database.supabase]
+url = "https://vdmizraansyjcblabuqp.supabase.co"
+service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkbWl6cmFhbnN5amNibGFidXFwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODMxODE1MywiZXhwIjoyMDczODk0MTUzfQ._-iCGbox6iJJtqUC5R-0Z8-CfRFdQKCtBbzfi1ww9tY"
+anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkbWl6cmFhbnN5amNibGFidXFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMTgxNTMsImV4cCI6MjA3Mzg5NDE1M30.be4hDvtK8o21yeXBnovX5at1yqiBgDuIlIoCVc6cWFA"
+enable_rls = true
+connection_timeout = 30
+max_connections = 20
+
+# Supabase authentication settings
+[database.supabase.auth]
+enable_signup = false
+enable_email_confirmations = true
+site_url = "http://localhost:3000"
+jwt_expiry = 3600
+
+# Supabase Row Level Security settings
+[database.supabase.rls]
+enforce_mfa_for_sensitive_operations = false
+tenant_isolation_strict = true
+enable_audit_logging = true
 
 # ============================================================================
 # SYSTEM CONFIGURATION

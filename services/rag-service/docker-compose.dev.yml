@@ -1,0 +1,31 @@
+# Development Override for Docker Compose
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  rag-app:
+    volumes:
+      # Mount source code for hot reload during development
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./rag.py:/app/rag.py:ro
+      - ./chat_api.py:/app/chat_api.py:ro
+    environment:
+      - RAG_ENV=development
+      - RAG_LOG_LEVEL=DEBUG
+    command: >
+      sh -c "
+        echo 'Starting in development mode...' &&
+        python chat_api.py
+      "
+
+  rag-cli:
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./rag.py:/app/rag.py:ro
+    environment:
+      - RAG_ENV=development
+      - RAG_LOG_LEVEL=DEBUG

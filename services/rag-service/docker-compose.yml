@@ -1,0 +1,200 @@
+version: '3.8'
+
+# RAG Service Docker Compose Configuration
+# Complete multi-service setup for Croatian/English RAG system
+# Includes: PostgreSQL, Ollama LLM, RAG Application
+
+networks:
+  rag-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  # Database persistence
+  postgres_data:
+    driver: local
+
+  # Application data persistence
+  rag_data:
+    driver: local
+
+  # Model storage
+  rag_models:
+    driver: local
+
+  # Ollama model storage
+  ollama_data:
+    driver: local
+
+  # ChromaDB persistence
+  chromadb_data:
+    driver: local
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-x|B&h@p4F@o|k6t;~X]1A((Z.,RG}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      rag-network:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Ollama LLM Server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      rag-network:
+        ipv4_address: 172.20.0.20
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Ollama Model Puller (runs once to download models)
+  ollama-puller:
+    image: ollama/ollama:latest
+    container_name: rag-ollama-puller
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag-network
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    command: >
+      sh -c "
+        echo 'Waiting for Ollama server...' &&
+        sleep 10 &&
+        echo 'Pulling qwen2.5:7b-instruct model...' &&
+        ollama pull qwen2.5:7b-instruct &&
+        echo 'Models ready!'
+      "
+    restart: "no"
+
+  # RAG Application
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-application
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=ragdb
+      - DATABASE_USER=raguser
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-x|B&h@p4F@o|k6t;~X]1A((Z.,RG}
+
+      # Ollama configuration
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:7b-instruct
+
+      # Application configuration
+      - PYTHONPATH=/app/src
+      - RAG_ENV=docker
+      - RAG_LOG_LEVEL=INFO
+    volumes:
+      # Configuration files
+      - ./config:/app/config:ro
+
+      # Data persistence - mount existing directories
+      - ./data:/app/data
+      - ./models:/app/models
+
+      # System directories
+      - ./system/logs:/app/system/logs
+      - ./system/temp:/app/system/temp
+    ports:
+      - "8080:8080"  # Web API
+    networks:
+      rag-network:
+        ipv4_address: 172.20.0.30
+    command: python chat_api.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # RAG CLI Service (for CLI operations)
+  rag-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-cli
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=ragdb
+      - DATABASE_USER=raguser
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-x|B&h@p4F@o|k6t;~X]1A((Z.,RG}
+
+      # Ollama configuration
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:7b-instruct
+
+      # Application configuration
+      - PYTHONPATH=/app/src
+      - RAG_ENV=docker
+    volumes:
+      # Configuration files
+      - ./config:/app/config:ro
+
+      # Data persistence (shared with rag-app) - mount existing directories
+      - ./data:/app/data
+      - ./models:/app/models
+
+      # System directories
+      - ./system/logs:/app/system/logs
+      - ./system/temp:/app/system/temp
+    networks:
+      - rag-network
+    command: tail -f /dev/null  # Keep container running for CLI access
+    profiles:
+      - cli
+    restart: unless-stopped

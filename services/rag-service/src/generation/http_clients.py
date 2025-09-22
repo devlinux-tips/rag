@@ -21,6 +21,7 @@ from .ollama_client import ConnectionError, HttpError, HttpResponse
 class AsyncHttpxClient:
     """
     Production HTTP client using httpx library.
+    Compatible with both old Ollama client and new LLM provider interfaces.
     """
 
     def __init__(self):
@@ -205,6 +206,20 @@ class AsyncHttpxClient:
             logger.trace("http_client", "close", "No active HTTP client to close")
 
         log_component_end("http_client", "close", "HTTP client cleanup completed")
+
+    # New LLM Provider Interface Methods
+    async def post_json(
+        self, url: str, headers: dict[str, str], json_data: dict[str, Any], timeout: float
+    ) -> dict[str, Any]:
+        """POST request returning JSON (for new LLM provider interface)."""
+        response = await self.post(url, json_data, timeout, headers)
+        return response.json()
+
+    async def stream_post_lines(self, url: str, headers: dict[str, str], json_data: dict[str, Any], timeout: float):
+        """Streaming POST returning lines (for new LLM provider interface)."""
+        lines = await self.stream_post(url, json_data, timeout, headers)
+        for line in lines:
+            yield line
 
 
 class MockHttpClient:
