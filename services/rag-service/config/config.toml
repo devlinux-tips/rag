@@ -73,6 +73,10 @@ tenant_processed_template = "{data_base_dir}/{tenant_slug}/shared/processed/{lan
 chromadb_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 models_path_template = "{models_base_dir}/{tenant_slug}/{language}"
 
+# Feature-specific data sources (outside tenant scope)
+narodne_novine_documents_template = "{data_base_dir}/features/documents/narodne_novine/{language}"
+narodne_novine_processed_template = "{data_base_dir}/features/processed/narodne_novine/{language}"
+
 # System-wide temp directory
 temp_dir = "./temp"
 
@@ -130,6 +134,10 @@ db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 # Collection naming templates
 collection_name_template = "{tenant_slug}_{scope}_{language}"
 # Examples: "development_user_hr", "enterprise_tenant_en", "acme_user_multilingual"
+
+# Feature collection templates (for non-tenant data sources)
+feature_collection_template = "feature_{feature_name}_{language}"
+# Examples: "feature_narodne_novine_hr", "feature_legal_en"
 
 distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
 persist = true
@@ -475,3 +483,166 @@ cleanup_empty_folders = false
 auto_create_collections = true
 collection_per_language = true
 collection_per_scope = true  # Separate user/tenant collections
+
+# ============================================================================
+# FEATURES CONFIGURATION - Advanced Multi-Source Data Management
+# ============================================================================
+
+[features]
+# Global feature system settings
+enable_features = true
+features_base_dir = "./data/features"
+
+# Feature collection strategy - how features integrate with tenant data
+collection_strategy = "isolated"  # "isolated" | "integrated" | "hybrid"
+# - isolated: Features use separate collections (recommended for legal/regulatory data)
+# - integrated: Features share tenant collections (for internal company data)
+# - hybrid: Mix of both based on feature configuration
+
+# Feature data lifecycle management
+enable_feature_versioning = true
+enable_feature_caching = true
+feature_cache_ttl = 3600  # seconds
+
+# ============================================================================
+# NARODNE NOVINE FEATURE - Croatian Official Gazette
+# ============================================================================
+
+[features.narodne_novine]
+# Basic feature identification
+enabled = true
+name = "narodne_novine"
+display_name = "Narodne Novine"
+description = "Croatian Official Gazette - legal and regulatory documents"
+feature_type = "legal_repository"
+data_classification = "public_official"
+
+# Language and scope configuration
+supported_languages = ["hr"]
+primary_language = "hr"
+collection_name = "feature_narodne_novine_hr"
+
+# Data source paths (now matching your actual structure)
+documents_path = "./data/features/documents/narodne_novine/hr"
+processed_path = "./data/features/processed/narodne_novine/hr"
+vectordb_path = "./data/features/vectordb/narodne_novine"
+
+# Content lifecycle settings
+enable_auto_update = false  # Manual processing for official documents
+retention_policy = "permanent"  # Legal documents never expire
+enable_backup = true
+
+# ============================================================================
+# PROCESSING SETTINGS - Optimized for Legal Documents
+# ============================================================================
+
+[features.narodne_novine.processing]
+# Chunk sizing - larger for legal context preservation
+chunk_size = 1024                    # Larger chunks preserve legal context
+chunk_overlap = 150                  # More overlap for cross-reference preservation
+min_chunk_size = 256                 # Minimum viable legal content unit
+
+# Legal document structure preservation
+preserve_legal_structure = true     # Maintain article/paragraph numbering
+preserve_hierarchical_context = true # Keep law > article > paragraph structure
+extract_legal_entities = true       # Extract laws, dates, authorities, references
+
+# Document format support
+supported_formats = [".pdf", ".txt", ".html", ".md", ".docx"]
+prefer_pdf_extraction = true        # PDF is primary format for official docs
+enable_ocr_fallback = false         # Assume clean digital documents
+
+# Content validation
+validate_legal_format = true        # Check for proper NN formatting
+require_publication_metadata = true # Ensure docs have NN numbers/dates
+enable_content_deduplication = true # Remove duplicate publications
+
+# ============================================================================
+# METADATA ENHANCEMENT - Legal Document Intelligence
+# ============================================================================
+
+[features.narodne_novine.metadata]
+# Publication metadata extraction
+extract_publication_number = true   # Extract NN number (e.g., "85/2009")
+extract_publication_date = true     # Extract publication date
+extract_publication_year = true     # Extract year for temporal organization
+
+# Authority and source tracking
+extract_ministry = true             # Extract issuing ministry/authority
+extract_legal_category = true       # Extract document type (zakon, uredba, etc.)
+extract_issuing_authority = true    # Specific authority within ministry
+
+# Legal lifecycle metadata
+extract_effective_date = true       # When law/regulation takes effect
+extract_expiration_date = true      # If applicable
+extract_amendment_references = true # References to previous laws/amendments
+extract_superseded_documents = true # Documents this replaces
+
+# Legal content classification
+extract_legal_domain = true         # Tax, labor, criminal, civil, etc.
+extract_affected_entities = true    # Who the regulation affects
+extract_geographical_scope = true   # National, regional, local applicability
+
+# Cross-reference intelligence
+extract_citations = true            # References to other laws/documents
+extract_legal_precedents = true     # Referenced court decisions
+build_legal_relationship_graph = true # Create document relationship network
+
+# ============================================================================
+# SEARCH OPTIMIZATION - Legal Query Intelligence
+# ============================================================================
+
+[features.narodne_novine.search]
+# Query enhancement for legal searches
+enable_legal_synonym_expansion = true    # "zakon" -> "propis", "regulativa"
+enable_abbreviation_expansion = true     # "ZOR" -> "Zakon o radu"
+enable_temporal_context = true           # Understand "current law", "latest version"
+
+# Relevance boosting strategies
+boost_exact_legal_matches = 1.5         # Exact legal term matches
+boost_recent_documents = 1.2            # Recent regulations more relevant
+boost_active_regulations = 1.3          # Non-superseded documents
+boost_primary_sources = 1.4             # Laws over interpretations
+
+# Advanced search features
+enable_temporal_filtering = true        # Filter by publication/effective dates
+enable_authority_filtering = true       # Filter by ministry/issuing authority
+enable_legal_domain_filtering = true    # Filter by legal area
+enable_document_type_filtering = true   # Filter by zakon/uredba/pravilnik
+
+# Legal query understanding
+recognize_legal_entities = true         # Understand "Ministarstvo financija"
+recognize_legal_procedures = true       # Understand "postupak", "rok", "žalba"
+enable_legal_context_expansion = true   # Expand search with related legal concepts
+
+# Result presentation optimization
+group_by_legal_family = true           # Group related regulations
+show_amendment_history = true          # Show document evolution
+highlight_effective_periods = true     # Show when regulations were active
+enable_legal_summary_generation = true # AI-generated regulation summaries
+
+# ============================================================================
+# INTEGRATION SETTINGS - How Narodne Novine Connects to Main System
+# ============================================================================
+
+[features.narodne_novine.integration]
+# Scope integration - how it appears in chat system
+scope_identifier = "narodne_novine"    # Used in chat scope selection
+scope_display_name = "Narodne Novine"  # User-friendly name in UI
+scope_description = "Croatian Official Gazette and legal documents"
+
+# Query routing intelligence
+auto_detect_legal_queries = true       # Automatically route legal questions
+legal_query_confidence_threshold = 0.7 # Minimum confidence for auto-routing
+fallback_to_user_docs = true          # Search user docs if no legal matches
+
+# Cross-scope search capabilities
+enable_mixed_results = true           # Allow mixing legal + user document results
+legal_result_max_ratio = 0.6         # Max 60% of results from legal docs
+enable_scope_suggestion = true       # Suggest switching scopes based on query
+
+# Response enhancement
+add_legal_disclaimers = true         # Add "consult lawyer" disclaimers
+include_source_authority = true      # Always show which ministry/authority
+include_effective_dates = true       # Show when regulation is/was active
+enable_legal_change_alerts = true    # Alert about superseded regulations

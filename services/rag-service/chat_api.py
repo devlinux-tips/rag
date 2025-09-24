@@ -20,6 +20,7 @@ from src.chat.chat_service import create_chat_service
 from src.database.factory import create_database_provider
 from src.utils.config_loader import get_shared_config
 from src.utils.logging_factory import get_system_logger
+from src.query.query_classifier import create_query_classifier
 
 
 from src.utils.json_logging import write_debug_json
@@ -44,6 +45,8 @@ class SendMessageRequest(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    # New scope parameter for different data sources
+    scope: str = "user"  # "user", "narodne_novine", "tenant" (future)
 
 
 class ChatResponse(BaseModel):
@@ -61,6 +64,20 @@ class ConversationResponse(BaseModel):
     created_at: float
     updated_at: float
     message_count: int
+
+
+class QueryClassifyRequest(BaseModel):
+    query: str
+    language: str = "hr"
+
+
+class QueryClassifyResponse(BaseModel):
+    query_type: str
+    confidence: float
+    reasoning: str
+    detected_keywords: List[str]
+    should_include_user_docs: bool
+    should_include_narodne_novine: bool
 
 
 # Global chat service instance
@@ -170,6 +187,17 @@ async def serve_chat_interface():
 
         <div id="chat-area" style="display: none;">
             <h3 id="chat-title">New Chat</h3>
+
+            <div class="scope-selector" style="margin-bottom: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
+                <label for="scopeSelect">Data Source:</label>
+                <select id="scopeSelect" style="margin-left: 8px; padding: 4px;">
+                    <option value="user">Personal Documents</option>
+                    <option value="narodne_novine">Narodne Novine</option>
+                    <option value="tenant">Tenant Documents (Future)</option>
+                </select>
+                <span id="scopeStatus" style="margin-left: 8px; font-size: 12px; color: #666;">Using: Personal Documents</span>
+            </div>
+
             <div id="messages" class="chat-container"></div>
             <div class="input-area">
                 <input type="text" id="messageInput" placeholder="Type your message..."
@@ -184,6 +212,25 @@ async def serve_chat_interface():
             function setStatus(message) {
                 document.getElementById('status').textContent = message;
             }
+
+            function updateScopeStatus() {
+                const scopeSelect = document.getElementById('scopeSelect');
+                const scopeStatus = document.getElementById('scopeStatus');
+                const scopeTexts = {
+                    'user': 'Personal Documents',
+                    'narodne_novine': 'Narodne Novine',
+                    'tenant': 'Tenant Documents (Future)'
+                };
+                scopeStatus.textContent = 'Using: ' + scopeTexts[scopeSelect.value];
+            }
+
+            // Add event listener for scope changes
+            document.addEventListener('DOMContentLoaded', function() {
+                const scopeSelect = document.getElementById('scopeSelect');
+                if (scopeSelect) {
+                    scopeSelect.addEventListener('change', updateScopeStatus);
+                }
+            });
 
             async function startNewConversation() {
                 setStatus('Starting new conversation...');
@@ -228,12 +275,16 @@ async def serve_chat_interface():
                 setStatus('Generating response...');
 
                 try {
+                    const scopeSelect = document.getElementById('scopeSelect');
+                    const currentScope = scopeSelect ? scopeSelect.value : 'user';
+
                     const response = await fetch('/chat/message', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
                             conversation_id: currentConversationId,
-                            message: message
+                            message: message,
+                            scope: currentScope
                         })
                     });
 
@@ -412,6 +463,7 @@ async def send_message(request: SendMessageRequest):
             user_message=request.message,
             system_prompt=request.system_prompt,
             model=request.model,
+            scope=request.scope,
             **llm_kwargs
         )
 
@@ -556,6 +608,71 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
 
     except WebSocketDisconnect:
         logger.info("chat_api", "websocket_disconnect", f"WebSocket disconnected for {conversation_id}")
+
+
+@app.post("/query/classify")
+async def classify_query(request: QueryClassifyRequest):
+    """Classify query to determine data source routing."""
+    logger = get_system_logger()
+    logger.info("query_classify", "request", f"Classifying query: '{request.query[:50]}...'")
+
+    try:
+        # Create classifier for specified language
+        classifier = create_query_classifier(language=request.language)
+
+        # Classify the query
+        classification = classifier.classify_query(request.query)
+
+        response = QueryClassifyResponse(
+            query_type=classification.primary_type.value,
+            confidence=classification.confidence,
+            reasoning=classification.reasoning,
+            detected_keywords=classification.detected_keywords,
+            should_include_user_docs=classification.should_include_user_docs,
+            should_include_narodne_novine=classification.should_include_narodne_novine
+        )
+
+        logger.info("query_classify", "response",
+                   f"Classified as {response.query_type} (confidence: {response.confidence:.2f})")
+
+        return response
+
+    except Exception as e:
+        logger.error("query_classify", "error", f"Classification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/chat/scopes")
+async def get_available_scopes(tenant_slug: str = "development", user_id: str = "web_user", language: str = "hr"):
+    """Get available data source scopes for the user."""
+    try:
+        from src.chat.rag_integration import create_rag_chat_service
+
+        # Create temporary RAG service to check available scopes
+        rag_service = create_rag_chat_service(language=language, tenant_slug=tenant_slug, user_id=user_id)
+        await rag_service.initialize()
+
+        available_scopes = rag_service.get_available_scopes()
+        await rag_service.close()
+
+        return {
+            "available_scopes": available_scopes,
+            "scope_descriptions": {
+                "user": "Personal Documents",
+                "narodne_novine": "Narodne Novine (Croatian Official Gazette)",
+                "tenant": "Tenant-wide Documents"
+            }
+        }
+    except Exception as e:
+        logger = get_system_logger()
+        logger.error("chat_api", "get_scopes", f"Failed to get scopes: {e}")
+        # Return default scopes if RAG service fails
+        return {
+            "available_scopes": ["user"],
+            "scope_descriptions": {
+                "user": "Personal Documents"
+            }
+        }
 
 
 @app.get("/health")

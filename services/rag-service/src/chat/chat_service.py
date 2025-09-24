@@ -93,6 +93,7 @@ class ChatService:
                           rag_context: Optional[List[str]] = None,
                           model: Optional[str] = None,
                           enable_rag: bool = True,  # RAG enabled by default
+                          scope: Optional[str] = None,  # Scope for RAG data source selection
                           **llm_kwargs) -> ChatResponse:
         """
         Send message and get response with conversation persistence.
@@ -103,6 +104,7 @@ class ChatService:
             system_prompt: Optional system prompt for this exchange
             rag_context: Optional RAG context documents
             model: Optional specific model to use
+            scope: Optional scope for RAG data source ("user", "narodne_novine", etc.)
             **llm_kwargs: Additional LLM parameters (temperature, max_tokens, etc.)
         """
         log_component_start("chat_service", "send_message",
@@ -141,7 +143,8 @@ class ChatService:
                 # Execute RAG search
                 rag_context_obj = await rag_service.search_documents(
                     query_text=user_message,
-                    max_results=llm_kwargs.get("rag_top_k", 3)
+                    max_results=llm_kwargs.get("rag_top_k", 3),
+                    scope=scope
                 )
 
                 # If RAG found results and has an answer, use it directly (like CLI)
@@ -381,6 +384,7 @@ class ChatService:
                                    rag_context: Optional[List[str]] = None,
                                    model: Optional[str] = None,
                                    enable_rag: bool = True,  # RAG enabled by default
+                                   scope: Optional[str] = None,  # Scope for RAG data source selection
                                    **llm_kwargs) -> AsyncIterator[str]:
         """
         Send message and get streaming response with conversation persistence.
@@ -420,7 +424,8 @@ class ChatService:
                 # Execute RAG search
                 rag_context_obj = await rag_service.search_documents(
                     query_text=user_message,
-                    max_results=llm_kwargs.get("rag_top_k", 3)
+                    max_results=llm_kwargs.get("rag_top_k", 3),
+                    scope=scope
                 )
 
                 # If RAG found results and has an answer, use it directly (like CLI)

@@ -777,17 +777,17 @@ class MultiTenantRAGCLI:
                 # Single file processing
                 document_paths = [str(path)]
             elif path.is_dir():
-                # Directory processing - find all supported document files
-                supported_extensions = {'.pdf', '.docx', '.txt', '.md'}
+                # Directory processing - find all supported document files recursively
+                supported_extensions = {'.pdf', '.docx', '.txt', '.md', '.html'}
                 document_paths = []
                 for ext in supported_extensions:
-                    document_paths.extend([str(p) for p in path.glob(f"*{ext}")])
-                
+                    document_paths.extend([str(p) for p in path.rglob(f"*{ext}")])
+
                 if not document_paths:
                     return DocumentProcessingResult(
                         success=False,
                         processing_time=0.0,
-                        error_message=f"No supported documents found in directory: {docs_path}",
+                        error_message=f"No supported documents found in directory (searched recursively): {docs_path}",
                     )
             else:
                 return DocumentProcessingResult(

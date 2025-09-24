@@ -217,6 +217,13 @@ class ConfigValidator:
         "llm.primary_provider": str,
         "llm.fallback_order": list,
         "llm.auto_fallback": bool,
+        # Features configuration - minimal essential keys
+        "features.enable_features": bool,
+        "features.features_base_dir": str,
+        "features.narodne_novine.enabled": bool,
+        "features.narodne_novine.name": str,
+        "features.narodne_novine.collection_name": str,
+        "features.narodne_novine.documents_path": str,
     }
 
     # Language-specific config schema (hr.toml, en.toml) - ALL 214 keys from language configs

@@ -215,6 +215,7 @@ __marimo__/
 **/data/chromadb
 
 
+**/data/features/**
 
 
 # Claude Flow generated files

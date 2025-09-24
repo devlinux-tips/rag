@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from bs4 import BeautifulSoup
 from docx import Document
 from pypdf import PdfReader
 
@@ -405,6 +406,10 @@ class DocumentExtractor:
                 result = self._extract_docx(file_path)
             elif suffix == ".txt":
                 result = self._extract_txt(file_path)
+            elif suffix == ".html":
+                result = self._extract_html(file_path)
+            elif suffix == ".md":
+                result = self._extract_txt(file_path)  # Markdown can be processed as text
             else:
                 raise ValueError(f"Unsupported format: {suffix}")
 
@@ -465,6 +470,32 @@ class DocumentExtractor:
             text=processed_text,
             character_count=len(processed_text),
             extraction_method="TXT",
+            encoding_used=encoding_used,
+        )
+
+    def _extract_html(self, file_path: Path) -> ExtractionResult:
+        """Extract text from HTML using BeautifulSoup with encoding fallback."""
+        html_binary = self._file_system.open_binary(file_path)
+        html_content, encoding_used = extract_text_with_encoding_fallback(html_binary, self._config.text_encodings)
+
+        # Parse HTML and extract text content
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+
+        # Extract text and clean up
+        text = soup.get_text()
+        processed_text = post_process_extracted_text(text)
+
+        self._log_info(f"Successfully parsed HTML file with {encoding_used} encoding")
+        self._log_info(f"Extracted {len(processed_text)} characters from HTML")
+
+        return ExtractionResult(
+            text=processed_text,
+            character_count=len(processed_text),
+            extraction_method="HTML",
             encoding_used=encoding_used,
         )
 

@@ -11,6 +11,7 @@ from ..utils.config_loader import get_shared_config
 from ..utils.logging_factory import get_system_logger, log_component_start, log_component_end
 from ..utils.factories import create_complete_rag_system
 from ..models.multitenant_models import Tenant, User
+from ..query.query_classifier import create_query_classifier, QueryType
 
 
 @dataclass
@@ -21,6 +22,7 @@ class RAGChatContext:
     confidence: float
     chunks: List[Dict[str, Any]]
     query_id: str
+    scope: str = "user"  # Which scope was used for this search
 
 
 class RAGChatService:
@@ -37,8 +39,12 @@ class RAGChatService:
         self.logger = get_system_logger()
         self.config = get_shared_config()
 
+        # Multiple RAG systems for different scopes
+        self.rag_systems = {}  # Will hold different RAG systems per scope
+        self.current_scope = "user"  # Default scope
+
     async def initialize(self) -> None:
-        """Initialize the RAG system with proper configuration."""
+        """Initialize RAG systems for all supported scopes."""
         log_component_start("rag_chat_service", "initialize",
                            language=self.language, tenant=self.tenant_slug)
 
@@ -57,38 +63,93 @@ class RAGChatService:
                 full_name=f"User {self.user_id.title()}"
             )
 
-            # Initialize RAG system using the same factory that works in rag.py CLI
-            self.rag_system = create_complete_rag_system(
+            # Initialize RAG system for user documents (default)
+            self.rag_systems["user"] = create_complete_rag_system(
                 language=self.language,
                 tenant=tenant,
                 user=user
             )
-            await self.rag_system.initialize()
+            await self.rag_systems["user"].initialize()
+
+            # Initialize Narodne Novine RAG system if enabled and Croatian
+            if self.language == "hr":
+                try:
+                    self.rag_systems["narodne_novine"] = await self._create_narodne_novine_rag_system()
+                    self.logger.info("rag_chat_service", "initialize", "Narodne Novine RAG system initialized")
+                except Exception as e:
+                    self.logger.warning("rag_chat_service", "initialize", f"Narodne Novine not available: {e}")
+
+            # Set default system
+            self.rag_system = self.rag_systems["user"]
 
             self.logger.info("rag_chat_service", "initialize",
-                           f"RAG system initialized for language: {self.language}")
-            log_component_end("rag_chat_service", "initialize", "RAG system ready")
+                           f"RAG systems initialized for scopes: {list(self.rag_systems.keys())}")
+            log_component_end("rag_chat_service", "initialize", "RAG systems ready")
 
         except Exception as e:
             self.logger.error("rag_chat_service", "initialize", f"Failed to initialize RAG: {e}")
             raise
 
-    async def search_documents(self, query_text: str, max_results: int = 5) -> Optional[RAGChatContext]:
+    async def _create_narodne_novine_rag_system(self):
+        """Create RAG system for Narodne Novine documents."""
+        # This is a placeholder - we'll need to implement this
+        # For now, just use the same system but with different collection
+        # In reality, this would use feature collection "feature_narodne_novine_hr"
+        self.logger.info("rag_chat_service", "_create_narodne_novine_rag_system",
+                        "Narodne Novine RAG system creation - placeholder")
+        return None  # Will implement when we have NN documents
+
+    def set_scope(self, scope: str) -> bool:
+        """
+        Switch to different data source scope.
+
+        Args:
+            scope: "user", "narodne_novine", "tenant" (future)
+
+        Returns:
+            True if scope was successfully switched
+        """
+        if scope not in self.rag_systems:
+            self.logger.warning("rag_chat_service", "set_scope",
+                               f"Scope '{scope}' not available. Available: {list(self.rag_systems.keys())}")
+            return False
+
+        self.current_scope = scope
+        self.rag_system = self.rag_systems[scope]
+        self.logger.info("rag_chat_service", "set_scope", f"Switched to scope: {scope}")
+        return True
+
+    def get_available_scopes(self) -> List[str]:
+        """Get list of available scopes."""
+        return list(self.rag_systems.keys())
+
+    async def search_documents(self, query_text: str, max_results: int = 5, scope: Optional[str] = None) -> Optional[RAGChatContext]:
         """
         Search documents using RAG system and return chat-ready context.
 
         Args:
             query_text: User query to search for
             max_results: Maximum number of document chunks to retrieve
+            scope: Optional scope override for this search
 
         Returns:
             RAGChatContext with search results or None if no results
         """
+        # Use specified scope or current scope
+        search_scope = scope or self.current_scope
+
+        # Switch to requested scope if needed
+        if scope and scope != self.current_scope:
+            if not self.set_scope(scope):
+                self.logger.error("rag_chat_service", "search_documents",
+                                f"Failed to switch to scope: {scope}")
+                return None
+
         if not self.rag_system:
             raise RuntimeError("RAG system not initialized. Call initialize() first.")
 
         log_component_start("rag_chat_service", "search_documents",
-                           query_length=len(query_text), max_results=max_results)
+                           query_length=len(query_text), max_results=max_results, scope=search_scope)
 
         try:
             # Create RAG query
@@ -99,7 +160,8 @@ class RAGChatService:
                 max_results=max_results,
                 context_filters={
                     "tenant_slug": self.tenant_slug,
-                    "user_id": self.user_id
+                    "user_id": self.user_id,
+                    "scope": search_scope
                 }
             )
 
@@ -107,7 +169,8 @@ class RAGChatService:
             rag_response: RAGResponse = await self.rag_system.query(rag_query)
 
             if not rag_response.retrieved_chunks:
-                self.logger.info("rag_chat_service", "search_documents", "No documents found for query")
+                self.logger.info("rag_chat_service", "search_documents",
+                               f"No documents found for query in scope: {search_scope}")
                 log_component_end("rag_chat_service", "search_documents", "No results")
                 return None
 
@@ -125,13 +188,14 @@ class RAGChatService:
                     }
                     for chunk in rag_response.retrieved_chunks
                 ],
-                query_id=rag_response.metadata.get("query_id", "")
+                query_id=rag_response.metadata.get("query_id", ""),
+                scope=search_scope
             )
 
             self.logger.info("rag_chat_service", "search_documents",
-                           f"Found {len(context.chunks)} chunks with confidence {context.confidence:.3f}")
+                           f"Found {len(context.chunks)} chunks in scope '{search_scope}' with confidence {context.confidence:.3f}")
             log_component_end("rag_chat_service", "search_documents",
-                             f"Retrieved {len(context.chunks)} chunks")
+                             f"Retrieved {len(context.chunks)} chunks from {search_scope}")
 
             return context
 
