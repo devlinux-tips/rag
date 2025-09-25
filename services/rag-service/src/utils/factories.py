@@ -176,11 +176,11 @@ def create_complete_rag_system(
             "rag_factory", "create_complete_rag_system", f"Language config sections: {list(language_config.keys())}"
         )
 
-        # Build compatible chroma config from storage and vectordb sections
-        storage_config = main_config["storage"]
+        # Build compatible chroma config from vectordb section
+        storage_config = main_config["vectordb"]
         logger.trace("rag_factory", "create_complete_rag_system", f"storage_config keys: {list(storage_config.keys())}")
 
-        vectordb_config = main_config["vectordb"]["factory"]
+        vectordb_config = main_config["vectordb"]
         logger.trace(
             "rag_factory", "create_complete_rag_system", f"vectordb_config keys: {list(vectordb_config.keys())}"
         )
@@ -188,15 +188,16 @@ def create_complete_rag_system(
         shared_config = main_config["shared"]
 
         # Create a chroma section that matches ChromaConfig expectations
+        chromadb_section = storage_config.get("chromadb", {})
         main_config["chroma"] = {
             "db_path": "./data/vectordb",  # Default path, will be updated per tenant
             "collection_name": f"{language}_documents",  # Default, will be updated per tenant
             "distance_metric": storage_config["distance_metric"],
-            "chunk_size": vectordb_config["chunk_size"],
+            "chunk_size": main_config.get("chunking", {}).get("chunk_size", 512),
             "ef_construction": 200,  # HNSW default
             "m": 16,  # HNSW default
-            "persist": storage_config["persist"],
-            "allow_reset": storage_config["allow_reset"],
+            "persist": chromadb_section.get("persist", True),
+            "allow_reset": chromadb_section.get("allow_reset", True),
         }
 
         # Promote shared config values to root level for config models that expect them there
@@ -208,7 +209,7 @@ def create_complete_rag_system(
         processing_config = ProcessingConfig.from_validated_config(main_config)
         embedding_config = EmbeddingConfig.from_validated_config(main_config, language_config)
         tenant_slug = tenant.slug if tenant else "development"
-        chroma_config = ChromaConfig.from_validated_config(main_config, tenant_slug)
+        ChromaConfig.from_validated_config(main_config, tenant_slug)
         retrieval_config = RetrievalConfig.from_validated_config(main_config)
         ollama_config = OllamaConfig.from_validated_config(main_config)
 
@@ -225,9 +226,9 @@ def create_complete_rag_system(
         from ..retrieval.ranker import create_document_ranker
         from ..retrieval.reranker import create_multilingual_reranker
         from ..retrieval.retriever import create_document_retriever
+        from ..vectordb.database_factory import create_vector_database
         from ..vectordb.embeddings import create_embedding_generator
         from ..vectordb.search_providers import create_vector_search_provider
-        from ..vectordb.storage_factories import create_vector_database
 
         # Document extractor with dependency injection
         extractor_config_provider, file_system_provider, logger_provider = create_providers()
@@ -246,8 +247,9 @@ def create_complete_rag_system(
         from ..utils.config_protocol import get_config_provider
 
         chunker_config_provider = get_config_provider()
+        # Use config provider for language-aware chunking configuration (NO config_dict)
         document_chunker = create_document_chunker(
-            config_dict=main_config, config_provider=chunker_config_provider, language=language
+            config_dict=None, config_provider=chunker_config_provider, language=language
         )
 
         # Embedding model
@@ -258,15 +260,18 @@ def create_complete_rag_system(
             scope = DocumentScope.USER
             collection_name = tenant.get_collection_name(scope, language)
 
-        vector_database = create_vector_database(
-            db_path=chroma_config.db_path, distance_metric=chroma_config.distance_metric
-        )
-        # Try to get existing collection, create if it doesn't exist
-        try:
-            vector_storage = vector_database.get_collection(name=collection_name or f"{language}_documents")
-        except Exception:
-            # Collection doesn't exist, create it
-            vector_storage = vector_database.create_collection(name=collection_name or f"{language}_documents")
+        # Use unified vector database factory (supports both Weaviate and ChromaDB)
+        vector_database = create_vector_database(config=main_config, language=language)
+
+        # Create VectorStorage with the database and initialize it with collection name
+        from ..vectordb.storage import VectorStorage
+
+        vector_storage = VectorStorage(database=vector_database)
+
+        # Initialize the storage with the proper collection name
+        # We'll do this synchronously here since VectorStorage.initialize is async
+        # Store the collection_name for later async initialization in RAG system
+        vector_storage._pending_collection_name = collection_name or f"{language}_documents"
 
         # Create embedding provider for search engine with same model as document processing
         from ..vectordb.search_providers import create_embedding_provider

@@ -41,6 +41,7 @@ class ChunkingStrategy(Enum):
     SLIDING_WINDOW = "sliding_window"
     SENTENCE = "sentence"
     PARAGRAPH = "paragraph"
+    SMART_LEGAL = "smart_legal"
 
 
 class RankingMethod(Enum):
@@ -160,7 +161,7 @@ class EmbeddingConfig:
             model_name=embed_config["model_name"],
             device=embed_config["device"],
             max_seq_length=embed_config["max_seq_length"],
-            batch_size=embed_config["batch_size"],
+            batch_size=main_config.get("batch_processing", {}).get("embedding_batch_size", embed_config["batch_size"]),
             normalize_embeddings=embed_config["normalize_embeddings"],
             use_safetensors=embed_config["use_safetensors"],
             trust_remote_code=embed_config["trust_remote_code"],
@@ -466,14 +467,14 @@ class StorageConfig:
     @classmethod
     def from_validated_config(cls, main_config: dict) -> "StorageConfig":
         """Create config from validated main configuration."""
-        storage_config = main_config["storage"]  # Direct access
+        storage_config = main_config["vectordb"]  # Direct access
 
         return cls(
-            db_path_template=storage_config["db_path_template"],
+            db_path_template=storage_config["chromadb"]["db_path_template"],
             collection_name_template=storage_config["collection_name_template"],
             distance_metric=storage_config["distance_metric"],
-            persist=storage_config["persist"],
-            allow_reset=storage_config["allow_reset"],
+            persist=storage_config["chromadb"]["persist"],
+            allow_reset=storage_config["chromadb"]["allow_reset"],
         )
 
 
@@ -645,11 +646,11 @@ class ChromaConfig:
     @classmethod
     def from_validated_config(cls, main_config: dict, tenant_slug: str = "development") -> "ChromaConfig":
         """Create config from validated configuration."""
-        storage_config = main_config["storage"]  # Direct access - guaranteed by validation
+        storage_config = main_config["vectordb"]  # Direct access - guaranteed by validation
         chroma_config = main_config["chroma"]  # Direct access - created by factories.py
 
         # Generate tenant-specific db_path from template
-        db_path_template = storage_config["db_path_template"]
+        db_path_template = storage_config["chromadb"]["db_path_template"]
         data_base_dir = main_config["paths"]["data_base_dir"]
         db_path = db_path_template.format(data_base_dir=data_base_dir, tenant_slug=tenant_slug)
 
@@ -660,8 +661,8 @@ class ChromaConfig:
             chunk_size=chroma_config["chunk_size"],
             ef_construction=chroma_config["ef_construction"],
             m=chroma_config["m"],
-            persist=storage_config["persist"],
-            allow_reset=storage_config["allow_reset"],
+            persist=storage_config["chromadb"]["persist"],
+            allow_reset=storage_config["chromadb"]["allow_reset"],
         )
 
 

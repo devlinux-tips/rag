@@ -654,8 +654,20 @@ class RAGSystem:
             "rag_system", "post_init", f"Embedding model initialized: {self.embedding_config.model_name}"
         )
 
-        self._vector_storage.create_collection()
-        system_logger.debug("rag_system", "post_init", "Vector storage collection created")
+        # Initialize vector storage with the pending collection name
+        if hasattr(self._vector_storage, "_pending_collection_name"):
+            await self._vector_storage.initialize(
+                collection_name=self._vector_storage._pending_collection_name, reset_if_exists=False
+            )
+            system_logger.debug(
+                "rag_system",
+                "post_init",
+                f"Vector storage collection initialized: {self._vector_storage._pending_collection_name}",
+            )
+        else:
+            # Fallback for legacy compatibility
+            await self._vector_storage.create_collection()
+            system_logger.debug("rag_system", "post_init", "Vector storage collection created")
 
         self._initialized = True
         log_component_end("rag_system", "post_init", "All components initialized successfully")
@@ -789,11 +801,16 @@ class RAGSystem:
                         metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
                         chunk_id = f"{doc_path.stem}_{chunk_idx}_{hash(chunk.content) % 1000000}"
 
+                        # Convert embedding to the right format for Weaviate
+                        if hasattr(embedding, "tolist"):
+                            embedding_data = embedding.tolist()
+                        elif isinstance(embedding, (list, tuple)):
+                            embedding_data = list(embedding)
+                        else:
+                            embedding_data = embedding
+
                         self._vector_storage.add(
-                            ids=[chunk_id],
-                            documents=[chunk.content],
-                            metadatas=[metadata],
-                            embeddings=[embedding.tolist() if hasattr(embedding, "tolist") else embedding],
+                            ids=[chunk_id], documents=[chunk.content], metadatas=[metadata], embeddings=[embedding_data]
                         )
                         system_logger.trace("document_processing", "vector_storage", f"Stored chunk {chunk_id}")
 

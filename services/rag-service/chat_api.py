@@ -689,14 +689,14 @@ if __name__ == "__main__":
     import uvicorn
 
     print("🚀 Starting RAG Chat API Server...")
-    print("📝 Web Interface: http://localhost:8080")
-    print("🔧 API Docs: http://localhost:8080/docs")
+    print("📝 Web Interface: http://localhost:8090")
+    print("🔧 API Docs: http://localhost:8090/docs")
     print("🛑 Press Ctrl+C to stop")
 
     uvicorn.run(
         "chat_api:app",
         host="0.0.0.0",
-        port=8080,
+        port=8090,
         reload=True,
         log_level="info"
     )

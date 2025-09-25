@@ -396,7 +396,14 @@ def get_response_parsing_config() -> dict[str, Any]:
 
 def get_preprocessing_config() -> dict[str, Any]:
     """Get preprocessing configuration."""
-    return _config_loader.load("preprocessing")
+    # Load from main config since we don't have a separate preprocessing.toml
+    main_config = _config_loader.load("config")
+    return {
+        "chunking": main_config["chunking"],
+        "cleaning": main_config["cleaning"],
+        "extraction": main_config["extraction"],
+        "processing": main_config["processing"],
+    }
 
 
 def get_extraction_config() -> dict[str, Any]:
@@ -488,7 +495,7 @@ def get_embeddings_config() -> dict[str, Any]:
 def get_storage_config() -> dict[str, Any]:
     """Get storage configuration."""
     vectordb_config = get_vectordb_config()
-    return cast(dict[str, Any], vectordb_config["storage"])
+    return cast(dict[str, Any], vectordb_config)
 
 
 def get_search_config() -> dict[str, Any]:

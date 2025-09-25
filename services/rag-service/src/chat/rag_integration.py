@@ -92,12 +92,39 @@ class RAGChatService:
 
     async def _create_narodne_novine_rag_system(self):
         """Create RAG system for Narodne Novine documents."""
-        # This is a placeholder - we'll need to implement this
-        # For now, just use the same system but with different collection
-        # In reality, this would use feature collection "feature_narodne_novine_hr"
+        from ..utils.factories import create_complete_rag_system
+        from ..models.multitenant_models import Tenant, User
+
         self.logger.info("rag_chat_service", "_create_narodne_novine_rag_system",
-                        "Narodne Novine RAG system creation - placeholder")
-        return None  # Will implement when we have NN documents
+                        "Creating Narodne Novine RAG system with features tenant")
+
+        # Create special tenant and user for Narodne Novine feature collection
+        features_tenant = Tenant(
+            id="tenant:features",
+            name="Features Tenant",
+            slug="features"
+        )
+        feature_user = User(
+            id="user:feature_user",
+            tenant_id=features_tenant.id,
+            email="feature_user@features.example.com",
+            username="feature_user",
+            full_name="Feature User"
+        )
+
+        # Create RAG system for features tenant with feature_user
+        # This will use the existing collection: Features_user_hr (4,962 documents)
+        narodne_novine_rag = create_complete_rag_system(
+            language=self.language,
+            tenant=features_tenant,
+            user=feature_user
+        )
+        await narodne_novine_rag.initialize()
+
+        self.logger.info("rag_chat_service", "_create_narodne_novine_rag_system",
+                        "Narodne Novine RAG system created successfully")
+
+        return narodne_novine_rag
 
     def set_scope(self, scope: str) -> bool:
         """

@@ -19,9 +19,9 @@ embedding_timeout = 180.0
 retrieval_timeout = 60.0
 generation_timeout = 120.0
 
-# Common model settings
+# Common model settings - PERFORMANCE OPTIMIZED
 default_device = "cpu" # "cpu" "cuda"
-default_batch_size = 32
+default_batch_size = 200  # Increased from 32 for faster processing
 
 # Context and chunk size standards
 default_max_context_length = 2500
@@ -90,82 +90,194 @@ format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 log_to_file = true
 
 # ============================================================================
+# VECTOR DATABASE CONFIGURATION
+# ============================================================================
+[vectordb]
+# Provider selection: "chromadb" or "weaviate" - NO FALLBACKS
+provider = "weaviate"
+
+# Shared settings across all providers
+collection_name_template = "{tenant}_{user}_{language}_documents"
+distance_metric = "cosine"
+batch_size = 500
+timeout = 60.0
+max_retries = 3
+retry_delay = 1.0
+
+# ChromaDB-specific configuration (kept for compatibility, not tested)
+[vectordb.chromadb]
+db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
+persist = true
+allow_reset = true
+anonymized_telemetry = false
+heartbeat_interval = 30
+max_batch_size = 1000
+
+# Weaviate-specific configuration (primary focus)
+[vectordb.weaviate]
+host = "localhost"
+port = 8080
+grpc_port = 50051
+scheme = "http"
+vectorizer = "none"  # Use custom embeddings - NO FALLBACKS
+timeout = 60.0
+startup_period = 10
+
+# Additional headers for authentication (if needed)
+[vectordb.weaviate.additional_headers]
+# Add headers as needed, no defaults
+
+# HNSW index configuration for optimal performance with 244GB RAM
+[vectordb.weaviate.index]
+type = "hnsw"
+ef_construction = 200
+ef = 100
+max_connections = 32
+ef_dynamic = 100
+cleanup_interval_seconds = 300
+vector_cache_max_objects = 2000000
+
+# Compression configuration for memory efficiency
+[vectordb.weaviate.compression]
+enabled = true
+type = "sq"  # "sq" (scalar quantization) or "pq" (product quantization)
+rescore_limit = 1000
+training_limit = 50000
+cache = true
+
+# Backup and recovery settings
+[vectordb.weaviate.backup]
+enabled = false
+backend = "filesystem"
+backup_id = ""
+include_meta = true
+
+# ============================================================================
 # EMBEDDING CONFIGURATION
 # ============================================================================
 [embeddings]
-# Primary embedding model settings
+# Primary embedding model settings - NO FALLBACKS
 model_name = "BAAI/bge-m3"  # Primary multilingual model
 device = "cpu"
+torch_dtype = "float32"
 max_seq_length = 512
 batch_size = 32
 normalize_embeddings = true
+use_safetensors = true
+trust_remote_code = false
+show_progress_bar = false
 
-# Security and loading preferences
-use_safetensors = true  # Use safetensors format for security (PyTorch 2.6+ vulnerability fix)
-trust_remote_code = false  # Security setting for model loading
-torch_dtype = "auto"  # or "float32", "float16", "bfloat16"
+# Croatian-specific model override (if needed)
+croatian_model_name = "classla/bcms-bertic"
+croatian_model_dimensions = 768
 
-# Recommended models for multilingual support
-[embeddings.recommended_models]
-bge_m3 = "BAAI/bge-m3"  # Primary multilingual model
-labse = "sentence-transformers/LaBSE"  # Secondary: Language-Agnostic BERT
-multilingual_minilm = "paraphrase-multilingual-MiniLM-L12-v2"  # Fast option
-multilingual_mpnet = "paraphrase-multilingual-mpnet-base-v2"  # Accuracy option
-distiluse_multilingual = "distiluse-base-multilingual-cased"  # Lightweight option
+# English-specific model override (if needed)
+english_model_name = "BAAI/bge-large-en-v1.5"
+english_model_dimensions = 1024
 
-# Language-specific models (for reference by language configs)
-all_minilm_l6 = "sentence-transformers/all-MiniLM-L6-v2"  # English-optimized fast model
-all_mpnet_base = "sentence-transformers/all-mpnet-base-v2"  # English-optimized accuracy model
-bge_small_en = "BAAI/bge-small-en-v1.5"  # English-specific BGE small
-bge_base_en = "BAAI/bge-base-en-v1.5"  # English-specific BGE base
+# Fallback multilingual model - EXPLICIT configuration
+fallback_model_name = "BAAI/bge-m3"
+fallback_model_dimensions = 1024
 
-# Similarity calculation settings
-[embeddings.similarity]
-default_metric = "cosine"
-top_k_default = 5
+# Model loading configuration
+cache_folder = "./models/cache"
+local_files_only = false
+revision = "main"
 
 # ============================================================================
-# VECTOR DATABASE CONFIGURATION
+# ENHANCED CHUNKING CONFIGURATION
 # ============================================================================
-[storage]
-# Multi-tenant ChromaDB storage settings
-db_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
+[chunking]
+# Strategy selection - NO FALLBACKS, explicit choice required
+strategy = "smart_legal"  # "sliding_window", "sentence", "paragraph", "smart_legal"
 
-# Collection naming templates
-collection_name_template = "{tenant_slug}_{scope}_{language}"
-# Examples: "development_user_hr", "enterprise_tenant_en", "acme_user_multilingual"
+# Base chunking parameters - optimized for memory efficiency
+chunk_size = 1024  # 2x larger than default for fewer chunks
+chunk_overlap = 128  # 12.5% overlap for better context
+min_chunk_size = 400  # No tiny meaningless chunks
+max_chunk_size = 1536  # Hard upper limit
 
-# Feature collection templates (for non-tenant data sources)
-feature_collection_template = "feature_{feature_name}_{language}"
-# Examples: "feature_narodne_novine_hr", "feature_legal_en"
+# Boundary respect settings
+preserve_sentence_boundaries = true
+respect_paragraph_breaks = true
+preserve_document_structure = true
+enable_smart_splitting = true
 
-distance_metric = "cosine"  # "cosine", "l2", "ip" (inner product)
-persist = true
-allow_reset = false
+# Paragraph separators for chunking
+paragraph_separators = ["\n\n", "\r\n\r\n"]
+min_sentence_length = 20
 
-# Document metadata defaults
-[storage.metadata]
-content_types = ["pdf", "docx", "txt"]
+# Advanced chunking options
+enable_semantic_chunking = true
+semantic_threshold = 0.7
+max_chunks_per_document = 15  # Hard limit for memory management
 
-[search]
-# Search configuration
-default_method = "semantic"  # "semantic", "keyword", "hybrid"
-max_context_length = 2000  # Specific to search display
-rerank = true
-include_metadata = true
-include_distances = true
+# Global chunking settings
+sentence_search_range = 100
 
-# Hybrid search weights
-[search.weights]
-semantic_weight = 0.7
-keyword_weight = 0.3
+# Smart legal chunking specific settings
+[chunking.smart_legal]
+enabled = true
+preserve_section_boundaries = true
+preserve_paragraph_structure = true
+merge_short_paragraphs = true
+section_min_length = 200
+paragraph_min_length = 100
 
-[vectordb.factory]
-# Factory settings for vectordb components
-auto_create_collection = true
-default_embedding_function = "sentence_transformers"
-chunk_size = 1000
-chunk_overlap = 100
+# Legal document structure indicators (Croatian)
+legal_section_indicators = [
+    "članak", "stavak", "točka", "podtočka", "odjeljak",
+    "poglavlje", "dio", "odlomak", "alineja", "uvjet"
+]
+
+# Sliding window chunking settings (backup strategy)
+[chunking.sliding_window]
+sentence_search_range = 100
+overlap_strategy = "sentence_boundary"
+
+# Sentence-based chunking settings
+[chunking.sentence]
+min_sentences_per_chunk = 3
+max_sentences_per_chunk = 10
+sentence_overlap_count = 1
+
+# Paragraph-based chunking settings
+[chunking.paragraph]
+min_paragraphs_per_chunk = 1
+max_paragraphs_per_chunk = 3
+paragraph_overlap_count = 0
+
+# ============================================================================
+# BATCH PROCESSING CONFIGURATION
+# ============================================================================
+[batch_processing]
+# Core batch processing settings - PERFORMANCE OPTIMIZED FOR 115 DOCUMENTS
+enabled = true
+document_batch_size = 115  # Process ALL documents in one batch
+embedding_batch_size = 1000  # Much larger embedding batches
+vector_insert_batch_size = 2000  # Larger vector insert batches
+max_parallel_workers = 8  # Utilize available CPU cores
+
+# Memory management
+memory_limit_gb = 200  # 80% of 244GB available RAM
+memory_check_interval = 10  # Check memory every N batches
+force_gc_interval = 50  # Force garbage collection every N batches
+
+# Progress and checkpointing
+checkpoint_interval = 100  # Save progress every N batches
+progress_report_interval = 10  # Report progress every N batches
+enable_progress_bar = true
+
+# Error handling and resilience
+max_retry_attempts = 3
+retry_delay_seconds = 2.0
+skip_failed_documents = false  # Fail fast - don't skip errors
+continue_on_batch_failure = false  # Fail entire process on batch failure
+
+# Performance optimization
+prefetch_batches = 2  # Pre-load next batches for efficiency
+async_processing = true
+thread_pool_size = 8
 
 # ============================================================================
 # DOCUMENT PROCESSING CONFIGURATION
@@ -176,6 +288,7 @@ sentence_chunk_overlap = 2
 preserve_paragraphs = true
 enable_smart_chunking = true
 respect_document_structure = true
+max_concurrent_documents = 10
 
 [extraction]
 # Document extraction settings
@@ -184,63 +297,31 @@ preserve_formatting = true
 extract_metadata = true
 handle_images = false
 ocr_enabled = false
-max_file_size_mb = 50  # Maximum file size for processing
-enable_logging = true  # Enable extraction logging
+max_file_size_mb = 50
+enable_logging = true
 encoding_detection = true
 text_encodings = ["utf-8", "cp1252", "iso-8859-1", "iso-8859-2"]
-
-[chunking]
-# Text chunking configuration
-strategy = "sliding_window"  # "sliding_window", "sentence", "paragraph"
-max_chunk_size = 1024  # Specific override for chunking (larger than default)
-preserve_sentence_boundaries = true
-respect_paragraph_breaks = true
-enable_smart_splitting = true
-sentence_search_range = 100
-
-# Common paragraph and sentence settings (language-specific settings in language files)
-paragraph_separators = ["\n\n", "\r\n\r\n"]  # Universal paragraph separators
-min_sentence_length = 10  # Minimum sentence length for all languages
 
 [cleaning]
 # Text cleaning settings
 remove_extra_whitespace = true
+multiple_whitespace = true
+multiple_linebreaks = true
+min_meaningful_words = 5
+min_word_char_ratio = 0.3
 normalize_unicode = true
 preserve_formatting = false
-remove_headers_footers = true
-handle_tables = true
-extract_links = false
-preserve_line_breaks = false
-fix_encoding_issues = true
-remove_page_numbers = true
-clean_ocr_artifacts = true
-normalize_punctuation = true
-
-# Regex patterns for text cleaning
-multiple_whitespace = "\\s+"
-multiple_linebreaks = "\\n{3,}"
-min_meaningful_words = 3
-min_word_char_ratio = 0.7
-
-# Text quality settings
-min_character_ratio = 0.7
-
-[formatting_patterns]
-# Croatian-specific formatting patterns (references croatian.toml)
-date_formats = ["dd.mm.yyyy", "d.m.yyyy", "dd/mm/yyyy"]
-number_formats = ["1.234,56", "1 234,56"]
-currency_symbols = ["kn", "HRK", "€", "EUR"]
-address_patterns = ["\\d{5}\\s+[A-ZČĆŽŠĐ][a-zčćžšđ]+"]
-phone_patterns = ["\\+385\\s*\\d{1,2}\\s*\\d{3}\\s*\\d{3,4}"]
-email_patterns = ["[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"]
+remove_urls = false
+remove_email_addresses = false
+preserve_sentence_structure = true
 
 # ============================================================================
-# RETRIEVAL CONFIGURATION
+# QUERY PROCESSING CONFIGURATION
 # ============================================================================
 [query_processing]
-# Query processing settings
-language = "hr"  # Croatian language code
-expand_synonyms = true
+# Query enhancement settings
+language = "hr"
+expand_synonyms = false
 normalize_case = true
 remove_stopwords = true
 min_query_length = 3
@@ -250,399 +331,185 @@ enable_morphological_analysis = true
 use_query_classification = true
 enable_spell_check = false
 
+# ============================================================================
+# RETRIEVAL CONFIGURATION
+# ============================================================================
 [retrieval]
-# Retrieval configuration - OPTIMIZED FOR SPEED
-default_k = 3                 # Reduced from 5 - fewer chunks = faster generation
-max_k = 8                     # Reduced from 10
+# Document retrieval settings
+default_k = 5
+max_k = 20
 adaptive_retrieval = true
 enable_reranking = true
-diversity_lambda = 0.3
+diversity_lambda = 0.7
 use_hybrid_search = true
-enable_query_expansion = true
+enable_query_expansion = false
 
+# ============================================================================
+# RANKING AND RERANKING CONFIGURATION
+# ============================================================================
 [ranking]
-# Document ranking and scoring
+# Ranking method configuration
 method = "language_enhanced"
 enable_diversity = true
 diversity_threshold = 0.8
-boost_recent = true
-boost_authoritative = true
-content_length_factor = true
-keyword_density_factor = true
-language_specific_boost = true  # Enable language-specific ranking features
-boost_exact_match = 1.5
-boost_title_match = 1.3
-boost_metadata_match = 1.2
-decay_factor = 0.95
-
-[ranking.weights]
-# Ranking component weights
-content_weight = 0.6
-title_weight = 0.2
-metadata_weight = 0.1
-freshness_weight = 0.1
+boost_recent = false
+boost_authoritative = false
+content_length_factor = false
+keyword_density_factor = false
+language_specific_boost = true
 
 [reranking]
-# Cross-encoder reranking settings
+# Reranking settings
 enabled = true
-model_name = "BAAI/bge-reranker-v2-m3"  # BGE-reranker-v2-m3: Best multilingual reranker for Croatian
+model_name = "ms-marco-MultiBERT-L-12"
 max_length = 512
-batch_size = 4  # Specific to reranking (smaller than default)
-top_k = 20  # Specific to reranking (larger than default)
-use_fp16 = true  # Speed up computation with slight performance degradation
-normalize = true  # Map scores to 0-1 range using sigmoid
+batch_size = 4
+top_k = 10
+use_fp16 = false
+normalize = true
 
+# ============================================================================
+# HYBRID RETRIEVAL CONFIGURATION
+# ============================================================================
 [hybrid_retrieval]
-# Hybrid retrieval combining dense and sparse
+# Hybrid search weights
 dense_weight = 0.7
 sparse_weight = 0.3
-fusion_method = "rrf"  # "linear", "rrf" (Reciprocal Rank Fusion)
+fusion_method = "reciprocal_rank_fusion"
 bm25_k1 = 1.2
 bm25_b = 0.75
 
 # ============================================================================
-# GENERATION CONFIGURATION
+# SEARCH CONFIGURATION
+# ============================================================================
+[search]
+# Search method settings
+default_method = "hybrid"
+max_context_length = 2500
+rerank = true
+include_metadata = true
+include_distances = true
+
+[search.weights]
+semantic_weight = 0.7
+keyword_weight = 0.3
+
+# ============================================================================
+# LLM CONFIGURATION
 # ============================================================================
 [ollama]
-# Local Ollama LLM configuration - Using Qwen2.5 7B model
+# Ollama LLM settings
 base_url = "http://localhost:11434"
-model = "qwen2.5:7b-instruct"  # Local Qwen2.5 7B model
-timeout = 120.0                # Connection and response timeout in seconds
-temperature = 0.7
-max_tokens = 2000              # Increased back to allow complete responses
+model = "qwen2.5:7b-instruct"
+timeout = 30.0
+temperature = 0.1
+max_tokens = 2048
 top_p = 0.9
-top_k = 40                     # Specific to generation (different from search top_k)
+top_k = 40
 stream = true
-keep_alive = "5m"              # Keep model loaded for 5 minutes
-num_predict = 2000             # Cap token generation
+keep_alive = "5m"
+num_predict = 2048
 repeat_penalty = 1.1
 seed = -1
-api_key = ""                   # No API key needed for local Ollama
-response_format = "ollama"     # Response format: "ollama" or "openai"
+api_key = "ollama"
+response_format = "ollama"
 
-# API endpoints configuration for different LLM providers
 [ollama.endpoints]
-# Local Ollama endpoints (default configuration)
-health_check = "/api/version"               # Endpoint to check service availability
-chat_completions = "/api/generate"          # Endpoint for chat/text generation
-models_list = "/api/tags"                   # Endpoint to list available models
-streaming_chat = "/api/generate"            # Endpoint for streaming responses
-
-# OpenRouter configuration (cloud LLM API)
-[openrouter]
-base_url = "https://openrouter.ai/api/v1"
-api_key = "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"
-model = "qwen/qwen3-30b-a3b-instruct-2507"  # Latest QWen3 model for better multilingual support
-timeout = 120.0
-temperature = 0.7
-max_tokens = 2000
-stream = true
-
-# Multi-provider LLM configuration
-[llm]
-primary_provider = "openrouter"  # Primary: "ollama" for local, "openrouter" for cloud
-fallback_order = []             # No fallbacks - swappable by configuration only
-auto_fallback = false           # Disabled - use explicit provider selection
-
-[prompts]
-# Prompt configuration
-system_prompt_template = "rag_system"
-user_prompt_template = "rag_user"
-context_template = "rag_context"
-use_few_shot_examples = true
-max_context_length = 4000
-include_source_references = true
-
-[response_parsing]
-# Response parsing and validation
-validate_responses = true
-extract_confidence_scores = true
-parse_citations = true
-handle_incomplete_responses = true
-max_response_length = 3000
-min_response_length = 50
-filter_hallucinations = true
-require_source_grounding = true
-confidence_threshold = 0.7
-response_format = "markdown"
-include_metadata = true
+health_check = "/api/tags"
+chat_completions = "/api/chat"
+models_list = "/api/tags"
+streaming_chat = "/api/chat"
 
 # ============================================================================
-# DATABASE CONFIGURATION
+# DATABASE PROVIDER CONFIGURATION
 # ============================================================================
 [database]
-# Database provider: "postgresql" for PostgreSQL, "surrealdb" for local/on-premise, "supabase" for cloud
 provider = "postgresql"
 
-# PostgreSQL configuration (local/cloud database)
 [database.postgresql]
 host = "localhost"
 port = 5432
 database = "ragdb"
 user = "raguser"
-password = 'x|B&h@p4F@o|k6t;~X]1A((Z.,RG'
-min_connections = 1
+password = "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+connection_timeout = 30
 max_connections = 10
+pool_min_size = 1
+pool_max_size = 10
 
-# SurrealDB configuration (local/on-premise database)
 [database.surrealdb]
-url = "ws://localhost:8001/rpc"
-namespace = "rag"
-database = "documents"
-# Authentication credentials for write permissions (temporarily disabled for testing)
+url = "ws://localhost:8000/rpc"
+namespace = "rag_system"
+database = "main"
 username = "root"
 password = "root"
 connection_timeout = 30
 max_connections = 10
 
-# Supabase configuration (cloud database)
 [database.supabase]
-url = "https://vdmizraansyjcblabuqp.supabase.co"
-service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkbWl6cmFhbnN5amNibGFidXFwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODMxODE1MywiZXhwIjoyMDczODk0MTUzfQ._-iCGbox6iJJtqUC5R-0Z8-CfRFdQKCtBbzfi1ww9tY"
-anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkbWl6cmFhbnN5amNibGFidXFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMTgxNTMsImV4cCI6MjA3Mzg5NDE1M30.be4hDvtK8o21yeXBnovX5at1yqiBgDuIlIoCVc6cWFA"
+url = "https://your-project.supabase.co"
+service_role_key = "your-service-role-key"
+anon_key = "your-anon-key"
 enable_rls = true
 connection_timeout = 30
-max_connections = 20
+max_connections = 10
 
-# Supabase authentication settings
 [database.supabase.auth]
-enable_signup = false
-enable_email_confirmations = true
+enable_signup = true
+enable_email_confirmations = false
 site_url = "http://localhost:3000"
 jwt_expiry = 3600
 
-# Supabase Row Level Security settings
 [database.supabase.rls]
 enforce_mfa_for_sensitive_operations = false
 tenant_isolation_strict = true
 enable_audit_logging = true
 
 # ============================================================================
-# SYSTEM CONFIGURATION
+# OPENROUTER CONFIGURATION
 # ============================================================================
-[system]
-# System-wide settings
-log_level = "INFO"
-enable_caching = true
-max_concurrent_requests = 5
-enable_metrics = true
-
-[performance]
-# Performance optimization settings
-use_async_processing = true
-parallel_document_processing = true
-max_workers = 4
-batch_processing_size = 10
-memory_limit_mb = 2048
-enable_gpu_acceleration = false
+[openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key = "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"
+model = "qwen/qwen3-30b-a3b-instruct-2507"
+timeout = 30.0
+temperature = 0.1
+max_tokens = 2048
+stream = false
 
 # ============================================================================
-# PIPELINE ORCHESTRATION
+# MULTI-PROVIDER LLM CONFIGURATION
 # ============================================================================
-[pipeline]
-# Main pipeline settings
-enable_preprocessing = true
-enable_embeddings = true
-enable_storage = true
-enable_retrieval = true
-enable_generation = true
-enable_monitoring = true
-
-# Note: Timeouts are now in [shared] section - no need for separate pipeline.timeouts
-
-[pipeline.retries]
-# Retry configuration
-max_retries = 3
-retry_delay = 1.0
-exponential_backoff = true
-retry_on_timeout = true
-retry_on_connection_error = true
+[llm]
+primary_provider = "openrouter"
+fallback_order = ["ollama"]
+auto_fallback = true
 
 # ============================================================================
-# MULTI-TENANT CONFIGURATION
+# RESPONSE PARSING CONFIGURATION
 # ============================================================================
-[multi_tenant]
-# Multi-tenancy settings
-enable_multi_tenancy = true
-default_tenant_slug = "development"
-auto_create_tenant_folders = true
-tenant_isolation_mode = "strict"  # "strict" or "shared"
-
-# Tenant limits and quotas
-max_tenants = 100
-max_users_per_tenant = 1000
-max_documents_per_tenant = 10000
-max_documents_per_user = 1000
-
-# Folder management
-create_missing_folders = true
-validate_tenant_paths = true
-cleanup_empty_folders = false
-
-# Collection management
-auto_create_collections = true
-collection_per_language = true
-collection_per_scope = true  # Separate user/tenant collections
+[response_parsing]
+validate_responses = true
+extract_confidence_scores = true
+parse_citations = true
+handle_incomplete_responses = false
+max_response_length = 4096
+min_response_length = 10
+filter_hallucinations = true
+require_source_grounding = true
+confidence_threshold = 0.7
+response_format = "ollama"
+include_metadata = true
 
 # ============================================================================
-# FEATURES CONFIGURATION - Advanced Multi-Source Data Management
+# FEATURES CONFIGURATION
 # ============================================================================
-
 [features]
-# Global feature system settings
 enable_features = true
 features_base_dir = "./data/features"
 
-# Feature collection strategy - how features integrate with tenant data
-collection_strategy = "isolated"  # "isolated" | "integrated" | "hybrid"
-# - isolated: Features use separate collections (recommended for legal/regulatory data)
-# - integrated: Features share tenant collections (for internal company data)
-# - hybrid: Mix of both based on feature configuration
-
-# Feature data lifecycle management
-enable_feature_versioning = true
-enable_feature_caching = true
-feature_cache_ttl = 3600  # seconds
-
-# ============================================================================
-# NARODNE NOVINE FEATURE - Croatian Official Gazette
-# ============================================================================
-
 [features.narodne_novine]
-# Basic feature identification
 enabled = true
-name = "narodne_novine"
-display_name = "Narodne Novine"
-description = "Croatian Official Gazette - legal and regulatory documents"
-feature_type = "legal_repository"
-data_classification = "public_official"
-
-# Language and scope configuration
-supported_languages = ["hr"]
-primary_language = "hr"
+name = "Narodne Novine"
 collection_name = "feature_narodne_novine_hr"
-
-# Data source paths (now matching your actual structure)
 documents_path = "./data/features/documents/narodne_novine/hr"
-processed_path = "./data/features/processed/narodne_novine/hr"
-vectordb_path = "./data/features/vectordb/narodne_novine"
-
-# Content lifecycle settings
-enable_auto_update = false  # Manual processing for official documents
-retention_policy = "permanent"  # Legal documents never expire
-enable_backup = true
-
-# ============================================================================
-# PROCESSING SETTINGS - Optimized for Legal Documents
-# ============================================================================
-
-[features.narodne_novine.processing]
-# Chunk sizing - larger for legal context preservation
-chunk_size = 1024                    # Larger chunks preserve legal context
-chunk_overlap = 150                  # More overlap for cross-reference preservation
-min_chunk_size = 256                 # Minimum viable legal content unit
-
-# Legal document structure preservation
-preserve_legal_structure = true     # Maintain article/paragraph numbering
-preserve_hierarchical_context = true # Keep law > article > paragraph structure
-extract_legal_entities = true       # Extract laws, dates, authorities, references
-
-# Document format support
-supported_formats = [".pdf", ".txt", ".html", ".md", ".docx"]
-prefer_pdf_extraction = true        # PDF is primary format for official docs
-enable_ocr_fallback = false         # Assume clean digital documents
-
-# Content validation
-validate_legal_format = true        # Check for proper NN formatting
-require_publication_metadata = true # Ensure docs have NN numbers/dates
-enable_content_deduplication = true # Remove duplicate publications
-
-# ============================================================================
-# METADATA ENHANCEMENT - Legal Document Intelligence
-# ============================================================================
-
-[features.narodne_novine.metadata]
-# Publication metadata extraction
-extract_publication_number = true   # Extract NN number (e.g., "85/2009")
-extract_publication_date = true     # Extract publication date
-extract_publication_year = true     # Extract year for temporal organization
-
-# Authority and source tracking
-extract_ministry = true             # Extract issuing ministry/authority
-extract_legal_category = true       # Extract document type (zakon, uredba, etc.)
-extract_issuing_authority = true    # Specific authority within ministry
-
-# Legal lifecycle metadata
-extract_effective_date = true       # When law/regulation takes effect
-extract_expiration_date = true      # If applicable
-extract_amendment_references = true # References to previous laws/amendments
-extract_superseded_documents = true # Documents this replaces
-
-# Legal content classification
-extract_legal_domain = true         # Tax, labor, criminal, civil, etc.
-extract_affected_entities = true    # Who the regulation affects
-extract_geographical_scope = true   # National, regional, local applicability
-
-# Cross-reference intelligence
-extract_citations = true            # References to other laws/documents
-extract_legal_precedents = true     # Referenced court decisions
-build_legal_relationship_graph = true # Create document relationship network
-
-# ============================================================================
-# SEARCH OPTIMIZATION - Legal Query Intelligence
-# ============================================================================
-
-[features.narodne_novine.search]
-# Query enhancement for legal searches
-enable_legal_synonym_expansion = true    # "zakon" -> "propis", "regulativa"
-enable_abbreviation_expansion = true     # "ZOR" -> "Zakon o radu"
-enable_temporal_context = true           # Understand "current law", "latest version"
-
-# Relevance boosting strategies
-boost_exact_legal_matches = 1.5         # Exact legal term matches
-boost_recent_documents = 1.2            # Recent regulations more relevant
-boost_active_regulations = 1.3          # Non-superseded documents
-boost_primary_sources = 1.4             # Laws over interpretations
-
-# Advanced search features
-enable_temporal_filtering = true        # Filter by publication/effective dates
-enable_authority_filtering = true       # Filter by ministry/issuing authority
-enable_legal_domain_filtering = true    # Filter by legal area
-enable_document_type_filtering = true   # Filter by zakon/uredba/pravilnik
-
-# Legal query understanding
-recognize_legal_entities = true         # Understand "Ministarstvo financija"
-recognize_legal_procedures = true       # Understand "postupak", "rok", "žalba"
-enable_legal_context_expansion = true   # Expand search with related legal concepts
-
-# Result presentation optimization
-group_by_legal_family = true           # Group related regulations
-show_amendment_history = true          # Show document evolution
-highlight_effective_periods = true     # Show when regulations were active
-enable_legal_summary_generation = true # AI-generated regulation summaries
-
-# ============================================================================
-# INTEGRATION SETTINGS - How Narodne Novine Connects to Main System
-# ============================================================================
-
-[features.narodne_novine.integration]
-# Scope integration - how it appears in chat system
-scope_identifier = "narodne_novine"    # Used in chat scope selection
-scope_display_name = "Narodne Novine"  # User-friendly name in UI
-scope_description = "Croatian Official Gazette and legal documents"
-
-# Query routing intelligence
-auto_detect_legal_queries = true       # Automatically route legal questions
-legal_query_confidence_threshold = 0.7 # Minimum confidence for auto-routing
-fallback_to_user_docs = true          # Search user docs if no legal matches
-
-# Cross-scope search capabilities
-enable_mixed_results = true           # Allow mixing legal + user document results
-legal_result_max_ratio = 0.6         # Max 60% of results from legal docs
-enable_scope_suggestion = true       # Suggest switching scopes based on query
-
-# Response enhancement
-add_legal_disclaimers = true         # Add "consult lawyer" disclaimers
-include_source_authority = true      # Always show which ministry/authority
-include_effective_dates = true       # Show when regulation is/was active
-enable_legal_change_alerts = true    # Alert about superseded regulations

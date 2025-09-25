@@ -302,6 +302,7 @@ class ChunkingStrategy(Enum):
     SLIDING_WINDOW = "sliding_window"
     SENTENCE = "sentence"
     PARAGRAPH = "paragraph"
+    SMART_LEGAL = "smart_legal"
 
 
 @dataclass
@@ -317,7 +318,10 @@ class ChunkingConfig:
 
     @classmethod
     def from_config(
-        cls, config_dict: dict[str, Any] | None = None, config_provider: Optional["ConfigProvider"] = None
+        cls,
+        config_dict: dict[str, Any] | None = None,
+        config_provider: Optional["ConfigProvider"] = None,
+        language: str = "hr",
     ) -> "ChunkingConfig":
         """Create config from dictionary or provider with DRY error handling."""
         if config_dict:
@@ -330,14 +334,14 @@ class ChunkingConfig:
                 raise ValueError("Missing 'shared' section in configuration")
             shared_config = config_dict["shared"]
         else:
-            # Use dependency injection
+            # Use dependency injection with language-aware config merging
             if config_provider is None:
                 from ..utils.config_protocol import get_config_provider
 
                 config_provider = get_config_provider()
 
-            full_config = config_provider.load_config("config")
-            chunking_config = full_config["chunking"]
+            # Use merged chunking configuration that combines main config + language-specific overrides
+            chunking_config = config_provider.get_chunking_config(language)
             shared_config = config_provider.get_shared_config()
 
         # Validate required configuration keys
@@ -517,6 +521,8 @@ class DocumentChunker:
             chunks = self._sentence_based_chunking(cleaned_text, source_file)
         elif strategy == ChunkingStrategy.PARAGRAPH:
             chunks = self._paragraph_based_chunking(cleaned_text, source_file)
+        elif strategy == ChunkingStrategy.SMART_LEGAL:
+            chunks = self._smart_legal_chunking(cleaned_text, source_file)
         else:
             logger.error("document_chunker", "chunk_document", f"Unknown chunking strategy: {strategy}")
             raise ValueError(f"Unknown chunking strategy: {strategy}")
@@ -661,6 +667,50 @@ class DocumentChunker:
 
         return chunks
 
+    def _smart_legal_chunking(self, text: str, source_file: str) -> list[TextChunk]:
+        """Execute smart legal document chunking with structure awareness."""
+        get_system_logger()
+        log_component_start("smart_legal_chunker", "chunk_text", text_length=len(text), source_file=source_file)
+
+        # For now, use paragraph-based chunking as fallback
+        # In the future, this could be enhanced with legal document structure detection
+        paragraphs = extract_paragraphs(text)
+
+        # Calculate chunk positions using pure function
+        chunk_positions = paragraph_chunk_positions(
+            paragraphs=paragraphs,
+            chunk_size=self.config.chunk_size,
+            overlap=self.config.overlap,
+            min_chunk_size=self.config.min_chunk_size,
+        )
+
+        # Create chunks
+        chunks: list[TextChunk] = []
+        char_offset = 0
+
+        for chunk_idx, (_start_idx, _end_idx, paragraph_group) in enumerate(chunk_positions):
+            # Join paragraphs in the group
+            chunk_text = "\n\n".join(paragraph_group)
+            start_char = char_offset
+            end_char = char_offset + len(chunk_text)
+
+            if chunk_text:
+                chunk = self._create_chunk(
+                    content=chunk_text,
+                    source_file=source_file,
+                    start_char=start_char,
+                    end_char=end_char,
+                    chunk_index=chunk_idx,
+                )
+                chunks.append(chunk)
+
+            char_offset = end_char
+
+        log_component_end(
+            "smart_legal_chunker", "chunk_text", f"Created {len(chunks)} smart legal chunks", chunks_created=len(chunks)
+        )
+        return chunks
+
     def _filter_meaningful_chunks(self, chunks: list[TextChunk]) -> list[TextChunk]:
         """Filter chunks to keep only meaningful ones."""
         meaningful_chunks = []
@@ -706,8 +756,8 @@ def create_document_chunker(
     Returns:
         Configured DocumentChunker instance
     """
-    # Create configuration
-    config = ChunkingConfig.from_config(config_dict, config_provider)
+    # Create configuration with language-specific merging
+    config = ChunkingConfig.from_config(config_dict, config_provider, language)
 
     # Create dependencies (can be mocked in tests)
     from typing import cast

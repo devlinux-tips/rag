@@ -1375,7 +1375,7 @@ async def main():
 
         def _ensure_initialized(self):
             if self._vector_db is None:
-                from ..vectordb.storage_factories import create_vector_database
+                from ..vectordb.database_factory import create_vector_database
                 from ..utils.config_loader import get_paths_config
                 paths_config = get_paths_config()
                 db_path_template = paths_config["chromadb_path_template"]
@@ -1405,7 +1405,7 @@ async def main():
         def get_storage_config(self) -> dict[str, Any]:
             from ..utils.config_loader import load_config
             config = load_config('config')
-            return config['storage']
+            return config['vectordb']
 
     cli = MultiTenantRAGCLI(
         output_writer=StandardOutputWriter(),

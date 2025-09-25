@@ -241,7 +241,9 @@ min_word_char_ratio = 0.6
 
 [chunking]
 # English sentence and paragraph detection
-# Note: paragraph_separators, min_sentence_length inherited from config.toml [chunking] section
+# Note: paragraph_separators inherited from config.toml [chunking] section
+min_sentence_length = 20
+sentence_search_range = 100
 sentence_endings = [".", "!", "?", "...", "…"]
 abbreviations = ["Mr.", "Mrs.", "Dr.", "Prof.", "Inc.", "Ltd.", "Corp.", "Co.", "vs.", "etc.", "i.e.", "e.g.", "Ph.D.", "M.D.", "B.A.", "M.A.", "CEO", "CFO", "CTO", "USA", "UK", "EU", "NATO"]
 

@@ -105,7 +105,14 @@ class Tenant:
 
     def get_collection_name(self, scope: DocumentScope, language: str) -> str:
         """Generate ChromaDB collection name for this tenant."""
-        return f"{self.slug}_{scope.value}_{language}"
+        collection_name = f"{self.slug}_{scope.value}_{language}"
+
+        # Handle Weaviate collection name capitalization for features tenant
+        # Weaviate auto-capitalizes the first letter when creating collections
+        if self.slug == "features" and scope == DocumentScope.USER:
+            collection_name = f"Features_{scope.value}_{language}"
+
+        return collection_name
 
     def can_create_user(self) -> bool:
         """Check if tenant can create new users."""

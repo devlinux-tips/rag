@@ -234,7 +234,9 @@ min_word_char_ratio = 0.6
 # ============================================================================
 [chunking]
 # Croatian sentence and paragraph detection
-# Note: paragraph_separators, min_sentence_length inherited from config.toml [chunking] section
+# Note: paragraph_separators inherited from config.toml [chunking] section
+min_sentence_length = 20
+sentence_search_range = 100
 sentence_endings = [".", "!", "?", "…"]
 abbreviations = ["npr.", "itd.", "tj.", "dr.", "prof.", "mr.", "mag.", "ing."]
 

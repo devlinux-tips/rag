@@ -437,6 +437,10 @@ class VectorStorage:
         )
 
         try:
+            # Safety check - ensure database is properly initialized
+            if self.database is None:
+                raise RuntimeError("Vector database is not initialized - database is None")
+
             logger.debug("vector_storage", "initialize", f"Creating collection: {collection_name}")
             self.collection = self.database.create_collection(name=collection_name, reset_if_exists=reset_if_exists)
 
@@ -572,13 +576,24 @@ class VectorStorage:
                 )
                 log_decision_point("vector_storage", "search_documents", "search_type=text", "query_executed")
             elif query_embedding is not None:
+                # Convert embedding to numpy array if needed for shape access
+                if hasattr(query_embedding, "shape"):
+                    embedding_shape: tuple[int, ...] | str = query_embedding.shape
+                    embedding_data = query_embedding
+                elif isinstance(query_embedding, (list, tuple)):
+                    embedding_shape = (len(query_embedding),)
+                    embedding_data = query_embedding
+                else:
+                    embedding_shape = "unknown"
+                    embedding_data = query_embedding
+
                 logger.debug(
                     "vector_storage",
                     "search_documents",
-                    f"Searching by embedding: shape={query_embedding.shape} (top_k={top_k})",
+                    f"Searching by embedding: shape={embedding_shape} (top_k={top_k})",
                 )
                 raw_results = self.collection.query(
-                    query_embeddings=[query_embedding],
+                    query_embeddings=[embedding_data],
                     n_results=top_k,
                     where=filter_metadata,
                     include=["documents", "metadatas", "distances"],
@@ -625,6 +640,60 @@ class VectorStorage:
         count = self.collection.count()
         return {"name": self.collection.name, "document_count": count, "metadata": self.collection.metadata}
 
+    def add(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict[str, Any]],
+        embeddings: list[np.ndarray] | None = None,
+    ) -> None:
+        """Add documents directly to collection - synchronous wrapper for RAG system compatibility."""
+        if not self.collection:
+            raise RuntimeError("Storage not initialized - call initialize() first")
+
+        self.collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
+    def query(
+        self,
+        query_embeddings: list[list[float]] | None = None,
+        query_texts: list[str] | None = None,
+        n_results: int = 10,
+        where: dict[str, Any] | None = None,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Query documents - compatibility method for search providers."""
+        import asyncio
+
+        if not self.collection:
+            raise RuntimeError("Storage not initialized - call initialize() first")
+
+        # For Weaviate, we need to use the search_documents method
+        # Convert the query format to match our internal interface
+        if query_embeddings and len(query_embeddings) > 0:
+            query_embedding = np.array(query_embeddings[0])  # Convert to numpy array
+            results = asyncio.run(
+                self.search_documents(query_embedding=query_embedding, top_k=n_results, filter_metadata=where)
+            )
+        elif query_texts and len(query_texts) > 0:
+            query_text = query_texts[0]  # Take first text
+            results = asyncio.run(self.search_documents(query_text=query_text, top_k=n_results, filter_metadata=where))
+        else:
+            raise ValueError("Either query_embeddings or query_texts must be provided")
+
+        # Convert results back to ChromaDB-style format for compatibility
+        ids = []
+        documents = []
+        metadatas = []
+        distances = []
+
+        for result in results:
+            ids.append(result.id)
+            documents.append(result.content)
+            metadatas.append(result.metadata)
+            distances.append(1.0 - result.score)  # Convert similarity to distance
+
+        return {"ids": [ids], "documents": [documents], "metadatas": [metadatas], "distances": [distances]}
+
     async def delete_documents(
         self, ids: list[str] | None = None, filter_metadata: dict[str, Any] | None = None
     ) -> None:
@@ -655,7 +724,8 @@ def create_vector_storage(database: VectorDatabase) -> VectorStorage:
 
 def create_mock_storage() -> VectorStorage:
     """Factory function to create mock storage for testing."""
-    from .storage_factories import create_mock_database
-
-    mock_db = create_mock_database()
-    return VectorStorage(mock_db)
+    # TODO: Implement mock database for testing
+    # from .storage_factories import create_mock_database
+    # mock_db = create_mock_database()
+    raise NotImplementedError("Mock storage not implemented yet")
+    # return VectorStorage(mock_db)

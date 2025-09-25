@@ -201,10 +201,20 @@ def calculate_optimal_batch_size(
             f"adjusted to {optimal_batch}",
         )
 
-    optimal_batch = min(optimal_batch, num_texts)
-    log_decision_point(
-        "batch_optimizer", "calculate_optimal_batch_size", f"num_texts={num_texts}", f"final batch size {optimal_batch}"
-    )
+    # Don't limit batch size by num_texts when using configuration-driven batching
+    # This allows processing multiple document chunks in one batch for efficiency
+    if base_batch_size <= 32:  # Only apply num_texts limit for default small batch sizes
+        optimal_batch = min(optimal_batch, num_texts)
+        log_decision_point(
+            "batch_optimizer", "calculate_optimal_batch_size", f"num_texts={num_texts}", f"limited to {optimal_batch}"
+        )
+    else:
+        log_decision_point(
+            "batch_optimizer",
+            "calculate_optimal_batch_size",
+            f"num_texts={num_texts}",
+            f"config-driven batch size {optimal_batch}",
+        )
 
     optimal_batch = max(1, optimal_batch)
     log_component_end("batch_optimizer", "calculate_optimal_batch_size", f"Optimal batch size: {optimal_batch}")

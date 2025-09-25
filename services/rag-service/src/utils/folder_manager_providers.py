@@ -337,7 +337,7 @@ class DefaultConfigProvider:
 
             paths_config = get_paths_config()
             main_config = load_config("config")
-            storage_config = main_config["storage"]
+            storage_config = main_config["vectordb"]
 
             log_data_transformation(
                 "folder_manager_providers",
