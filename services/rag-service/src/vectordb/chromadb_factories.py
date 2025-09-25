@@ -7,11 +7,11 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-import chromadb
+import chromadb  # type: ignore[import-not-found]
 import numpy as np
-from chromadb.api.models.Collection import Collection
-from chromadb.api.types import Metadata, WhereDocument
-from chromadb.config import Settings
+from chromadb.api.models.Collection import Collection  # type: ignore[import-not-found]
+from chromadb.api.types import Metadata, WhereDocument  # type: ignore[import-not-found]
+from chromadb.config import Settings  # type: ignore[import-not-found]
 
 from ..utils.logging_factory import (
     get_system_logger,

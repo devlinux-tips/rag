@@ -137,9 +137,9 @@ class VectorStorageProtocol(Protocol):
 
     def add(self, ids: list[str], documents: list[str], metadatas: list[dict], embeddings: list) -> None: ...
 
-    def create_collection(self) -> None: ...
-
     def get_document_count(self) -> int: ...
+
+    async def initialize(self, collection_name: str, reset_if_exists: bool = False) -> None: ...
 
     async def close(self) -> None: ...
 
@@ -665,9 +665,10 @@ class RAGSystem:
                 f"Vector storage collection initialized: {self._vector_storage._pending_collection_name}",
             )
         else:
-            # Fallback for legacy compatibility
-            await self._vector_storage.create_collection()
-            system_logger.debug("rag_system", "post_init", "Vector storage collection created")
+            # Error case - no collection name available
+            error_msg = "Vector storage initialization failed: no collection name specified"
+            system_logger.error("rag_system", "post_init", error_msg)
+            raise RuntimeError(error_msg)
 
         self._initialized = True
         log_component_end("rag_system", "post_init", "All components initialized successfully")

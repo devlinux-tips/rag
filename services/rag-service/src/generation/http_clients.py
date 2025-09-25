@@ -4,6 +4,7 @@ Provides testable HTTP abstraction layer.
 """
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -215,7 +216,9 @@ class AsyncHttpxClient:
         response = await self.post(url, json_data, timeout, headers)
         return response.json()
 
-    async def stream_post_lines(self, url: str, headers: dict[str, str], json_data: dict[str, Any], timeout: float):
+    async def stream_post_lines(
+        self, url: str, headers: dict[str, str], json_data: dict[str, Any], timeout: float
+    ) -> AsyncIterator[str]:
         """Streaming POST returning lines (for new LLM provider interface)."""
         lines = await self.stream_post(url, json_data, timeout, headers)
         for line in lines:

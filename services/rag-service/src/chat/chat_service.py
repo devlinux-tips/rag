@@ -263,7 +263,7 @@ class ChatService:
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_prompt))
 
         # Add RAG context as system message if provided
-        if retrieved_context and rag_service:
+        if retrieved_context and rag_service and rag_context_obj:
             context_content = rag_service.format_rag_context_for_llm(rag_context_obj, user_message)
             if context_content:
                 messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context_content))
@@ -490,7 +490,7 @@ class ChatService:
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_prompt))
 
         # Add RAG context as system message if provided (streaming version)
-        if retrieved_context and rag_service:
+        if retrieved_context and rag_service and rag_context_obj:
             context_content = rag_service.format_rag_context_for_llm(rag_context_obj, user_message)
             if context_content:
                 messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context_content))

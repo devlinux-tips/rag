@@ -426,6 +426,8 @@ class VectorStorage:
         self.database = database
         self.collection: VectorCollection | None = None
         self.logger = get_system_logger()
+        # Temporary attribute for deferred async initialization
+        self._pending_collection_name: str | None = None
 
         log_component_end("vector_storage", "init", "Vector storage initialized")
 

@@ -104,7 +104,7 @@ class LLMProvider(Protocol):
         """Generate chat completion."""
         ...
 
-    async def stream_chat_completion(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
+    def stream_chat_completion(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """Generate streaming chat completion."""
         ...
 
@@ -122,7 +122,7 @@ class HttpClient(Protocol):
         """Make POST request and return JSON."""
         ...
 
-    async def stream_post_lines(
+    def stream_post_lines(
         self, url: str, headers: dict[str, str], json_data: dict[str, Any], timeout: float
     ) -> AsyncIterator[str]:
         """Make streaming POST request."""
@@ -282,7 +282,7 @@ class OllamaProvider(BaseLLMProvider):
         prompt_parts.append("Assistant:")
         prompt = "\n\n".join(prompt_parts)
 
-        ollama_request = {
+        ollama_request: dict[str, Any] = {
             "model": request.model,
             "prompt": prompt,
             "stream": request.stream,
@@ -521,7 +521,7 @@ class UnifiedLLMManager:
     def __init__(self, config: dict[str, Any]):
         self._validate_manager_config(config)
         self.config = config
-        self.providers = {}
+        self.providers: dict[str, LLMProvider] = {}
         self.primary_provider = config["primary_provider"]
         self.fallback_order = config["fallback_order"]
         self.logger = get_system_logger()

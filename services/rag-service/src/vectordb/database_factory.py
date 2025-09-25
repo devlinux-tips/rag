@@ -63,7 +63,20 @@ def _create_chromadb_database(config: dict[str, Any], language: str) -> VectorDa
     # Import here to avoid circular imports
     from .chromadb_factories import create_chromadb_database
 
-    database = create_chromadb_database(config, language)
+    # Extract ChromaDB-specific configuration
+    chromadb_config = config["vectordb"]["chromadb"]
+    vectordb_config = config["vectordb"]
+
+    # Build db_path with language suffix
+    db_path_template = chromadb_config["db_path_template"]
+    db_path = db_path_template.format(language=language)
+
+    database = create_chromadb_database(
+        db_path=db_path,
+        distance_metric=vectordb_config["distance_metric"],
+        persist=chromadb_config["persist"],
+        allow_reset=chromadb_config["allow_reset"],
+    )
 
     logger.debug("chromadb_factory", "create_database", "ChromaDB database created successfully")
 

@@ -40,7 +40,7 @@ class RAGChatService:
         self.config = get_shared_config()
 
         # Multiple RAG systems for different scopes
-        self.rag_systems = {}  # Will hold different RAG systems per scope
+        self.rag_systems: Dict[str, Any] = {}  # Will hold different RAG systems per scope
         self.current_scope = "user"  # Default scope
 
     async def initialize(self) -> None:

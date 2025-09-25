@@ -8,9 +8,9 @@ import time
 from typing import Any
 
 import numpy as np
-import weaviate
-from weaviate.classes.config import Configure, VectorDistances
-from weaviate.classes.query import Filter
+import weaviate  # type: ignore[import-not-found]
+from weaviate.classes.config import Configure, VectorDistances  # type: ignore[import-not-found]
+from weaviate.classes.query import Filter  # type: ignore[import-not-found]
 
 from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
 from .storage import VectorCollection, VectorDatabase
@@ -34,6 +34,26 @@ class WeaviateCollection(VectorCollection):
         self._ensure_class_exists()
 
         log_component_end("weaviate_collection", "init", f"Weaviate collection initialized: {class_name}")
+
+    @property
+    def name(self) -> str:
+        """Get collection name."""
+        return self.class_name
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """Get collection metadata."""
+        return {
+            "class_name": self.class_name,
+            "config": {
+                "hnsw": {
+                    "ef_construction": self.config.hnsw.ef_construction,
+                    "ef": self.config.hnsw.ef,
+                    "max_connections": self.config.hnsw.max_connections,
+                },
+                "compression": {"enabled": self.config.compression.enabled, "type": self.config.compression.type},
+            },
+        }
 
     def _ensure_class_exists(self) -> None:
         """Ensure the Weaviate class/collection exists."""
@@ -61,7 +81,7 @@ class WeaviateCollection(VectorCollection):
                     ef_construction=hnsw_config.ef_construction,
                     ef=hnsw_config.ef,
                     max_connections=hnsw_config.max_connections,
-                    dynamic_ef=hnsw_config.ef_dynamic,
+                    dynamic_ef_factor=hnsw_config.ef_dynamic,
                     cleanup_interval_seconds=hnsw_config.cleanup_interval_seconds,
                     vector_cache_max_objects=hnsw_config.vector_cache_max_objects,
                 )
@@ -74,7 +94,7 @@ class WeaviateCollection(VectorCollection):
                             ef_construction=hnsw_config.ef_construction,
                             ef=hnsw_config.ef,
                             max_connections=hnsw_config.max_connections,
-                            dynamic_ef=hnsw_config.ef_dynamic,
+                            dynamic_ef_factor=hnsw_config.ef_dynamic,
                             cleanup_interval_seconds=hnsw_config.cleanup_interval_seconds,
                             vector_cache_max_objects=hnsw_config.vector_cache_max_objects,
                             quantizer=Configure.VectorIndex.Quantizer.sq(
@@ -157,7 +177,7 @@ class WeaviateCollection(VectorCollection):
 
                 import uuid as uuid_lib
 
-                from weaviate.classes.data import DataObject
+                from weaviate.classes.data import DataObject  # type: ignore[import-not-found]
 
                 try:
                     # Generate a proper UUID if doc_id is not valid UUID format
@@ -329,9 +349,9 @@ class WeaviateCollection(VectorCollection):
     def update(
         self,
         ids: list[str],
-        embeddings: list[np.ndarray] | None = None,
-        metadatas: list[dict[str, Any]] | None = None,
         documents: list[str] | None = None,
+        metadatas: list[dict[str, Any]] | None = None,
+        embeddings: list[np.ndarray] | None = None,
     ) -> None:
         """Update documents in Weaviate collection."""
         logger = get_system_logger()
@@ -350,15 +370,15 @@ class WeaviateCollection(VectorCollection):
                     metadata = metadatas[i]
                     update_data.update(
                         {
-                            "source_file": metadata.get("source_file"),
-                            "chunk_index": metadata.get("chunk_index"),
-                            "language": metadata.get("language"),
-                            "timestamp": metadata.get("timestamp"),
+                            "source_file": metadata.get("source_file") or "",
+                            "chunk_index": metadata.get("chunk_index") or "",
+                            "language": metadata.get("language") or "",
+                            "timestamp": metadata.get("timestamp") or "",
                         }
                     )
 
                 if update_data:
-                    collection.data.update_by_id(
+                    collection.data.update(
                         uuid=doc_id,
                         properties=update_data,
                         vector=embeddings[i].tolist() if embeddings and i < len(embeddings) else None,
@@ -553,15 +573,15 @@ class WeaviateDatabase(VectorDatabase):
         try:
             # Use collections API to list all collections
             collections_list = []
-            for collection in self.client.collections.list_all():
-                collections_list.append(collection.name)
+            for collection_name in self.client.collections.list_all():
+                collections_list.append(collection_name)
             return collections_list
 
         except Exception as e:
             self.logger.error(f"Failed to list Weaviate collections: {str(e)}")
             return []
 
-    def delete_collection(self, collection_name: str) -> bool:
+    def delete_collection(self, collection_name: str) -> None:
         """Delete Weaviate class/collection."""
         logger = get_system_logger()
         log_component_start("weaviate_database", "delete_collection", collection_name=collection_name)
@@ -578,15 +598,13 @@ class WeaviateDatabase(VectorDatabase):
 
             log_component_end("weaviate_database", "delete_collection", f"Collection {collection_name} deleted")
 
-            return True
-
         except Exception as e:
             error_msg = f"Failed to delete Weaviate collection {collection_name}: {str(e)}"
             logger.error("weaviate_database", "delete_collection", error_msg)
             log_error_context("weaviate_database", "delete_collection", e, {"collection_name": collection_name})
-            return False
+            raise
 
-    def reset_database(self) -> bool:
+    def reset(self) -> None:
         """Reset entire Weaviate database."""
         logger = get_system_logger()
         log_component_start("weaviate_database", "reset_database")
@@ -610,13 +628,11 @@ class WeaviateDatabase(VectorDatabase):
                 "weaviate_database", "reset_database", f"Database reset, {len(collections)} collections deleted"
             )
 
-            return True
-
         except Exception as e:
             error_msg = f"Failed to reset Weaviate database: {str(e)}"
             logger.error("weaviate_database", "reset_database", error_msg)
             log_error_context("weaviate_database", "reset_database", e, {})
-            return False
+            raise
 
 
 def create_weaviate_client(config: WeaviateConfiguration) -> weaviate.WeaviateClient:

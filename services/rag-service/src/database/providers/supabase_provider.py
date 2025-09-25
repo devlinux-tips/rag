@@ -33,7 +33,7 @@ class SupabaseProvider:
     """
 
     def __init__(self):
-        self.client = None
+        self.client: Client | None = None
         self.config: Dict[str, Any] = {}
         self.logger = get_system_logger()
 
@@ -62,7 +62,7 @@ class SupabaseProvider:
         try:
             # Import Supabase here to handle optional dependency
             try:
-                from supabase import create_client, Client
+                from supabase import create_client, Client  # type: ignore[import-not-found]
             except ImportError as e:
                 raise DatabaseError(
                     "Supabase not installed. Install with: pip install supabase"

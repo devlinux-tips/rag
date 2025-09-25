@@ -9,9 +9,10 @@ SurrealDB Configuration:
 """
 
 from typing import Dict, Any, List, Optional, Union, TYPE_CHECKING
+from datetime import datetime
 
 if TYPE_CHECKING:
-    from surrealdb import Surreal
+    from surrealdb import Surreal  # type: ignore[import-not-found]
 else:
     Surreal = Any
 import asyncio
@@ -25,7 +26,7 @@ from ...utils.logging_factory import (
 )
 from ...models.multitenant_models import (
     Tenant, User, Document, Chunk, SearchQuery,
-    CategorizationTemplate, SystemConfig
+    CategorizationTemplate, SystemConfig, DocumentScope
 )
 
 
@@ -47,6 +48,21 @@ class SurrealDBProvider:
         if self.client is None:
             raise DatabaseError("Database client not initialized. Call initialize() first.")
         return self.client
+
+    def _parse_datetime(self, value: Any) -> datetime:
+        """Parse datetime value from database result."""
+        if value is None:
+            return datetime.now()
+        elif isinstance(value, datetime):
+            return value
+        elif isinstance(value, str):
+            # Try parsing common formats
+            try:
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                return datetime.now()
+        else:
+            return datetime.now()
 
     async def initialize(self, config: Dict[str, Any]) -> None:
         """Initialize SurrealDB connection with fail-fast validation."""
@@ -80,7 +96,7 @@ class SurrealDBProvider:
             try:
                 # Import SurrealDB here to handle optional dependency
                 try:
-                    from surrealdb import Surreal
+                    from surrealdb import Surreal  # type: ignore[import-not-found]
                 except ImportError as e:
                     raise DatabaseError(
                         "SurrealDB not installed. Install with: pip install surrealdb"
@@ -463,10 +479,10 @@ class SurrealDBProvider:
                 "user_id": document.user_id,
                 "title": document.title,
                 "content": document.content,
-                "language": document.language.value,
+                "language": document.language if isinstance(document.language, str) else document.language.value,
                 "scope": document.scope.value,
-                "category": document.category,
-                "status": document.status.value,
+                "categories": document.categories,
+                "status": document.status if isinstance(document.status, str) else document.status.value,
                 "metadata": document.metadata or {},
                 "source_path": document.source_path,
                 "mime_type": document.mime_type,
@@ -623,7 +639,7 @@ class SurrealDBProvider:
                 "user_id": chunk.user_id,
                 "chunk_index": chunk.chunk_index,
                 "content": chunk.content,
-                "language": chunk.language.value,
+                "language": chunk.language if isinstance(chunk.language, str) else chunk.language.value,
                 "start_char": chunk.start_char,
                 "end_char": chunk.end_char,
                 "token_count": chunk.token_count,
@@ -756,8 +772,8 @@ class SurrealDBProvider:
             language_preference=result["language_preference"],
             cultural_context=BusinessContext(result["cultural_context"]),
             subscription_tier=SubscriptionTier(result["subscription_tier"]),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            created_at=self._parse_datetime(result.get("created_at")),
+            updated_at=self._parse_datetime(result.get("updated_at"))
         )
 
     def _parse_user_result(self, result: Dict[str, Any]) -> User:
@@ -780,9 +796,9 @@ class SurrealDBProvider:
             status=UserStatus(result["status"]),
             language_preference=Language(result["language_preference"]),
             settings=result.get("settings") or {},
-            last_login_at=result.get("last_login_at"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            last_login_at=self._parse_datetime(result.get("last_login_at")) if result.get("last_login_at") else None,
+            created_at=self._parse_datetime(result.get("created_at")),
+            updated_at=self._parse_datetime(result.get("updated_at"))
         )
 
     def _parse_document_result(self, result: Dict[str, Any]) -> Document:
@@ -799,19 +815,20 @@ class SurrealDBProvider:
             tenant_id=result["tenant_id"],
             user_id=result["user_id"],
             title=result["title"],
+            filename=result.get("filename", result["title"]),
+            file_path=result.get("file_path", ""),
             content=result["content"],
-            language=Language(result["language"]),
+            language=result["language"] if isinstance(result["language"], str) else result["language"],
             scope=DocumentScope(result["scope"]),
-            category=result.get("category"),
+            categories=result.get("categories", []),
             status=DocumentStatus(result["status"]),
             metadata=result.get("metadata") or {},
             source_path=result.get("source_path"),
             mime_type=result.get("mime_type"),
-            file_size=result.get("file_size"),
+            file_size=result.get("file_size") or 0,
             checksum=result.get("checksum"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at"),
-            processed_at=result.get("processed_at")
+            created_at=self._parse_datetime(result.get("created_at")),
+            updated_at=self._parse_datetime(result.get("updated_at"))
         )
 
     def _parse_chunk_result(self, result: Dict[str, Any]) -> Chunk:
@@ -828,22 +845,22 @@ class SurrealDBProvider:
             document_id=result["document_id"],
             tenant_id=result["tenant_id"],
             user_id=result["user_id"],
+            scope=DocumentScope(result.get("scope", "user")),
             chunk_index=result["chunk_index"],
             content=result["content"],
-            language=Language(result["language"]),
+            language=result["language"] if isinstance(result["language"], str) else result["language"],
             start_char=result.get("start_char") or 0,
             end_char=result.get("end_char") or 0,
             token_count=result.get("token_count") or 0,
-            vector_id=result.get("vector_id"),
-            vector_collection=result.get("vector_collection"),
+            vector_id=result.get("vector_id") or "",
+            vector_collection=result.get("vector_collection") or "",
             metadata=result.get("metadata") or {},
-            embedding_model=result.get("embedding_model"),
-            embedding_dimension=result.get("embedding_dimension"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            embedding_model=result.get("embedding_model") or "bge-m3",
+            embedding_dimension=result.get("embedding_dimension") or 768,
+            created_at=self._parse_datetime(result.get("created_at"))
         )
 
-    async def execute_query(self, query: str, parameters: dict = None) -> list[dict]:
+    async def execute_query(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Execute SQL-like query with automatic retry and reconnection.
 
         This method provides compatibility with chat persistence that expects SQL syntax.
@@ -900,6 +917,9 @@ class SurrealDBProvider:
                 wait_time = self.retry_delay * (attempt + 1)
                 await asyncio.sleep(wait_time)
 
+        # This should not be reached, but add for type safety
+        raise DatabaseError("Query execution failed after all retries")
+
     async def _handle_table_creation(self, query: str) -> list[dict]:
         """Handle CREATE TABLE statements by translating to SurrealQL."""
         # Extract table name from CREATE TABLE statement
@@ -931,7 +951,7 @@ class SurrealDBProvider:
         except Exception as e:
             raise DatabaseError(f"Failed to acknowledge index creation: {e}") from e
 
-    async def _handle_insert(self, query: str, parameters: dict = None) -> list[dict]:
+    async def _handle_insert(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Handle INSERT INTO statements by translating to SurrealQL."""
         import re
 
@@ -970,7 +990,7 @@ class SurrealDBProvider:
         except Exception as e:
             raise DatabaseError(f"Failed to insert into {table_name}: {e}") from e
 
-    async def _handle_update(self, query: str, parameters: dict = None) -> list[dict]:
+    async def _handle_update(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Handle UPDATE statements by translating to SurrealQL."""
         import re
 
@@ -1010,7 +1030,7 @@ class SurrealDBProvider:
         except Exception as e:
             raise DatabaseError(f"Failed to update {table_name}: {e}") from e
 
-    async def _handle_delete(self, query: str, parameters: dict = None) -> list[dict]:
+    async def _handle_delete(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict]:
         """Handle DELETE statements by translating to SurrealQL."""
         import re
 
@@ -1035,7 +1055,7 @@ class SurrealDBProvider:
         except Exception as e:
             raise DatabaseError(f"Failed to delete from {table_name}: {e}") from e
 
-    async def _handle_select(self, query: str, parameters: dict = None) -> list[dict]:
+    async def _handle_select(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict]:
         """Handle SELECT statements by translating to SurrealQL."""
         # SurrealQL SELECT syntax is similar to SQL, so we can often pass it through
         try:
@@ -1044,7 +1064,7 @@ class SurrealDBProvider:
         except Exception as e:
             raise DatabaseError(f"Failed to execute SELECT: {e}") from e
 
-    async def fetch_one(self, query: str, parameters: list = None) -> dict | None:
+    async def fetch_one(self, query: str, parameters: list[Any] | None = None) -> dict | None:
         """Execute SQL-like query and return single result with retry logic."""
         client = self._ensure_client()
 
