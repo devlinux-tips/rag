@@ -78,6 +78,10 @@ class PostgreSQLProvider:
             )
 
             # Test connection
+            if self.pool is None:
+                raise DatabaseError("Connection pool not initialized")
+
+
             conn = self.pool.getconn()
             try:
                 with conn.cursor() as cursor:
@@ -92,8 +96,7 @@ class PostgreSQLProvider:
 
         except Exception as e:
             log_error_context(
-                "postgresql_provider", "initialize",
-                f"Connection failed: {str(e)}"
+                "postgresql_provider", "initialize", e, {"connection_config": "hidden"}
             )
             raise DatabaseError(f"Failed to initialize PostgreSQL: {str(e)}")
 
@@ -160,6 +163,11 @@ class PostgreSQLProvider:
         CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
         """
 
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
+
+
+
         conn = self.pool.getconn()
         try:
             with conn.cursor() as cursor:
@@ -170,12 +178,17 @@ class PostgreSQLProvider:
             self.pool.putconn(conn)
 
     async def store_conversation(self, conversation_id: str, tenant_slug: str,
-                                user_id: str, title: str = None) -> Dict[str, Any]:
+                                user_id: str, title: Optional[str] = None) -> Dict[str, Any]:
         """Store a new conversation."""
         log_component_start(
             "postgresql_provider", "store_conversation",
             conversation_id=conversation_id, tenant_slug=tenant_slug, user_id=user_id
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
+
+
 
         conn = self.pool.getconn()
         try:
@@ -192,28 +205,30 @@ class PostgreSQLProvider:
                 result = cursor.fetchone()
                 conn.commit()
 
-                log_component_end("postgresql_provider", "store_conversation",
-                                success=True, conversation_id=conversation_id)
+                log_component_end("postgresql_provider", "store_conversation", "conversation stored successfully", conversation_id=conversation_id)
 
                 return dict(result)
 
         except Exception as e:
             conn.rollback()
             log_error_context(
-                "postgresql_provider", "store_conversation",
-                f"Error storing conversation: {str(e)}"
+                "postgresql_provider", "store_conversation", e,
+                {"conversation_id": conversation_id, "tenant": tenant_slug}
             )
             raise DatabaseError(f"Failed to store conversation: {str(e)}")
         finally:
             self.pool.putconn(conn)
 
     async def store_message(self, message_id: str, conversation_id: str,
-                           role: str, content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+                           role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Store a message in a conversation."""
         log_component_start(
             "postgresql_provider", "store_message",
             message_id=message_id, conversation_id=conversation_id, role=role
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -227,17 +242,13 @@ class PostgreSQLProvider:
                 result = cursor.fetchone()
                 conn.commit()
 
-                log_component_end("postgresql_provider", "store_message",
-                                success=True, message_id=message_id)
+                log_component_end("postgresql_provider", "store_message", "operation completed", success=True, message_id=message_id)
 
                 return dict(result)
 
         except Exception as e:
             conn.rollback()
-            log_error_context(
-                "postgresql_provider", "store_message",
-                f"Error storing message: {str(e)}"
-            )
+            log_error_context("postgresql_provider", "store_message", e, {"error_details": "Error storing message: {str(e)}"})
             raise DatabaseError(f"Failed to store message: {str(e)}")
         finally:
             self.pool.putconn(conn)
@@ -249,6 +260,9 @@ class PostgreSQLProvider:
             "postgresql_provider", "get_conversation_history",
             conversation_id=conversation_id, limit=limit
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -262,16 +276,12 @@ class PostgreSQLProvider:
 
                 results = [dict(row) for row in cursor.fetchall()]
 
-                log_component_end("postgresql_provider", "get_conversation_history",
-                                success=True, message_count=len(results))
+                log_component_end("postgresql_provider", "get_conversation_history", "operation completed", success=True, message_count=len(results))
 
                 return results
 
         except Exception as e:
-            log_error_context(
-                "postgresql_provider", "get_conversation_history",
-                f"Error retrieving history: {str(e)}"
-            )
+            log_error_context("postgresql_provider", "get_conversation_history", e, {"error_details": "Error retrieving history: {str(e)}"})
             raise DatabaseError(f"Failed to get conversation history: {str(e)}")
         finally:
             self.pool.putconn(conn)
@@ -282,6 +292,9 @@ class PostgreSQLProvider:
             "postgresql_provider", "store_document",
             document_id=document.get("document_id")
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -310,27 +323,26 @@ class PostgreSQLProvider:
                 result = cursor.fetchone()
                 conn.commit()
 
-                log_component_end("postgresql_provider", "store_document",
-                                success=True, document_id=document["document_id"])
+                log_component_end("postgresql_provider", "store_document", "operation completed", success=True, document_id=document["document_id"])
 
                 return dict(result)
 
         except Exception as e:
             conn.rollback()
-            log_error_context(
-                "postgresql_provider", "store_document",
-                f"Error storing document: {str(e)}"
-            )
+            log_error_context("postgresql_provider", "store_document", e, {"error_details": "Error storing document: {str(e)}"})
             raise DatabaseError(f"Failed to store document: {str(e)}")
         finally:
             self.pool.putconn(conn)
 
-    async def execute_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results."""
         log_component_start(
             "postgresql_provider", "execute_query",
             query_preview=query[:100] + "..." if len(query) > 100 else query
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -348,14 +360,12 @@ class PostgreSQLProvider:
                 # For SELECT queries, fetch results
                 if query.strip().upper().startswith('SELECT'):
                     results = [dict(row) for row in cursor.fetchall()]
-                    log_component_end("postgresql_provider", "execute_query",
-                                    f"Query executed successfully, {len(results)} rows returned")
+                    log_component_end("postgresql_provider", "execute_query", f"Query executed successfully, {len(results)} rows returned")
                     return results
                 else:
                     # For INSERT/UPDATE/DELETE, commit and return empty list
                     conn.commit()
-                    log_component_end("postgresql_provider", "execute_query",
-                                    "Query executed successfully")
+                    log_component_end("postgresql_provider", "execute_query", "Query executed successfully")
                     return []
         except Exception as e:
             conn.rollback()
@@ -367,12 +377,15 @@ class PostgreSQLProvider:
         finally:
             self.pool.putconn(conn)
 
-    async def fetch_one(self, query: str, params: list = None) -> Optional[Dict[str, Any]]:
+    async def fetch_one(self, query: str, params: Optional[list] = None) -> Optional[Dict[str, Any]]:
         """Fetch single row from query (SurrealDB compatibility method)."""
         log_component_start(
             "postgresql_provider", "fetch_one",
             query_preview=query[:100] + "..." if len(query) > 100 else query
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -405,12 +418,15 @@ class PostgreSQLProvider:
         finally:
             self.pool.putconn(conn)
 
-    async def fetch_all(self, query: str, params: list = None) -> List[Dict[str, Any]]:
+    async def fetch_all(self, query: str, params: Optional[list] = None) -> List[Dict[str, Any]]:
         """Fetch all rows from query (SurrealDB compatibility method)."""
         log_component_start(
             "postgresql_provider", "fetch_all",
             query_preview=query[:100] + "..." if len(query) > 100 else query
         )
+
+        if self.pool is None:
+            raise DatabaseError("Connection pool not initialized")
 
         conn = self.pool.getconn()
         try:
@@ -428,8 +444,7 @@ class PostgreSQLProvider:
                 results = cursor.fetchall()
                 result_dicts = [dict(row) for row in results]
 
-                log_component_end("postgresql_provider", "fetch_all",
-                                f"Fetched {len(result_dicts)} rows successfully")
+                log_component_end("postgresql_provider", "fetch_all", f"Fetched {len(result_dicts)} rows successfully")
                 return result_dicts
 
         except Exception as e:

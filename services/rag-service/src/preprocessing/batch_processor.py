@@ -96,6 +96,11 @@ class BatchProcessingConfig:
 
         return config_obj
 
+    @classmethod
+    def from_validated_config(cls, config: dict[str, Any]) -> "BatchProcessingConfig":
+        """Create config from validated configuration dictionary."""
+        return cls.from_config(config)
+
 
 @dataclass
 class BatchProcessingResult:

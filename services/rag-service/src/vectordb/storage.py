@@ -65,6 +65,50 @@ class QueryResult:
     score: float
 
 
+@dataclass
+class VectorSearchResult:
+    """Standard search result format - vendor-agnostic."""
+
+    id: str
+    content: str
+    metadata: dict[str, Any]
+    distance: float  # Lower is better (0.0 = perfect match)
+
+    @property
+    def score(self) -> float:
+        """Convert distance to similarity score (higher is better)."""
+        return max(0.0, 1.0 - self.distance)
+
+
+@dataclass
+class VectorSearchResults:
+    """Collection of search results with metadata."""
+
+    results: list[VectorSearchResult]
+    total_count: int
+    search_time_ms: float
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    def __iter__(self):
+        return iter(self.results)
+
+    def to_chunks_format(self) -> list[dict[str, Any]]:
+        """Convert to the chunks format expected by RAG pipeline."""
+        chunks = []
+        for result in self.results:
+            chunk = {
+                "document_id": result.id,
+                "content": result.content,
+                "metadata": result.metadata,
+                "score": result.score,  # Use score (similarity) not distance
+                "distance": result.distance,  # Keep distance for compatibility
+            }
+            chunks.append(chunk)
+        return chunks
+
+
 # Protocols for dependency injection
 class VectorCollection(Protocol):
     """Vector collection interface."""
@@ -85,7 +129,7 @@ class VectorCollection(Protocol):
         where: dict[str, Any] | None = None,
         where_document: dict[str, Any] | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]: ...
+    ) -> VectorSearchResults: ...
 
     def get(
         self,
@@ -444,15 +488,37 @@ class VectorStorage:
                 raise RuntimeError("Vector database is not initialized - database is None")
 
             logger.debug("vector_storage", "initialize", f"Creating collection: {collection_name}")
-            self.collection = self.database.create_collection(name=collection_name, reset_if_exists=reset_if_exists)
+            logger.info(
+                "vector_storage",
+                "initialize",
+                f"STARTED | collection_name={collection_name} | reset_if_exists={reset_if_exists}",
+            )
+
+            created_collection = self.database.create_collection(name=collection_name, reset_if_exists=reset_if_exists)
+            logger.info(
+                "vector_storage",
+                "initialize",
+                f"CREATED COLLECTION | type={type(created_collection).__name__} | collection_none={created_collection is None}",
+            )
+
+            self.collection = created_collection
+            logger.info(
+                "vector_storage",
+                "initialize",
+                f"ASSIGNED COLLECTION | self.collection_type={type(self.collection).__name__} | self.collection_none={self.collection is None}",
+            )
 
             # Get collection stats for logging
             try:
                 count = self.collection.count()
                 log_performance_metric("vector_storage", "initialize", "collection_count", count)
-            except Exception:
-                logger.trace("vector_storage", "initialize", "Could not get collection count")
+                logger.info("vector_storage", "initialize", f"COLLECTION STATS | count={count}")
+            except Exception as e:
+                logger.error("vector_storage", "initialize", f"Could not get collection count: {str(e)}")
 
+            logger.info(
+                "vector_storage", "initialize", f"COMPLETED: Weaviate collection initialized: {collection_name}"
+            )
             log_component_end("vector_storage", "initialize", f"Initialized collection: {collection_name}")
 
         except Exception as e:
@@ -570,12 +636,19 @@ class VectorStorage:
                 logger.debug(
                     "vector_storage", "search_documents", f"Searching by text: '{query_text[:50]}...' (top_k={top_k})"
                 )
-                raw_results = self.collection.query(
+                vector_results = self.collection.query(
                     query_texts=[query_text],
                     n_results=top_k,
                     where=filter_metadata,
                     include=["documents", "metadatas", "distances"],
                 )
+                # Convert VectorSearchResults to chunks format for compatibility
+                raw_results: dict[str, Any] = {"documents": [], "metadatas": [], "distances": []}
+                chunks_data = vector_results.to_chunks_format()
+                if chunks_data:
+                    raw_results["documents"] = [[chunk["content"] for chunk in chunks_data]]
+                    raw_results["metadatas"] = [[chunk["metadata"] for chunk in chunks_data]]
+                    raw_results["distances"] = [[chunk["distance"] for chunk in chunks_data]]
                 log_decision_point("vector_storage", "search_documents", "search_type=text", "query_executed")
             elif query_embedding is not None:
                 # Convert embedding to numpy array if needed for shape access
@@ -594,12 +667,18 @@ class VectorStorage:
                     "search_documents",
                     f"Searching by embedding: shape={embedding_shape} (top_k={top_k})",
                 )
-                raw_results = self.collection.query(
+                vector_results = self.collection.query(
                     query_embeddings=[embedding_data],
                     n_results=top_k,
                     where=filter_metadata,
                     include=["documents", "metadatas", "distances"],
                 )
+                # Convert VectorSearchResults to chunks format for compatibility
+                chunks_data = vector_results.to_chunks_format()
+                if chunks_data:
+                    raw_results["documents"] = [[chunk["content"] for chunk in chunks_data]]
+                    raw_results["metadatas"] = [[chunk["metadata"] for chunk in chunks_data]]
+                    raw_results["distances"] = [[chunk["distance"] for chunk in chunks_data]]
                 log_decision_point("vector_storage", "search_documents", "search_type=embedding", "query_executed")
             else:
                 logger.error("vector_storage", "search_documents", "Neither query_text nor query_embedding provided")

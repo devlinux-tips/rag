@@ -35,12 +35,16 @@ class ChatConversation:
 
     def get_created_at_timestamp(self) -> float:
         """Get created_at as Unix timestamp for JSON serialization."""
+        if self.created_at is None:
+            return float(int(time.time()))
         if isinstance(self.created_at, datetime):
             return self.created_at.timestamp()
         return float(self.created_at)
 
     def get_updated_at_timestamp(self) -> float:
         """Get updated_at as Unix timestamp for JSON serialization."""
+        if self.updated_at is None:
+            return float(int(time.time()))
         if isinstance(self.updated_at, datetime):
             return self.updated_at.timestamp()
         return float(self.updated_at)
@@ -181,7 +185,7 @@ class ChatPersistenceManager:
             WHERE conversation_id = $1
             ORDER BY order_index ASC
         """
-        params = [conversation_id]
+        params: List[Any] = [conversation_id]
 
         if limit:
             query += " LIMIT $2"

@@ -5,7 +5,7 @@ Creates appropriate database provider based on configuration.
 Supports fail-fast validation and AI-friendly logging.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, cast
 
 from .protocols import DatabaseProvider
 from .providers.postgresql_provider import PostgreSQLProvider
@@ -57,7 +57,7 @@ def create_database_provider(config: Dict[str, Any]) -> DatabaseProvider:
 
     # Create provider instance
     provider_class = providers[provider_type]
-    provider = provider_class()
+    provider: DatabaseProvider = cast(DatabaseProvider, provider_class())
 
     logger.info(
         "database_factory", "create_provider",

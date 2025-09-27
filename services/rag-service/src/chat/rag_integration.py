@@ -12,6 +12,7 @@ from ..utils.logging_factory import get_system_logger, log_component_start, log_
 from ..utils.factories import create_complete_rag_system
 from ..models.multitenant_models import Tenant, User
 from ..query.query_classifier import create_query_classifier, QueryType
+from .exceptions import RAGPipelineError, RAGEmptyResultsError
 
 
 @dataclass
@@ -93,36 +94,27 @@ class RAGChatService:
     async def _create_narodne_novine_rag_system(self):
         """Create RAG system for Narodne Novine documents."""
         from ..utils.factories import create_complete_rag_system
-        from ..models.multitenant_models import Tenant, User
 
         self.logger.info("rag_chat_service", "_create_narodne_novine_rag_system",
-                        "Creating Narodne Novine RAG system with features tenant")
+                        "Creating Narodne Novine RAG system with feature scope")
 
-        # Create special tenant and user for Narodne Novine feature collection
-        features_tenant = Tenant(
-            id="tenant:features",
-            name="Features Tenant",
-            slug="features"
-        )
-        feature_user = User(
-            id="user:feature_user",
-            tenant_id=features_tenant.id,
-            email="feature_user@features.example.com",
-            username="feature_user",
-            full_name="Feature User"
-        )
+        # AI-friendly TRACE logging
+        self.logger.trace("rag_chat_service", "_create_narodne_novine_rag_system",
+                         f"RAG_SYSTEM_CREATE | scope=feature | feature_name=narodne-novine | "
+                         f"language={self.language} | expected_collection=Features_narodne-novine_{self.language}")
 
-        # Create RAG system for features tenant with feature_user
-        # This will use the existing collection: Features_user_hr (4,962 documents)
+        # Create RAG system with feature scope (truly global, no user/tenant)
+        # This will use collection: Features_narodne-novine_hr
         narodne_novine_rag = create_complete_rag_system(
             language=self.language,
-            tenant=features_tenant,
-            user=feature_user
+            scope="feature",
+            feature_name="narodne-novine"
         )
         await narodne_novine_rag.initialize()
 
         self.logger.info("rag_chat_service", "_create_narodne_novine_rag_system",
-                        "Narodne Novine RAG system created successfully")
+                        f"Narodne Novine RAG system created successfully with collection: "
+                        f"Features_narodne-novine_{self.language}")
 
         return narodne_novine_rag
 
@@ -165,15 +157,24 @@ class RAGChatService:
         # Use specified scope or current scope
         search_scope = scope or self.current_scope
 
+        # AI-friendly TRACE logging
+        self.logger.trace("rag_chat_service", "search_documents",
+                         f"RAG_SEARCH_START | query='{query_text[:100]}' | scope={search_scope} | "
+                         f"max_results={max_results} | current_scope={self.current_scope}")
+
         # Switch to requested scope if needed
         if scope and scope != self.current_scope:
+            self.logger.trace("rag_chat_service", "search_documents",
+                             f"SCOPE_SWITCH | from={self.current_scope} | to={scope}")
             if not self.set_scope(scope):
                 self.logger.error("rag_chat_service", "search_documents",
-                                f"Failed to switch to scope: {scope}")
+                                f"SCOPE_SWITCH_FAILED | scope={scope} | available={list(self.rag_systems.keys())}")
                 return None
 
         if not self.rag_system:
-            raise RuntimeError("RAG system not initialized. Call initialize() first.")
+            error_msg = f"RAG_SYSTEM_NOT_INITIALIZED | scope={search_scope}"
+            self.logger.error("rag_chat_service", "search_documents", error_msg)
+            raise RAGPipelineError("RAG system not initialized. Call initialize() first.")
 
         log_component_start("rag_chat_service", "search_documents",
                            query_length=len(query_text), max_results=max_results, scope=search_scope)
@@ -199,7 +200,7 @@ class RAGChatService:
                 self.logger.info("rag_chat_service", "search_documents",
                                f"No documents found for query in scope: {search_scope}")
                 log_component_end("rag_chat_service", "search_documents", "No results")
-                return None
+                raise RAGEmptyResultsError(f"No matching documents found for query in scope '{search_scope}'")
 
             # Convert to chat context
             context = RAGChatContext(
@@ -226,10 +227,14 @@ class RAGChatService:
 
             return context
 
+        except RAGEmptyResultsError:
+            # Re-raise empty results errors as-is
+            raise
         except Exception as e:
             self.logger.error("rag_chat_service", "search_documents", f"RAG search failed: {e}")
             log_component_end("rag_chat_service", "search_documents", f"Error: {e}")
-            return None
+            # Pipeline failures should fail hard
+            raise RAGPipelineError(f"RAG pipeline failure: {e}") from e
 
     def should_use_rag(self, user_message: str) -> bool:
         """

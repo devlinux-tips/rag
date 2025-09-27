@@ -263,10 +263,25 @@ def determine_retrieval_strategy(
     """
     # Strategy priority: specific > cultural > complexity > default
 
+    # DEBUG: Log the strategy lookup parameters
+    logger = get_system_logger()
+    logger.info(
+        "strategy_lookup",
+        "determine_retrieval_strategy",
+        f"category={category.value} | strategy_config_keys={list(strategy_config.keys())} | "
+        f"legal_in_config={category.value in strategy_config} | "
+        f"legal_value={strategy_config.get(category.value, 'NOT_FOUND')}",
+    )
+
     # Check for category-specific strategy
-    category_key = f"category_{category.value}"
-    if category_key in strategy_config:
-        return strategy_config[category_key]
+    if category.value in strategy_config:
+        selected_strategy = strategy_config[category.value]
+        logger.info(
+            "strategy_lookup",
+            "determine_retrieval_strategy",
+            f"CATEGORY MATCH: {category.value} -> {selected_strategy}",
+        )
+        return selected_strategy
 
     # Check for cultural context strategy
     if cultural_indicators and "cultural_context" in strategy_config:
@@ -323,7 +338,12 @@ def categorize_query_pure(query: str, config: CategorizationConfig) -> CategoryM
         for category, confidence, patterns in category_matches:
             # Get category priority from config
             category_priority = 0  # Default priority
-            if category.value in config.categories:
+
+            # Handle both list and dict formats for config.categories
+            if isinstance(config.categories, list):
+                # If categories is a list, all have equal priority (0)
+                pass  # category_priority already set to 0
+            elif isinstance(config.categories, dict) and category.value in config.categories:
                 category_settings = config.categories[category.value]
                 if "priority" in category_settings:
                     category_priority = category_settings["priority"]
@@ -393,12 +413,13 @@ class QueryCategorizer:
             retrieval_strategies=config_data["retrieval_strategies"],
         )
 
-    def categorize_query(self, query: str) -> CategoryMatch:
+    def categorize_query(self, query: str, scope_context: dict[str, Any] | None = None) -> CategoryMatch:
         """
         Categorize query using dependency injection.
 
         Args:
             query: Query text to categorize
+            scope_context: Optional scope context including feature information
 
         Returns:
             CategoryMatch with categorization results
@@ -409,7 +430,30 @@ class QueryCategorizer:
         self._log_debug(f"Categorizing query: {query[:50]}...")
         logger.debug("query_categorizer", "categorize_query", f"Processing query: '{query}'")
 
-        result = categorize_query_pure(query, self._config)
+        # Check for narodne-novine scope override - always categorize as legal
+        if scope_context and scope_context.get("feature_name") == "narodne-novine":
+            self._log_info("Narodne-novine scope detected - overriding category to LEGAL")
+            logger.info(
+                "query_categorizer",
+                "scope_override",
+                "Feature 'narodne-novine' detected - forcing category to LEGAL with high confidence",
+            )
+
+            result = CategoryMatch(
+                category=CategoryType.LEGAL,
+                confidence=0.9,  # High confidence for scope-based categorization
+                matched_patterns=["narodne-novine-scope"],
+                cultural_indicators=[],
+                complexity=calculate_query_complexity(query, self._config.complexity_thresholds),
+                retrieval_strategy=determine_retrieval_strategy(
+                    CategoryType.LEGAL,
+                    calculate_query_complexity(query, self._config.complexity_thresholds),
+                    [],
+                    self._config.retrieval_strategies,
+                ),
+            )
+        else:
+            result = categorize_query_pure(query, self._config)
 
         log_decision_point(
             "query_categorizer",

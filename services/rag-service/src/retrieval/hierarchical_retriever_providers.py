@@ -5,6 +5,7 @@ Production and mock providers for testable hierarchical retrieval system.
 
 from typing import Any
 
+from ..utils.config_loader import get_config_section
 from ..utils.logging_factory import (
     get_system_logger,
     log_component_end,
@@ -14,6 +15,23 @@ from ..utils.logging_factory import (
 )
 from .categorization import CategoryMatch, CategoryType, QueryComplexity
 from .hierarchical_retriever import ProcessedQuery, RetrievalConfig, SearchResult
+
+
+def get_similarity_thresholds() -> dict[str, float]:
+    """Get similarity thresholds from configuration."""
+    try:
+        retrieval_config = get_config_section("config", "retrieval")
+        if "similarity_thresholds" not in retrieval_config:
+            raise KeyError("Missing 'similarity_thresholds' section in retrieval configuration")
+        return retrieval_config["similarity_thresholds"]
+    except Exception as e:
+        from ..utils.logging_factory import get_system_logger
+
+        logger = get_system_logger()
+        logger.error(
+            "config_error", "get_similarity_thresholds", f"Failed to load similarity thresholds from config: {str(e)}"
+        )
+        raise RuntimeError(f"Configuration error: Cannot load similarity thresholds - {str(e)}") from e
 
 
 class MockQueryProcessor:
@@ -58,9 +76,9 @@ class MockCategorizer:
         """Set mock response for specific query."""
         self.mock_responses[query] = response
 
-    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
+    def categorize_query(self, query: str, scope_context: dict[str, Any] | None = None) -> CategoryMatch:
         """Mock query categorization."""
-        self.call_history.append({"query": query, "context": context})
+        self.call_history.append({"query": query, "scope_context": scope_context})
 
         if query in self.mock_responses:
             return self.mock_responses[query]
@@ -299,9 +317,9 @@ class Categorizer:
         config_provider = create_config_provider()
         self._categorizer = QueryCategorizer(language, config_provider)
 
-    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
+    def categorize_query(self, query: str, scope_context: dict[str, Any] | None = None) -> CategoryMatch:
         """Categorize query using categorizer."""
-        return self._categorizer.categorize_query(query)
+        return self._categorizer.categorize_query(query, scope_context)
 
 
 class SearchEngineAdapter:
@@ -313,30 +331,109 @@ class SearchEngineAdapter:
 
     async def search(self, query_text: str, k: int = 5, similarity_threshold: float = 0.3) -> list[SearchResult]:
         """Adapt search engine to our interface."""
-        # Use search_by_text method from ChromaDBSearchProvider
-        raw_results = await self._search_engine.search_by_text(
-            query_text=query_text, top_k=k, filters=None, include_metadata=True
+        # AI DEBUGGING: Comprehensive trace logging for SearchEngineAdapter
+        from ..utils.logging_factory import get_system_logger
+
+        logger = get_system_logger()
+
+        logger.trace(
+            "search_engine_adapter",
+            "search_start",
+            f"ADAPTER_SEARCH | query_preview={query_text[:50]} | k={k} | "
+            f"similarity_threshold={similarity_threshold} | "
+            f"engine_type={type(self._search_engine).__name__}",
         )
 
-        # Convert ChromaDB results format to list of results
+        # Handle both ChromaDB and Weaviate interfaces - use class name for definitive identification
+        if type(self._search_engine).__name__ == "WeaviateSearchProvider":
+            # Weaviate provider - use search_by_text method
+            logger.trace(
+                "search_engine_adapter",
+                "weaviate_path",
+                f"WEAVIATE_CALL | using_search_by_text=true | passed_threshold={similarity_threshold}",
+            )
+            raw_results = await self._search_engine.search_by_text(
+                query_text=query_text, top_k=k, filters=None, include_metadata=True
+            )
+        elif hasattr(self._search_engine, "search_by_text"):
+            # ChromaDB interface
+            logger.trace("search_engine_adapter", "chromadb_path", "CHROMADB_CALL | using_search_by_text=true")
+            raw_results = await self._search_engine.search_by_text(
+                query_text=query_text, top_k=k, filters=None, include_metadata=True
+            )
+        else:
+            raise ValueError(
+                f"Search engine {type(self._search_engine)} doesn't support search_by_text or search methods"
+            )
+
+        logger.trace(
+            "search_engine_adapter",
+            "raw_results_received",
+            f"RAW_RESULTS | count={len(raw_results) if isinstance(raw_results, list) else 'dict_format'} | "
+            f"type={type(raw_results).__name__}",
+        )
+
+        # Convert results from both ChromaDB and Weaviate formats
         results = []
-        if raw_results and "documents" in raw_results and raw_results["documents"]:
-            documents = raw_results["documents"][0] if raw_results["documents"] else []
-            metadatas = raw_results.get("metadatas", [[]])[0] if raw_results.get("metadatas") else []
-            distances = raw_results.get("distances", [[]])[0] if raw_results.get("distances") else []
 
-            for i, doc in enumerate(documents):
-                # Convert distance to similarity score (assuming cosine distance)
-                distance = distances[i] if i < len(distances) else 1.0
-                similarity = max(0.0, 1.0 - distance)  # Convert distance to similarity
+        if type(self._search_engine).__name__ != "WeaviateSearchProvider":
+            # ChromaDB format: {"documents": [[...]], "metadatas": [[...]], "distances": [[...]]}
+            if raw_results and "documents" in raw_results and raw_results["documents"]:
+                documents = raw_results["documents"][0] if raw_results["documents"] else []
+                metadatas = raw_results.get("metadatas", [[]])[0] if raw_results.get("metadatas") else []
+                distances = raw_results.get("distances", [[]])[0] if raw_results.get("distances") else []
 
-                # Skip results below threshold
-                if similarity < similarity_threshold:
-                    continue
+                for i, doc in enumerate(documents):
+                    # Convert distance to similarity score (assuming cosine distance)
+                    distance = distances[i] if i < len(distances) else 1.0
+                    similarity = max(0.0, 1.0 - distance)  # Convert distance to similarity
 
-                metadata = metadatas[i] if i < len(metadatas) else {}
+                    # Skip results below threshold
+                    if similarity < similarity_threshold:
+                        continue
 
-                results.append({"content": doc, "metadata": metadata, "similarity_score": similarity})
+                    metadata = metadatas[i] if i < len(metadatas) else {}
+                    results.append({"content": doc, "metadata": metadata, "similarity_score": similarity})
+        else:
+            # Weaviate format: list of dicts with content, metadata, and similarity_score
+            logger.trace(
+                "search_engine_adapter",
+                "weaviate_processing",
+                f"WEAVIATE_PROCESSING | raw_results_count={len(raw_results) if raw_results else 0}",
+            )
+
+            if raw_results:
+                for i, result in enumerate(raw_results):
+                    if isinstance(result, dict):
+                        similarity = result.get("similarity_score", 0.5)
+                        passes_filter = similarity >= similarity_threshold
+                        filter_status = "PASS" if passes_filter else "FAIL"
+
+                        logger.trace(
+                            "search_engine_adapter",
+                            "weaviate_filtering",
+                            f"WEAVIATE_RESULT_{i:02d} | similarity={similarity:.6f} | "
+                            f"threshold={similarity_threshold} | passes={passes_filter} | "
+                            f"status={filter_status} | content_preview={str(result.get('content', ''))[:50]}",
+                        )
+
+                        if passes_filter:
+                            results.append(result)
+                    else:
+                        # Fallback for unexpected result format
+                        logger.warning(
+                            "search_engine_adapter",
+                            "unexpected_format",
+                            f"UNEXPECTED_FORMAT | result_type={type(result).__name__} | fallback_similarity=0.5",
+                        )
+                        results.append({"content": str(result), "metadata": {}, "similarity_score": 0.5})
+
+            logger.trace(
+                "search_engine_adapter",
+                "weaviate_filtering_summary",
+                f"WEAVIATE_SUMMARY | input_count={len(raw_results) if raw_results else 0} | "
+                f"passed_filter={len(results)} | threshold={similarity_threshold}",
+            )
 
         # Convert to our SearchResult format
         adapted_results = []
@@ -413,15 +510,7 @@ def create_mock_setup(
     # Create test configuration
     config = RetrievalConfig(
         default_max_results=5,
-        similarity_thresholds={
-            "semantic_focused": 0.5,
-            "keyword_hybrid": 0.4,
-            "technical_precise": 0.6,
-            "temporal_aware": 0.4,
-            "faq_optimized": 0.3,
-            "comparative_structured": 0.4,
-            "default": 0.3,
-        },
+        similarity_thresholds=get_similarity_thresholds(),
         boost_weights={
             "keyword": 0.2,
             "technical": 0.1,
@@ -491,15 +580,7 @@ def create_hierarchical_retriever(
     # Create production configuration
     config = RetrievalConfig(
         default_max_results=5,
-        similarity_thresholds={
-            "semantic_focused": 0.5,
-            "keyword_hybrid": 0.4,
-            "technical_precise": 0.6,
-            "temporal_aware": 0.4,
-            "faq_optimized": 0.3,
-            "comparative_structured": 0.4,
-            "default": 0.3,
-        },
+        similarity_thresholds=get_similarity_thresholds(),
         boost_weights={
             "keyword": 0.2,
             "technical": 0.1,
@@ -551,15 +632,7 @@ def create_test_config(max_results: int = 5, performance_tracking: bool = True) 
     """Create test configuration with customizable parameters."""
     return RetrievalConfig(
         default_max_results=max_results,
-        similarity_thresholds={
-            "semantic_focused": 0.5,
-            "keyword_hybrid": 0.4,
-            "technical_precise": 0.6,
-            "temporal_aware": 0.4,
-            "faq_optimized": 0.3,
-            "comparative_structured": 0.4,
-            "default": 0.3,
-        },
+        similarity_thresholds=get_similarity_thresholds(),
         boost_weights={
             "keyword": 0.2,
             "technical": 0.1,

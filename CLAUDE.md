@@ -78,11 +78,30 @@
 - **Tenant Context**: Multi-tenant data isolation in `data/{tenant_slug}/`
 - **Dimension Compatibility**: Different models = different dimensions = collection recreation needed
 
+## Virtual Environment Management
+
+### **CRITICAL: Use ONLY ONE venv**
+- **Repository Root venv**: `/home/x/src/rag/learn-rag/venv` (USE THIS ONE)
+- **DO NOT CREATE**: `services/rag-service/venv` (NEVER use this)
+- **All commands MUST use**: `cd /home/x/src/rag/learn-rag && source venv/bin/activate`
+- **Never use relative paths for venv**: Always use absolute path from repo root
+
+## Dependency Management
+
+### **CRITICAL: Use ONLY ONE requirements.txt**
+- **Repository Root**: `/home/x/src/rag/learn-rag/requirements.txt` (MASTER FILE)
+- **DO NOT CREATE**: Multiple requirements.txt files in services/ subdirectories
+- **Contains**: Complete RAG stack + FastAPI + development tools + psutil>=5.9.0
+- **Install command**: `cd /home/x/src/rag/learn-rag && source venv/bin/activate && pip install -r requirements.txt`
+- **Never split dependencies** - all Python packages go in the single root requirements.txt
+- **Docker containers**: Update Dockerfile COPY commands to use `COPY requirements.txt ./` from repo root
+
 ## Essential Commands
 
 ### **Development**
 ```bash
-# Activate environment
+# ALWAYS activate from repository root
+cd /home/x/src/rag/learn-rag
 source venv/bin/activate
 
 # CLI Usage (Multi-tenant)
@@ -96,10 +115,17 @@ python rag.py --language hr list-collections
 
 # Configuration Testing
 python -c "from src.utils.config_loader import get_unified_config; print(get_unified_config())"
+
+# Running services - ALWAYS from repo root with venv
+cd /home/x/src/rag/learn-rag && source venv/bin/activate && python services/rag-api/main.py
+cd /home/x/src/rag/learn-rag && source venv/bin/activate && python services/rag-service/scripts/any_script.py
 ```
 
 ### **Quality Checks**
 ```bash
+# ALWAYS from repo root with venv activated
+cd /home/x/src/rag/learn-rag && source venv/bin/activate
+
 # Testing
 pytest tests/ -v
 
@@ -111,7 +137,8 @@ mypy src/
 
 ## Working Directory Context
 
-**Primary Work Location**: `services/rag-service/`
+**Repository Root**: `/home/x/src/rag/learn-rag/` (ALWAYS start here)
+**Primary Work Location**: `services/rag-service/` (relative to repo root)
 **Configuration Files**: `services/rag-service/config/`
 **Source Code**: `services/rag-service/src/`
 

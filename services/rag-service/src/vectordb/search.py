@@ -119,14 +119,14 @@ class VectorSearchProvider(Protocol):
         top_k: int,
         filters: dict[str, Any] | None = None,
         include_metadata: bool = True,
-    ) -> dict[str, Any]:
-        """Search by embedding vector."""
+    ) -> Any:
+        """Search by embedding vector. Returns VectorSearchResults or legacy dict format."""
         ...
 
     async def search_by_text(
         self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
-    ) -> dict[str, Any]:
-        """Search by text (if supported by provider)."""
+    ) -> Any:
+        """Search by text (if supported by provider). Returns VectorSearchResults or legacy dict format."""
         ...
 
     async def get_document(self, document_id: str) -> dict[str, Any] | None:
@@ -223,12 +223,13 @@ def validate_search_query(query: SearchQuery) -> list[str]:
     return errors
 
 
-def parse_vector_search_results(raw_results: dict[str, Any], method_used: str = "semantic") -> list[SearchResult]:
+def parse_vector_search_results(raw_results: Any, method_used: str = "semantic") -> list[SearchResult]:
     """
-    Parse raw vector database results into SearchResult objects.
+    Parse vector database results into SearchResult objects.
+    Handles both VectorSearchResults (new format) and legacy ChromaDB dict format.
 
     Args:
-        raw_results: Raw results from vector database
+        raw_results: Results from vector database (VectorSearchResults or legacy dict)
         method_used: Search method identifier
 
     Returns:
@@ -239,6 +240,31 @@ def parse_vector_search_results(raw_results: dict[str, Any], method_used: str = 
 
     results: list[SearchResult] = []
 
+    # Import here to avoid circular imports
+    from .storage import VectorSearchResults
+
+    # Handle new VectorSearchResults format
+    if isinstance(raw_results, VectorSearchResults):
+        logger.debug(
+            "search_parser",
+            "parse_vector_search_results",
+            f"Processing VectorSearchResults with {len(raw_results.results)} results",
+        )
+
+        for vector_result in raw_results.results:
+            result = SearchResult(
+                id=vector_result.id,
+                content=vector_result.content,
+                score=vector_result.score,
+                metadata=vector_result.metadata,
+                method_used=method_used,
+            )
+            results.append(result)
+
+        log_component_end("search_parser", "parse_vector_search_results", f"Parsed {len(results)} VectorSearchResults")
+        return results
+
+    # Handle legacy ChromaDB dict format
     if not raw_results or not raw_results.get("ids"):
         logger.debug("search_parser", "parse_vector_search_results", "No results to parse: empty raw_results or no ids")
         log_component_end("search_parser", "parse_vector_search_results", "No results parsed")

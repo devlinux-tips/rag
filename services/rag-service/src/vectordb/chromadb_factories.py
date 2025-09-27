@@ -22,7 +22,7 @@ from ..utils.logging_factory import (
     log_error_context,
     log_performance_metric,
 )
-from .storage import VectorCollection, VectorDatabase
+from .storage import VectorCollection, VectorDatabase, VectorSearchResult, VectorSearchResults
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class ChromaDBCollection(VectorCollection):
         where: dict[str, Any] | None = None,
         where_document: dict[str, Any] | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> VectorSearchResults:
         """Query collection for similar documents."""
         logger = get_system_logger()
         log_component_start(
@@ -156,18 +156,46 @@ class ChromaDBCollection(VectorCollection):
                     include=final_include,  # type: ignore[arg-type]
                 )
 
-            # Convert ChromaDB QueryResult to dict for compatibility
+            # Convert ChromaDB QueryResult to VectorSearchResults
             results_dict = dict(results)
-            ids_data = results_dict.get("ids", [[]])
-            if ids_data and isinstance(ids_data, (list, tuple)) and len(ids_data) > 0:
-                first_item = ids_data[0]
-                num_results = len(first_item) if hasattr(first_item, "__len__") else 0
-            else:
-                num_results = 0
+
+            # Extract data from ChromaDB response with proper type casting
+            ids_data = cast(list[list[str]], results_dict.get("ids", [[]]))
+            documents_data = cast(list[list[str]], results_dict.get("documents", [[]]))
+            metadatas_data = cast(list[list[dict[str, Any]]], results_dict.get("metadatas", [[]]))
+            distances_data = cast(list[list[float]], results_dict.get("distances", [[]]))
+
+            search_results = []
+
+            # ChromaDB returns nested lists, we need the first sublist
+            if ids_data and len(ids_data) > 0:
+                ids: list[str] = ids_data[0]
+                documents: list[str] = documents_data[0] if documents_data and len(documents_data) > 0 else []
+                metadatas: list[dict[str, Any]] = (
+                    metadatas_data[0] if metadatas_data and len(metadatas_data) > 0 else []
+                )
+                distances: list[float] = distances_data[0] if distances_data and len(distances_data) > 0 else []
+
+                # Convert to VectorSearchResult objects
+                for i, doc_id in enumerate(ids):
+                    result = VectorSearchResult(
+                        id=str(doc_id),
+                        content=documents[i] if i < len(documents) else "",
+                        metadata=metadatas[i] if i < len(metadatas) else {},
+                        distance=distances[i] if i < len(distances) else 1.0,
+                    )
+                    search_results.append(result)
+
+            num_results = len(search_results)
+            vector_results = VectorSearchResults(
+                results=search_results,
+                total_count=num_results,
+                search_time_ms=0.0,  # ChromaDB doesn't provide timing
+            )
 
             log_performance_metric("chroma_collection", "query", "results_returned", num_results)
             log_component_end("chroma_collection", "query", f"Query returned {num_results} results")
-            return results_dict
+            return vector_results
 
         except Exception as e:
             log_error_context(
@@ -403,31 +431,28 @@ class MockCollection(VectorCollection):
         where: dict[str, Any] | None = None,
         where_document: dict[str, Any] | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> VectorSearchResults:
         """Mock query returns first n_results documents."""
         include = include or ["documents", "metadatas", "distances"]
 
         # Simple mock: return first n_results documents
         doc_items = list(self._documents.items())[:n_results]
 
-        results: dict[str, Any] = {"ids": [[]]}
-        if "documents" in include:
-            results["documents"] = [[]]
-        if "metadatas" in include:
-            results["metadatas"] = [[]]
-        if "distances" in include:
-            results["distances"] = [[]]
-
+        search_results = []
         for doc_id, doc_data in doc_items:
-            results["ids"][0].append(doc_id)
-            if "documents" in include:
-                results["documents"][0].append(doc_data["document"])
-            if "metadatas" in include:
-                results["metadatas"][0].append(doc_data["metadata"])
-            if "distances" in include:
-                results["distances"][0].append(0.5)  # Mock distance
+            result = VectorSearchResult(
+                id=str(doc_id),
+                content=doc_data.get("document", ""),
+                metadata=doc_data.get("metadata", {}),
+                distance=0.5,  # Mock distance
+            )
+            search_results.append(result)
 
-        return results
+        return VectorSearchResults(
+            results=search_results,
+            total_count=len(search_results),
+            search_time_ms=0.0,  # Mock timing
+        )
 
     def get(
         self,

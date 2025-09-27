@@ -35,6 +35,7 @@ class RAGQuery:
     context_filters: dict[str, Any] | None = None
     max_results: int | None = None
     metadata: dict[str, Any] | None = None
+    require_rag_documents: bool = True  # Fail if no documents found (no LLM fallback)
 
 
 @dataclass
@@ -132,6 +133,8 @@ class EmbeddingModelProtocol(Protocol):
 
 class VectorStorageProtocol(Protocol):
     """Protocol for vector storage operations."""
+
+    collection: Any  # Vector collection object (varies by provider)
 
     def add_documents(self, documents: list[str], metadatas: list[dict], embeddings: list) -> None: ...
 
@@ -375,16 +378,60 @@ def create_chunk_metadata(
 
 def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[str]:
     """Extract unique sources from retrieved document chunks."""
+    from src.utils.logging_config import get_system_logger
+
+    logger = get_system_logger()
+
     sources = set()
-    for chunk in retrieved_chunks:
+    for i, chunk in enumerate(retrieved_chunks):
+        # AI DEBUGGING: Log actual chunk structure
+        logger.error(
+            "chunk_debug",
+            f"extract_sources_chunk_{i}",
+            f"CHUNK_STRUCTURE | chunk_keys={list(chunk.keys())} | "
+            f"has_metadata={('metadata' in chunk)} | "
+            f"chunk_sample={str(chunk)[:500]}...",
+        )
+
         # FAIL FAST: Chunk must have proper metadata structure
         if "metadata" not in chunk:
             raise ValueError(f"Chunk missing required 'metadata' field: {chunk}")
         metadata = chunk["metadata"]
 
-        if "source" not in metadata:
-            raise ValueError(f"Chunk metadata missing required 'source' field: {metadata}")
-        source = metadata["source"]
+        # AI DEBUGGING: Log metadata structure
+        logger.error(
+            "metadata_debug",
+            f"extract_sources_metadata_{i}",
+            f"METADATA_STRUCTURE | metadata_keys={list(metadata.keys())} | "
+            f"has_source={('source' in metadata)} | "
+            f"metadata_content={metadata}",
+        )
+
+        # ENHANCED: Try multiple source field names
+        source = None
+        source_candidates = ["source", "document_id", "file_path", "filename", "title", "document_title"]
+
+        for field_name in source_candidates:
+            if field_name in metadata:
+                source = metadata[field_name]
+                logger.info(
+                    "source_mapping", f"found_source_field_{i}", f"FOUND_SOURCE | field={field_name} | value={source}"
+                )
+                break
+
+        if source is None:
+            # Try to construct source from available metadata
+            if "detected_category" in metadata:
+                source = f"Document (Category: {metadata['detected_category']})"
+                logger.info("source_fallback", f"constructed_source_{i}", f"CONSTRUCTED_SOURCE | value={source}")
+            else:
+                logger.error(
+                    "source_missing",
+                    f"no_source_found_{i}",
+                    f"NO_SOURCE_AVAILABLE | metadata_keys={list(metadata.keys())}",
+                )
+                source = "Unknown Document"
+
         if source and source != "Unknown":
             sources.add(source)
 
@@ -393,11 +440,27 @@ def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[
 
 def prepare_chunk_info(chunk_result: dict[str, Any], return_debug_info: bool = False) -> dict[str, Any]:
     """Prepare chunk information for response."""
+    # ENHANCED: Extract source using same logic as extract_sources_from_chunks
+    metadata = chunk_result["metadata"]
+    source = None
+    source_candidates = ["source", "document_id", "file_path", "filename", "title", "document_title"]
+
+    for field_name in source_candidates:
+        if field_name in metadata:
+            source = metadata[field_name]
+            break
+
+    if source is None:
+        if "detected_category" in metadata:
+            source = f"Document (Category: {metadata['detected_category']})"
+        else:
+            source = "Unknown"
+
     chunk_info = {
         "content": chunk_result["content"],
         "similarity_score": chunk_result["similarity_score"],
         "final_score": chunk_result["final_score"],
-        "source": (chunk_result["metadata"]["source"] if "source" in chunk_result["metadata"] else "Unknown"),
+        "source": source,
         "chunk_index": (chunk_result["metadata"]["chunk_index"] if "chunk_index" in chunk_result["metadata"] else 0),
     }
 
@@ -590,6 +653,7 @@ class RAGSystem:
         ollama_config: OllamaConfig,
         processing_config: ProcessingConfig,
         retrieval_config: RetrievalConfig,
+        batch_config: dict[str, Any],  # Raw batch config dict for BatchProcessingConfig.from_config()
     ):
         """Initialize with all dependencies injected."""
         system_logger = get_system_logger()
@@ -602,6 +666,11 @@ class RAGSystem:
         self.ollama_config = ollama_config
         self.processing_config = processing_config
         self.retrieval_config = retrieval_config
+
+        # Initialize batch processing config
+        from ..preprocessing.batch_processor import BatchProcessingConfig
+
+        self.batch_config = BatchProcessingConfig.from_config(batch_config)
 
         log_config_usage(
             "rag_system",
@@ -632,6 +701,7 @@ class RAGSystem:
         self._initialized = False
         self._document_count = 0
         self._query_count = 0
+        self._collection_name = None  # Will be set during initialization
 
     async def initialize(self) -> None:
         """Initialize all pipeline components."""
@@ -654,21 +724,76 @@ class RAGSystem:
             "rag_system", "post_init", f"Embedding model initialized: {self.embedding_config.model_name}"
         )
 
-        # Initialize vector storage with the pending collection name
-        if hasattr(self._vector_storage, "_pending_collection_name"):
-            await self._vector_storage.initialize(
-                collection_name=self._vector_storage._pending_collection_name, reset_if_exists=False
-            )
+        # Initialize vector storage with the pending collection name (if not already initialized)
+        if self._vector_storage.collection is None:
+            if hasattr(self._vector_storage, "_pending_collection_name"):
+                self._collection_name = self._vector_storage._pending_collection_name
+                await self._vector_storage.initialize(
+                    collection_name=self._vector_storage._pending_collection_name, reset_if_exists=False
+                )
+                system_logger.debug(
+                    "rag_system",
+                    "post_init",
+                    f"Vector storage collection initialized: {self._vector_storage._pending_collection_name}",
+                )
+            else:
+                # Error case - no collection name available
+                error_msg = "Vector storage initialization failed: no collection name specified"
+                system_logger.error("rag_system", "post_init", error_msg)
+                raise RuntimeError(error_msg)
+        else:
+            # Collection already initialized, get the collection name for tracking
+            if hasattr(self._vector_storage.collection, "class_name"):
+                self._collection_name = self._vector_storage.collection.class_name
             system_logger.debug(
                 "rag_system",
                 "post_init",
-                f"Vector storage collection initialized: {self._vector_storage._pending_collection_name}",
+                f"Vector storage already initialized with collection: {self._collection_name}",
             )
-        else:
-            # Error case - no collection name available
-            error_msg = "Vector storage initialization failed: no collection name specified"
-            system_logger.error("rag_system", "post_init", error_msg)
-            raise RuntimeError(error_msg)
+
+        # Initialize search engine with now-initialized VectorStorage
+        # This fixes the issue where search engine was created with uninitialized VectorStorage
+        system_logger.info(
+            "rag_system",
+            "post_init",
+            f"SEARCH ENGINE DEBUG | has_hierarchical_retriever={self._hierarchical_retriever is not None}",
+        )
+        if self._hierarchical_retriever:
+            has_search_engine_attr = hasattr(self._hierarchical_retriever, "_search_engine")
+            search_engine_value = getattr(self._hierarchical_retriever, "_search_engine", "NO_ATTR")
+            search_engine_type = type(search_engine_value).__name__
+            # Check the actual search engine inside the adapter
+            actual_search_engine = None
+            if hasattr(search_engine_value, "_search_engine"):
+                actual_search_engine = search_engine_value._search_engine
+            actual_search_engine_type = type(actual_search_engine).__name__
+            system_logger.info(
+                "rag_system",
+                "post_init",
+                f"SEARCH ENGINE DEBUG | has_attr={has_search_engine_attr} | adapter_type={search_engine_type} | actual_search_engine_type={actual_search_engine_type} | actual_none={actual_search_engine is None}",
+            )
+
+            # Check if the SearchEngineAdapter contains None as the actual search engine
+            if (
+                hasattr(self._hierarchical_retriever, "_search_engine")
+                and hasattr(self._hierarchical_retriever._search_engine, "_search_engine")
+                and self._hierarchical_retriever._search_engine._search_engine is None
+            ):
+                from ..vectordb.search_providers import create_vector_search_provider
+
+                search_engine = create_vector_search_provider(self._vector_storage, self._embedding_model)
+                system_logger.info(
+                    "rag_system", "post_init", f"LATE SEARCH ENGINE INIT | search_engine_none={search_engine is None}"
+                )
+                # Update the SearchEngineAdapter with the properly initialized search engine
+                self._hierarchical_retriever._search_engine._search_engine = search_engine
+                system_logger.info(
+                    "rag_system", "post_init", "Search engine initialized after VectorStorage initialization"
+                )
+            else:
+                system_logger.info(
+                    "rag_system", "post_init", "SEARCH ENGINE DEBUG | Lazy initialization condition not met"
+                )
 
         self._initialized = True
         log_component_end("rag_system", "post_init", "All components initialized successfully")
@@ -690,6 +815,7 @@ class RAGSystem:
         )
 
     async def add_documents(self, document_paths: list[str], batch_size: int = 10) -> DocumentProcessingResult:
+        """Process documents using efficient batch processing for embeddings and vector storage."""
         system_logger = get_system_logger()
         log_component_start(
             "rag_system", "add_documents", doc_count=len(document_paths), batch_size=batch_size, language=self.language
@@ -701,7 +827,9 @@ class RAGSystem:
 
         validated_paths = validate_document_paths(document_paths)
         system_logger.info(
-            "pipeline", "DOCUMENT_PROCESSING", f"STARTED: {len(validated_paths)} documents, batch_size={batch_size}"
+            "pipeline",
+            "BATCH_PROCESSING",
+            f"STARTED: {len(validated_paths)} documents | embedding_batch_size={self.batch_config.embedding_batch_size} | vector_batch_size={self.batch_config.vector_insert_batch_size}",
         )
 
         start_time = time.time()
@@ -710,19 +838,26 @@ class RAGSystem:
         total_chunks = 0
         errors = []
 
-        for i in range(0, len(validated_paths), batch_size):
-            batch = validated_paths[i : i + batch_size]
+        # PHASE 1: Collect all chunks from all documents (no embeddings yet)
+        all_chunks_data = []  # List of (chunk_content, chunk_id, metadata) tuples
+        system_logger.info("batch_processing", "phase_1", "Extracting and chunking all documents...")
+
+        doc_batch_size = self.batch_config.document_batch_size
+
+        for i in range(0, len(validated_paths), doc_batch_size):
+            batch = validated_paths[i : i + doc_batch_size]
             system_logger.debug(
-                "pipeline",
-                "process_batch",
-                f"Batch {i // batch_size + 1}/{(len(validated_paths) - 1) // batch_size + 1}: {len(batch)} documents",
+                "batch_processing",
+                "document_batch",
+                f"Processing document batch {i // doc_batch_size + 1}/{(len(validated_paths) - 1) // doc_batch_size + 1}: {len(batch)} documents",
             )
 
             for doc_path in batch:
-                doc_start = time.time()
-                system_logger.debug("document_processing", "process_document", f"Starting: {doc_path}")
+                time.time()
+                system_logger.debug("document_processing", "extract_and_chunk", f"Processing: {doc_path}")
 
                 try:
+                    # Extract text
                     system_logger.trace("document_processing", "extract_text", f"Starting extraction: {doc_path}")
                     extraction_result = self._document_extractor.extract_text(doc_path)
                     extracted_text = (
@@ -731,130 +866,148 @@ class RAGSystem:
                     if not extracted_text.strip():
                         error_msg = f"No text extracted from {doc_path}"
                         system_logger.warning("document_processing", "extract_text", error_msg)
-                        log_error_context(
-                            "document_processing",
-                            "extract_text",
-                            ValueError(error_msg),
-                            {"doc_path": str(doc_path), "result_type": type(extraction_result).__name__},
-                        )
                         errors.append(error_msg)
                         failed_docs += 1
                         continue
 
-                    log_data_transformation(
-                        "document_processing",
-                        "extract_text",
-                        f"document: {doc_path.name}",
-                        f"text: {len(extracted_text)} chars",
-                    )
-
-                    system_logger.trace(
-                        "document_processing", "clean_text", f"Starting cleaning: {len(extracted_text)} chars"
-                    )
+                    # Clean text
+                    system_logger.trace("document_processing", "clean_text", f"Cleaning: {len(extracted_text)} chars")
                     cleaning_result = self._text_cleaner.clean_text(extracted_text)
                     cleaned_text = cleaning_result.text if hasattr(cleaning_result, "text") else str(cleaning_result)
-                    log_data_transformation(
-                        "document_processing",
-                        "clean_text",
-                        f"{len(extracted_text)} chars",
-                        f"{len(cleaned_text)} chars",
-                    )
 
-                    system_logger.trace(
-                        "document_processing", "chunk_document", f"Starting chunking: {len(cleaned_text)} chars"
-                    )
+                    # Chunk document
+                    system_logger.trace("document_processing", "chunk_document", f"Chunking: {len(cleaned_text)} chars")
                     chunks = self._chunker.chunk_document(cleaned_text, str(doc_path))
                     if not chunks:
                         error_msg = f"No chunks created from {doc_path}"
                         system_logger.warning("document_processing", "chunk_document", error_msg)
-                        log_error_context(
-                            "document_processing",
-                            "chunk_document",
-                            ValueError(error_msg),
-                            {"doc_path": str(doc_path), "text_length": len(cleaned_text)},
-                        )
                         errors.append(error_msg)
                         failed_docs += 1
                         continue
 
-                    log_data_transformation(
-                        "document_processing", "chunk_document", f"{len(cleaned_text)} chars", f"{len(chunks)} chunks"
-                    )
-
+                    # Collect chunk data (but don't generate embeddings yet)
                     for chunk_idx, chunk in enumerate(chunks):
-                        system_logger.trace(
-                            "document_processing",
-                            "process_chunk",
-                            f"Chunk {chunk_idx + 1}/{len(chunks)}: {len(chunk.content)} chars",
-                        )
-
-                        embedding_result = self._embedding_model.generate_embeddings([chunk.content])
-                        embedding = embedding_result.embeddings
-
-                        if hasattr(embedding, "ndim") and embedding.ndim == 2:
-                            embedding = embedding[0]
-                            system_logger.trace(
-                                "document_processing",
-                                "process_chunk",
-                                f"Embedding shape normalized: {embedding.shape if hasattr(embedding, 'shape') else len(embedding)}",
-                            )
-
-                        metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
                         chunk_id = f"{doc_path.stem}_{chunk_idx}_{hash(chunk.content) % 1000000}"
-
-                        # Convert embedding to the right format for Weaviate
-                        if hasattr(embedding, "tolist"):
-                            embedding_data = embedding.tolist()
-                        elif isinstance(embedding, (list, tuple)):
-                            embedding_data = list(embedding)
-                        else:
-                            embedding_data = embedding
-
-                        self._vector_storage.add(
-                            ids=[chunk_id], documents=[chunk.content], metadatas=[metadata], embeddings=[embedding_data]
-                        )
-                        system_logger.trace("document_processing", "vector_storage", f"Stored chunk {chunk_id}")
+                        metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
+                        all_chunks_data.append((chunk.content, chunk_id, metadata))
 
                     processed_docs += 1
                     total_chunks += len(chunks)
-
-                    doc_time = time.time() - doc_start
-                    log_performance_metric(
+                    system_logger.debug(
                         "document_processing",
-                        "process_document",
-                        "duration",
-                        doc_time,
-                        chunks=len(chunks),
-                        chars=len(extracted_text),
-                        doc_name=doc_path.name,
+                        "extract_and_chunk",
+                        f"Collected {len(chunks)} chunks from {doc_path.name}",
                     )
 
                 except Exception as e:
-                    import traceback
-
-                    stack_trace = traceback.format_exc()
                     error_msg = f"Failed to process {doc_path}: {e}"
-                    log_error_context(
-                        "document_processing",
-                        "process_document",
-                        e,
-                        {
-                            "doc_path": str(doc_path),
-                            "language": self.language,
-                            "batch_size": batch_size,
-                            "stack_trace": stack_trace,
-                        },
-                    )
-                    system_logger.error(
-                        "document_processing",
-                        "process_document",
-                        f"FAILED: {doc_path}",
-                        error_type=type(e).__name__,
-                        stack_trace=str(e),
-                    )
+                    system_logger.error("document_processing", "extract_and_chunk", f"ERROR: {error_msg}")
                     errors.append(error_msg)
                     failed_docs += 1
 
+        system_logger.info(
+            "batch_processing",
+            "phase_1_complete",
+            f"Collected {len(all_chunks_data)} chunks from {processed_docs} documents",
+        )
+
+        # PHASE 2: Generate embeddings in batches
+        if not all_chunks_data:
+            system_logger.warning("batch_processing", "phase_2", "No chunks to process - skipping embedding generation")
+        else:
+            system_logger.info(
+                "batch_processing",
+                "phase_2",
+                f"Generating embeddings for {len(all_chunks_data)} chunks in batches of {self.batch_config.embedding_batch_size}...",
+            )
+
+            chunk_contents = [chunk_data[0] for chunk_data in all_chunks_data]
+            all_embeddings = []
+
+            embed_batch_size = self.batch_config.embedding_batch_size
+            for i in range(0, len(chunk_contents), embed_batch_size):
+                batch_contents = chunk_contents[i : i + embed_batch_size]
+                batch_start = time.time()
+
+                system_logger.debug(
+                    "batch_processing",
+                    "embedding_batch",
+                    f"Generating embeddings for batch {i // embed_batch_size + 1}/{(len(chunk_contents) - 1) // embed_batch_size + 1}: {len(batch_contents)} chunks",
+                )
+
+                # Generate embeddings for entire batch at once
+                embedding_result = self._embedding_model.generate_embeddings(batch_contents)
+                batch_embeddings = embedding_result.embeddings
+
+                # Handle 2D embeddings (batch_size x embedding_dim)
+                if hasattr(batch_embeddings, "ndim") and batch_embeddings.ndim == 2:
+                    for embedding in batch_embeddings:
+                        all_embeddings.append(embedding)
+                else:
+                    # Single embedding or list
+                    all_embeddings.extend(batch_embeddings)
+
+                batch_time = time.time() - batch_start
+                system_logger.debug(
+                    "batch_processing",
+                    "embedding_batch",
+                    f"Generated {len(batch_contents)} embeddings in {batch_time:.2f}s",
+                )
+
+            system_logger.info(
+                "batch_processing",
+                "phase_2_complete",
+                f"Generated {len(all_embeddings)} embeddings for {len(all_chunks_data)} chunks",
+            )
+
+            # PHASE 3: Store in vector database in batches
+            system_logger.info(
+                "batch_processing",
+                "phase_3",
+                f"Storing chunks in vector DB in batches of {self.batch_config.vector_insert_batch_size}...",
+            )
+
+            vector_batch_size = self.batch_config.vector_insert_batch_size
+            stored_chunks = 0
+
+            for i in range(0, len(all_chunks_data), vector_batch_size):
+                batch_chunk_data = all_chunks_data[i : i + vector_batch_size]
+                batch_embeddings = all_embeddings[i : i + vector_batch_size]
+
+                system_logger.debug(
+                    "batch_processing",
+                    "vector_batch",
+                    f"Storing batch {i // vector_batch_size + 1}/{(len(all_chunks_data) - 1) // vector_batch_size + 1}: {len(batch_chunk_data)} chunks",
+                )
+
+                # Prepare batch data
+                batch_ids = [chunk_data[1] for chunk_data in batch_chunk_data]
+                batch_documents = [chunk_data[0] for chunk_data in batch_chunk_data]
+                batch_metadatas = [chunk_data[2] for chunk_data in batch_chunk_data]
+
+                # Convert embeddings to proper format for Weaviate
+                batch_embedding_data = []
+                for embedding in batch_embeddings:
+                    if hasattr(embedding, "tolist"):
+                        batch_embedding_data.append(embedding.tolist())
+                    elif isinstance(embedding, (list, tuple)):
+                        batch_embedding_data.append(list(embedding))
+                    else:
+                        batch_embedding_data.append(embedding)
+
+                # Store entire batch at once
+                self._vector_storage.add(
+                    ids=batch_ids, documents=batch_documents, metadatas=batch_metadatas, embeddings=batch_embedding_data
+                )
+
+                stored_chunks += len(batch_chunk_data)
+                system_logger.debug("batch_processing", "vector_batch", f"Stored {len(batch_chunk_data)} chunks")
+
+            system_logger.info(
+                "batch_processing", "phase_3_complete", f"Stored {stored_chunks} chunks in vector database"
+            )
+
+        # Calculate final metrics
         processing_time = time.time() - start_time
         self._document_count += processed_docs
 
@@ -863,16 +1016,17 @@ class RAGSystem:
         log_component_end(
             "rag_system",
             "add_documents",
-            f"Processed {processed_docs}/{len(document_paths)} documents, {total_chunks} chunks",
+            f"BATCH_PROCESSED: {processed_docs}/{len(document_paths)} documents, {total_chunks} chunks in {processing_time:.2f}s",
             duration=processing_time,
             processed_docs=processed_docs,
             failed_docs=failed_docs,
+            total_chunks=total_chunks,
         )
 
         system_logger.info(
             "pipeline",
-            "DOCUMENT_PROCESSING",
-            f"COMPLETED: {processed_docs} processed, {failed_docs} failed, {total_chunks} chunks in {processing_time:.2f}s",
+            "BATCH_PROCESSING_COMPLETE",
+            f"✅ {processed_docs} docs → {total_chunks} chunks → {len(all_embeddings) if all_chunks_data else 0} embeddings → stored in {processing_time:.2f}s",
         )
 
         return DocumentProcessingResult(
@@ -941,6 +1095,13 @@ class RAGSystem:
                 log_decision_point(
                     "query_processing", "no_results_found", "no documents retrieved", "returning empty response"
                 )
+                # AI-friendly TRACE logging for empty results
+                system_logger.trace(
+                    "rag_system",
+                    "query",
+                    f"RETRIEVAL_EMPTY | query='{validated_query.text[:100]}' | "
+                    f"collection={self._collection_name} | chunks_found=0",
+                )
                 return create_empty_response(validated_query, time.time() - query_start, start_time)
 
             try:
@@ -958,6 +1119,16 @@ class RAGSystem:
                     "prepare_context",
                     f"{len(hierarchical_results.documents)} documents",
                     f"{len(context_chunks)} chunks, {total_context_chars} chars",
+                )
+
+                # AI-friendly TRACE logging for chunk retrieval
+                system_logger.trace(
+                    "rag_system",
+                    "query",
+                    f"CHUNKS_RETRIEVED | query='{validated_query.text[:100]}' | "
+                    f"collection={self._collection_name} | chunks_count={len(context_chunks)} | "
+                    f"total_chars={total_context_chars} | "
+                    f"first_chunk_preview='{context_chunks[0][:200] if context_chunks else 'None'}'",
                 )
 
                 from ..retrieval.categorization import CategoryType
@@ -984,6 +1155,17 @@ class RAGSystem:
                 log_config_usage("query_processing", "load_prompts", {"language": self.language})
 
                 context_text = "\n\n".join(context_chunks) if context_chunks else "Nema dostupnih informacija."
+
+                # AI-friendly TRACE logging for context being sent to LLM
+                system_logger.trace(
+                    "rag_system",
+                    "query",
+                    f"CONTEXT_TO_LLM | chunks_used={len(context_chunks)} | "
+                    f"context_length={len(context_text)} | "
+                    f"sending_to_model={self.ollama_config.model} | "
+                    f"has_context={len(context_chunks) > 0}",
+                )
+
                 system_prompt = prompts_config["question_answering_system"]
                 user_prompt = prompts_config["question_answering_user"].format(
                     query=validated_query.text, context=context_text
@@ -1017,6 +1199,18 @@ class RAGSystem:
                 system_logger.trace(
                     "query_processing", "ollama_request", f"Sending to model: {self.ollama_config.model}"
                 )
+
+                # AI-friendly TRACE logging for LLM request
+                system_logger.trace(
+                    "rag_system",
+                    "query",
+                    f"LLM_REQUEST | model={self.ollama_config.model} | "
+                    f"context_chunks={len(context_chunks)} | "
+                    f"context_chars={len(context_text)} | "
+                    f"query='{validated_query.text[:100]}' | "
+                    f"RAG_ENABLED=true",
+                )
+
                 system_logger.info("generation", "ollama_request", "Sending request to Ollama")
                 generation_response = await self._generation_client.generate_text_async(generation_request)
                 generation_time = time.time() - generation_start
@@ -1026,6 +1220,16 @@ class RAGSystem:
                     "llm_generation",
                     f"prompt: {len(user_prompt)} chars",
                     f"response: {len(generation_response.text)} chars in {generation_time:.3f}s",
+                )
+
+                # AI-friendly TRACE logging for LLM response
+                system_logger.trace(
+                    "rag_system",
+                    "query",
+                    f"LLM_RESPONSE | response_length={len(generation_response.text)} | "
+                    f"generation_time={generation_time:.3f}s | "
+                    f"used_context=true | chunks_in_context={len(context_chunks)} | "
+                    f"response_preview='{generation_response.text[:200]}'",
                 )
 
                 log_performance_metric(
@@ -1093,13 +1297,16 @@ class RAGSystem:
                 return create_error_response(validated_query, e, start_time)
 
         except Exception as e:
+            # Import traceback to get full stack trace
+            import traceback
+
             system_logger.error(
                 "query_processing",
                 "pipeline_error",
-                "QUERY_PROCESSING main pipeline failed",
-                error_type=type(e).__name__,
-                stack_trace=str(e),
+                f"QUERY_PROCESSING main pipeline failed: {type(e).__name__}: {str(e)}",
             )
+            # Log the full traceback separately for complete debugging info
+            system_logger.error("query_processing", "full_traceback", traceback.format_exc())
             return create_error_response(validated_query if "validated_query" in locals() else query, e, start_time)
 
     async def health_check(self) -> SystemHealth:
@@ -1212,6 +1419,7 @@ def create_rag_system(
     ollama_config: OllamaConfig,
     processing_config: ProcessingConfig,
     retrieval_config: RetrievalConfig,
+    batch_config: dict[str, Any] | None = None,
 ) -> RAGSystem:
     """Factory function to create RAG system with validated config dependency injection."""
     return RAGSystem(
@@ -1233,6 +1441,7 @@ def create_rag_system(
         ollama_config=ollama_config,
         processing_config=processing_config,
         retrieval_config=retrieval_config,
+        batch_config=batch_config or {},
     )
 
 

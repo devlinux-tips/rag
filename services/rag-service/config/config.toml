@@ -63,19 +63,20 @@ data_base_dir = "./data"
 models_base_dir = "./models"
 system_dir = "./system"
 
-# Multi-tenant path templates - explicit configuration for flexibility
+# Multi-tenant path templates - simplified since only documents are used
 # Templates use {variable} format and are rendered with tenant/user/language data
 tenant_root_template = "{data_base_dir}/{tenant_slug}"
-user_documents_template = "{data_base_dir}/{tenant_slug}/users/{user_id}/documents/{language}"
-tenant_shared_template = "{data_base_dir}/{tenant_slug}/shared/documents/{language}"
+user_documents_template = "{data_base_dir}/{tenant_slug}/users/{user_id}/{language}"
+tenant_shared_template = "{data_base_dir}/{tenant_slug}/{language}"  # Tenant level = shared by default
+# Processed folders are created but never used - keeping for backward compatibility
 user_processed_template = "{data_base_dir}/{tenant_slug}/users/{user_id}/processed/{language}"
-tenant_processed_template = "{data_base_dir}/{tenant_slug}/shared/processed/{language}"
+tenant_processed_template = "{data_base_dir}/{tenant_slug}/processed/{language}"
 chromadb_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 models_path_template = "{models_base_dir}/{tenant_slug}/{language}"
 
 # Feature-specific data sources (outside tenant scope)
-narodne_novine_documents_template = "{data_base_dir}/features/documents/narodne_novine/{language}"
-narodne_novine_processed_template = "{data_base_dir}/features/processed/narodne_novine/{language}"
+# Features only store documents, so no need for extra folder level
+narodne_novine_documents_template = "{data_base_dir}/features/narodne-novine/{language}"
 
 # System-wide temp directory
 temp_dir = "./temp"
@@ -115,7 +116,7 @@ max_batch_size = 1000
 
 # Weaviate-specific configuration (primary focus)
 [vectordb.weaviate]
-host = "localhost"
+host = "weaviate"  # Docker container name
 port = 8080
 grpc_port = 50051
 scheme = "http"
@@ -253,7 +254,7 @@ paragraph_overlap_count = 0
 [batch_processing]
 # Core batch processing settings - PERFORMANCE OPTIMIZED FOR 115 DOCUMENTS
 enabled = true
-document_batch_size = 115  # Process ALL documents in one batch
+document_batch_size = 100  # Process documents in batches of 100
 embedding_batch_size = 1000  # Much larger embedding batches
 vector_insert_batch_size = 2000  # Larger vector insert batches
 max_parallel_workers = 8  # Utilize available CPU cores
@@ -344,6 +345,14 @@ diversity_lambda = 0.7
 use_hybrid_search = true
 enable_query_expansion = false
 
+# Hierarchical retrieval similarity thresholds
+[retrieval.similarity_thresholds]
+semantic_focused = 0.1
+default = 0.3
+comprehensive = 0.05
+strict = 0.7
+factual = 0.6
+
 # ============================================================================
 # RANKING AND RERANKING CONFIGURATION
 # ============================================================================
@@ -427,11 +436,11 @@ streaming_chat = "/api/chat"
 provider = "postgresql"
 
 [database.postgresql]
-host = "localhost"
+host = "postgres"  # Changed from localhost to Docker container name
 port = 5432
 database = "ragdb"
 user = "raguser"
-password = "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+password = "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"  # Keep the proper secure password
 connection_timeout = 30
 max_connections = 10
 pool_min_size = 1
@@ -482,8 +491,8 @@ stream = false
 # ============================================================================
 [llm]
 primary_provider = "openrouter"
-fallback_order = ["ollama"]
-auto_fallback = true
+fallback_order = []  # NO FALLBACKS - OpenRouter only
+auto_fallback = false
 
 # ============================================================================
 # RESPONSE PARSING CONFIGURATION
@@ -512,4 +521,4 @@ features_base_dir = "./data/features"
 enabled = true
 name = "Narodne Novine"
 collection_name = "feature_narodne_novine_hr"
-documents_path = "./data/features/documents/narodne_novine/hr"
+documents_path = "./data/features/narodne_novine/documents/hr"

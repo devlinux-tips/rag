@@ -27,9 +27,7 @@ def run_command(cmd, description, allow_failure=False):
     """Run a command and report its status."""
     print(f"Running {description}...")
     try:
-        result = subprocess.run(
-            cmd, shell=True, check=True, capture_output=True, text=True
-        )
+        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
         print(f"✅ {description} completed successfully")
         if result.stdout:
             print(result.stdout)
@@ -93,16 +91,8 @@ def get_python_targets(repo_root, current_path):
                 break
 
         if rag_service_path:
-            # WHITELIST: Only include core src subdirectories (exclude CLI and everything else)
-            core_dirs = [
-                "utils",
-                "generation",
-                "preprocessing",
-                "retrieval",
-                "models",
-                "pipeline",
-                "vectordb",
-            ]
+            # WHITELIST: Only include core src subdirectories
+            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "models", "pipeline", "vectordb", "cli"]
 
             src_path = rag_service_path / "src"
             if (repo_root / src_path).exists():
@@ -113,18 +103,10 @@ def get_python_targets(repo_root, current_path):
                         rel_path = core_dir_path.relative_to(repo_root)
                         python_targets.append(str(rel_path))
     else:
-        # If we're in repository root, format ONLY core src subdirectories in rag-service
+        # If we're in repository root, format both rag-service and rag-api
         rag_service_path = repo_root / "services" / "rag-service"
         if rag_service_path.exists():
-            core_dirs = [
-                "utils",
-                "generation",
-                "preprocessing",
-                "retrieval",
-                "models",
-                "pipeline",
-                "vectordb",
-            ]
+            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "models", "pipeline", "vectordb", "cli"]
 
             src_path = rag_service_path / "src"
             if src_path.exists():
@@ -133,6 +115,12 @@ def get_python_targets(repo_root, current_path):
                     if core_dir_path.exists() and core_dir_path.is_dir():
                         rel_path = core_dir_path.relative_to(repo_root)
                         python_targets.append(str(rel_path))
+
+        # Add rag-api service
+        rag_api_path = repo_root / "services" / "rag-api"
+        if rag_api_path.exists():
+            rel_path = rag_api_path.relative_to(repo_root)
+            python_targets.append(str(rel_path))
 
     return python_targets
 
@@ -171,14 +159,10 @@ def main():
     targets_str = " ".join(python_targets)
 
     print("\n🚀 AI-Friendly Python Code Formatting")
-    print("    Focus: Core system (src/** except CLI) with consistent best practices")
-    print(
-        "    Strategy: Preserve readable one-liners, fix imports, maintain clean code"
-    )
-    print(
-        "    Tools: Ruff (linting & imports) → Ruff format → MyPy (type checking)"
-    )
-    print("    Exclusions: CLI directory, cache directories, hidden directories")
+    print("    Focus: Core system with consistent best practices")
+    print("    Strategy: Preserve readable one-liners, fix imports, maintain clean code")
+    print("    Tools: Ruff (linting & imports) → Ruff format → MyPy (type checking)")
+    print("    Exclusions: cache directories, hidden directories")
     print("")
 
     success_count = 0
@@ -197,34 +181,24 @@ def main():
             # Ruff check: Fix import sorting, unused imports, and other issues
             # Uses pyproject.toml configuration for AI-friendly rules
             if run_command(
-                f"ruff check --fix --unsafe-fixes {targets_str}",
-                "Ruff auto-fix (imports, unused code, style)",
+                f"ruff check --fix --unsafe-fixes {targets_str}", "Ruff auto-fix (imports, unused code, style)"
             ):
                 success_count += 1
 
         # Use Ruff format - better at preserving AI-friendly one-liners than Black
         if "ruff" in available_tools:
-            print(
-                "🎯 Using Ruff format - Superior at preserving AI-friendly one-liners"
-            )
+            print("🎯 Using Ruff format - Superior at preserving AI-friendly one-liners")
             total_operations += 1
             # Ruff format: Code formatting that preserves readable one-liners better than Black
             # Respects pyproject.toml settings to preserve readable patterns
-            if run_command(
-                f"ruff format {targets_str}",
-                "Ruff formatting (preserves clean one-liners)",
-            ):
+            if run_command(f"ruff format {targets_str}", "Ruff formatting (preserves clean one-liners)"):
                 success_count += 1
 
         # Type checking with MyPy (focuses on core system, excludes CLI)
         if "mypy" in available_tools:
             total_operations += 1
             # MyPy uses pyproject.toml exclusion rules to focus on core system
-            if run_command(
-                f"mypy {targets_str}",
-                "MyPy type checking (core system focus)",
-                allow_failure=True,
-            ):
+            if run_command(f"mypy {targets_str}", "MyPy type checking (core system focus)", allow_failure=True):
                 success_count += 1
     finally:
         # Restore original working directory
@@ -232,13 +206,11 @@ def main():
             os.chdir(original_cwd)
 
     # Report results with AI-friendly focus
-    print(
-        f"\n📊 Results: {success_count}/{total_operations} operations completed successfully"
-    )
+    print(f"\n📊 Results: {success_count}/{total_operations} operations completed successfully")
 
     if success_count == total_operations:
         print("🎉 All AI-friendly formatting and type checking completed successfully!")
-        print("    - Core system (src/** except CLI) follows Python best practices")
+        print("    - Core system follows Python best practices")
         print("    - Clean one-liners preserved with Ruff formatting")
         print("    - Import sorting and unused code removal completed with Ruff")
     elif success_count >= total_operations - 1:  # Allow mypy to fail
@@ -246,7 +218,7 @@ def main():
         print("    - Ruff formatting preserves clean one-liner patterns")
         print("    - Ruff linting and import optimization completed")
         if "mypy" in available_tools and success_count < total_operations:
-            print("⚠️  Some type checking issues remain (focused on core system)")
+            print("⚠️  Some type checking issues remain")
     else:
         print("❌ Critical formatting operations failed")
         print("    Check output above for specific issues")

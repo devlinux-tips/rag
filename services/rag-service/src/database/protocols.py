@@ -411,3 +411,55 @@ class DatabaseProvider(Protocol):
             List[CategorizationTemplate]: List of templates
         """
         ...
+
+    # ================================
+    # Low-level Database Operations
+    # ================================
+
+    @abstractmethod
+    async def execute_query(self, query: str, params: Optional[List[Any]] = None) -> None:
+        """
+        Execute a query that doesn't return results (INSERT, UPDATE, DELETE).
+
+        Args:
+            query: SQL query string
+            params: Optional query parameters
+
+        Raises:
+            DatabaseError: If query execution fails
+        """
+        ...
+
+    @abstractmethod
+    async def fetch_one(self, query: str, params: Optional[List[Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Execute a query and fetch one result.
+
+        Args:
+            query: SQL query string
+            params: Optional query parameters
+
+        Returns:
+            Optional[Dict[str, Any]]: Single result row or None if no results
+
+        Raises:
+            DatabaseError: If query execution fails
+        """
+        ...
+
+    @abstractmethod
+    async def fetch_all(self, query: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Execute a query and fetch all results.
+
+        Args:
+            query: SQL query string
+            params: Optional query parameters
+
+        Returns:
+            List[Dict[str, Any]]: All result rows
+
+        Raises:
+            DatabaseError: If query execution fails
+        """
+        ...

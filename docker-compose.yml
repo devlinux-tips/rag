@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # Vector Database - Weaviate
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+    container_name: rag_weaviate
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'  # Use custom embeddings
+      ENABLE_MODULES: ''
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5s bash -c 'cat < /dev/null > /dev/tcp/localhost/8080' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # PostgreSQL Database for Web API
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag_postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for real-time features
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # RAG API (Python service)
+  rag-api:
+    build:
+      context: .
+      dockerfile: services/rag-api/Dockerfile
+    container_name: rag_api
+    ports:
+      - "8082:8082"
+    environment:
+      # Use container networking
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: 8080
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+      # OpenRouter configuration (from config.toml)
+      OPENROUTER_API_KEY: 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
+    volumes:
+      # Mount data directories
+      - ./services/rag-service/data:/app/data
+      - ./services/rag-service/models:/app/models
+      - ./services/rag-service/config:/app/config
+    depends_on:
+      weaviate:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Web API (Node.js service)
+  web-api:
+    build:
+      context: .
+      dockerfile: services/web-api/Dockerfile
+    container_name: rag_web_api
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # Authentication
+      AUTH_MODE: mock
+      JWT_SECRET: dev-secret-change-in-production
+
+      # Service URLs (container networking)
+      PYTHON_RAG_URL: http://rag_api:8082
+      PYTHON_RAG_TIMEOUT: 30000
+      REDIS_URL: redis://rag_redis:6379
+      DATABASE_URL: postgresql://raguser:x|B&h@p4F@o|k6t;~X]1A((Z.,RG@rag_postgres:5432/ragdb?sslmode=disable
+
+      # Weaviate (for health checks)
+      WEAVIATE_HOST: rag_weaviate
+      WEAVIATE_PORT: 8080
+      WEAVIATE_GRPC_PORT: 50051
+      WEAVIATE_SCHEME: http
+
+      # CORS
+      CORS_ORIGIN: http://localhost:3001,http://localhost:5173
+
+      # Rate limiting
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 60
+
+      # Mock user configuration
+      MOCK_USER_ID: dev_user
+      MOCK_USER_EMAIL: dev@example.com
+      MOCK_TENANT_ID: development
+      MOCK_TENANT_SLUG: development
+      MOCK_LANGUAGE: hr
+      MOCK_FEATURES: narodne-novine,financial-reports
+      MOCK_PERMISSIONS: chat:create,chat:read,chat:write,chat:delete,user:read,user:write,tenant:read
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 150s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: rag_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      rag-api:
+        condition: service_started
+      web-api:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  weaviate_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: rag_network

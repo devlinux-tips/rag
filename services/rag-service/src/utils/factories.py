@@ -5,7 +5,7 @@ Component factory utilities for RAG system dependency injection.
 from pathlib import Path
 from typing import Any
 
-from ..models.multitenant_models import DocumentScope, Tenant, User
+from ..models.multitenant_models import Tenant, User
 from ..pipeline.rag_system import create_rag_system
 from .json_logging import write_debug_json
 from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
@@ -147,16 +147,43 @@ class ProviderAdapterClient:
 
 
 def create_complete_rag_system(
-    language: str, tenant: Tenant | None = None, user: User | None = None, collection_name: str | None = None
+    language: str,
+    scope: str = "user",
+    tenant: Tenant | None = None,
+    user: User | None = None,
+    feature_name: str | None = None,
+    collection_name: str | None = None,
 ):
-    """Create a complete RAG system using real components for production use."""
+    """Create a complete RAG system using real components for production use.
+
+    Args:
+        language: Language code (e.g., 'hr', 'en')
+        scope: Collection scope - 'user', 'tenant', 'feature', or 'global'
+        tenant: Required for 'user' and 'tenant' scopes
+        user: Required for 'user' scope only
+        feature_name: Required for 'feature' scope (e.g., 'narodne-novine')
+        collection_name: Explicit collection name override (bypasses scope logic)
+    """
     logger = get_system_logger()
+
+    # AI-friendly logging for scope clarity
+    logger.trace(
+        "rag_factory",
+        "create_complete_rag_system",
+        f"RAG_SYSTEM_INIT | scope={scope} | language={language} | "
+        f"tenant={tenant.slug if tenant else 'none'} | "
+        f"user={user.username if user else 'none'} | "
+        f"feature={feature_name or 'none'}",
+    )
+
     log_component_start(
         "rag_factory",
         "create_complete_rag_system",
         language=language,
+        scope=scope,
         tenant_slug=tenant.slug if tenant else None,
         user_id=user.username if user else None,
+        feature_name=feature_name,
     )
 
     try:
@@ -213,6 +240,9 @@ def create_complete_rag_system(
         retrieval_config = RetrievalConfig.from_validated_config(main_config)
         ollama_config = OllamaConfig.from_validated_config(main_config)
 
+        # Pass raw batch config dict for RAGSystem initialization
+        batch_config = main_config
+
         # Create individual components using their factories
         from ..generation.enhanced_prompt_templates import create_enhanced_prompt_builder
         from ..generation.response_parser import create_response_parser
@@ -255,23 +285,91 @@ def create_complete_rag_system(
         # Embedding model
         embedding_model = create_embedding_generator(config=embedding_config)
 
-        # Vector storage with proper collection name
-        if collection_name is None and tenant and user:
-            scope = DocumentScope.USER
-            collection_name = tenant.get_collection_name(scope, language)
+        # Vector storage with proper collection name based on scope
+        if collection_name is None:
+            if scope == "user":
+                if not tenant or not user:
+                    raise ValueError(f"Scope 'user' requires both tenant and user | tenant={tenant} | user={user}")
+                collection_name = f"{tenant.slug}_{user.username}_{language}_documents"
+                logger.trace("rag_factory", "collection_naming", f"USER_SCOPE | collection={collection_name}")
 
-        # Use unified vector database factory (supports both Weaviate and ChromaDB)
+            elif scope == "tenant":
+                if not tenant:
+                    raise ValueError(f"Scope 'tenant' requires tenant | tenant={tenant}")
+                collection_name = f"{tenant.slug}_{language}_documents"
+                logger.trace("rag_factory", "collection_naming", f"TENANT_SCOPE | collection={collection_name}")
+
+            elif scope == "feature":
+                if not feature_name:
+                    raise ValueError(f"Scope 'feature' requires feature_name | feature_name={feature_name}")
+                # Weaviate doesn't support hyphens in collection names, replace with underscore
+                safe_feature_name = feature_name.replace("-", "_")
+                collection_name = f"Features_{safe_feature_name}_{language}"
+                logger.trace(
+                    "rag_factory",
+                    "collection_naming",
+                    f"FEATURE_SCOPE | collection={collection_name} | feature={feature_name} | safe_name={safe_feature_name}",
+                )
+
+            elif scope == "global":
+                collection_name = f"Global_{language}_documents"
+                logger.trace("rag_factory", "collection_naming", f"GLOBAL_SCOPE | collection={collection_name}")
+
+            else:
+                raise ValueError(f"Invalid scope: {scope}. Must be 'user', 'tenant', 'feature', or 'global'")
+
+        logger.info(
+            "rag_factory", "create_complete_rag_system", f"Collection name resolved: {collection_name} | scope={scope}"
+        )
+
+        # Use vector database factory (supports both Weaviate and ChromaDB)
         vector_database = create_vector_database(config=main_config, language=language)
 
         # Create VectorStorage with the database and initialize it with collection name
+        import asyncio
+
         from ..vectordb.storage import VectorStorage
 
         vector_storage = VectorStorage(database=vector_database)
 
-        # Initialize the storage with the proper collection name
-        # We'll do this synchronously here since VectorStorage.initialize is async
-        # Store the collection_name for later async initialization in RAG system
-        vector_storage._pending_collection_name = collection_name or f"{language}_documents"
+        # Initialize the storage with the proper collection name - call async initialize
+        final_collection_name = collection_name or f"{language}_documents"
+        logger.info(
+            "rag_factory",
+            "create_complete_rag_system",
+            f"Initializing VectorStorage with collection: {final_collection_name}",
+        )
+
+        # Create a new event loop if one doesn't exist, or use existing one
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Initialize the vector storage with the collection
+        if loop.is_running():
+            # If loop is running, we need to run in a separate thread or use different approach
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run, vector_storage.initialize(final_collection_name, reset_if_exists=False)
+                )
+                future.result()
+        else:
+            # Loop is not running, we can use run directly
+            loop.run_until_complete(vector_storage.initialize(final_collection_name, reset_if_exists=False))
+
+        # Verify collection was set
+        if vector_storage.collection is None:
+            raise RuntimeError(f"Failed to initialize vector storage collection: {final_collection_name}")
+
+        logger.info(
+            "rag_factory",
+            "create_complete_rag_system",
+            f"VectorStorage initialized successfully with collection: {type(vector_storage.collection).__name__}",
+        )
 
         # Create embedding provider for search engine with same model as document processing
         from ..vectordb.search_providers import create_embedding_provider
@@ -280,7 +378,8 @@ def create_complete_rag_system(
             model_name=embedding_config.model_name, device=embedding_config.device
         )
 
-        # Search engine
+        # Search engine - Create immediately after VectorStorage is available
+        # Now that we have both vector_storage and embedding_provider, create the search engine
         search_engine = create_vector_search_provider(vector_storage, embedding_provider)
 
         # Query processor
@@ -308,7 +407,7 @@ def create_complete_rag_system(
         ranker = create_multilingual_reranker(model_loader=mock_model_loader, score_calculator=mock_score_calculator)
 
         # Generation client - Use provider system with primary_provider setting
-        from ..generation.llm_provider import UnifiedLLMManager
+        from ..generation.llm_provider import LLMManager
 
         # Get LLM config section with primary provider
         llm_config_section = main_config["llm"]
@@ -320,7 +419,7 @@ def create_complete_rag_system(
         }
 
         # Create provider-aware generation client
-        llm_manager = UnifiedLLMManager(llm_config)
+        llm_manager = LLMManager(llm_config)
         generation_client = ProviderAdapterClient(llm_manager)
 
         # Response parser
@@ -351,6 +450,7 @@ def create_complete_rag_system(
             ollama_config=ollama_config,
             processing_config=processing_config,
             retrieval_config=retrieval_config,
+            batch_config=batch_config,
         )
 
         logger.info("rag_factory", "create_complete_rag_system", f"RAG system created successfully for {language}")

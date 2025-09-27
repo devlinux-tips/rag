@@ -261,3 +261,5 @@ crawler/data/**
 
 **/priv/static/**
 
+**/rag-service/logs/**
+

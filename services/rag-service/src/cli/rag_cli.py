@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from ..utils.logging_config import log_component_error, log_component_info, log_workflow_event
 from ..utils.logging_factory import setup_system_logging
-from ..utils.logging_config import log_workflow_event, log_component_info, log_component_error
 
 
 # Pure data structures
@@ -27,6 +27,9 @@ class CLIArgs:
     user: str
     language: str
     log_level: str
+    # Scope-related args
+    scope: str = "user"  # user, tenant, feature, global
+    feature_name: str | None = None  # For feature scope (e.g., "narodne-novine")
     # Command-specific args
     query_text: str | None = None
     top_k: int | None = None
@@ -141,7 +144,7 @@ class FolderManagerProtocol(Protocol):
 
     def ensure_context_folders(self, context: Any, language: str) -> bool: ...
 
-    def get_collection_storage_paths(self, context: Any, language: str) -> dict[str, Any]: ...
+    def get_collection_storage_paths(self, context: Any, language: str) -> Any: ...
 
     def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> dict[str, Any]: ...
 
@@ -254,12 +257,7 @@ def format_query_results(result: QueryResult, context: TenantContext, language: 
             lines.append(f"  {i}. {source}")
         lines.append("")
 
-    lines.extend(
-        [
-            f"⚡ Query time: {result.query_time:.2f}s",
-            f"📄 Documents retrieved: {result.documents_retrieved}",
-        ]
-    )
+    lines.extend([f"⚡ Query time: {result.query_time:.2f}s", f"📄 Documents retrieved: {result.documents_retrieved}"])
 
     if result.retrieved_chunks:
         lines.append("\n🔍 Retrieved chunks:")
@@ -279,10 +277,7 @@ def format_query_results(result: QueryResult, context: TenantContext, language: 
 
 
 def format_processing_results(
-    result: DocumentProcessingResult,
-    context: TenantContext,
-    language: str,
-    docs_path: str,
+    result: DocumentProcessingResult, context: TenantContext, language: str, docs_path: str
 ) -> list[str]:
     """Format document processing results using pure logic."""
     lines = [
@@ -426,13 +421,7 @@ def format_clear_data_result(result: DataClearResult, context: TenantContext, la
     ]
 
     if result.success:
-        lines.extend(
-            [
-                "✅ Data clearing completed successfully",
-                f"📝 {result.message}",
-                "",
-            ]
-        )
+        lines.extend(["✅ Data clearing completed successfully", f"📝 {result.message}", ""])
 
         if result.cleared_paths:
             lines.append(f"🗑️  Cleared paths ({len(result.cleared_paths)}):")
@@ -451,13 +440,7 @@ def format_clear_data_result(result: DataClearResult, context: TenantContext, la
             lines.append("")
 
     else:
-        lines.extend(
-            [
-                "❌ Data clearing failed",
-                f"📝 {result.message}",
-                "",
-            ]
-        )
+        lines.extend(["❌ Data clearing failed", f"📝 {result.message}", ""])
 
         if result.errors:
             lines.append("❌ Errors encountered:")
@@ -481,13 +464,7 @@ def format_reprocess_result(result: dict[str, Any], context: TenantContext, lang
     message = result["message"]
 
     if success:
-        lines.extend(
-            [
-                "✅ Document reprocessing completed successfully",
-                f"📝 {message}",
-                "",
-            ]
-        )
+        lines.extend(["✅ Document reprocessing completed successfully", f"📝 {message}", ""])
 
         # Show clear results
         if "clear_result" not in result:
@@ -509,33 +486,17 @@ def format_reprocess_result(result: dict[str, Any], context: TenantContext, lang
         process_result = result["process_result"]
         if process_result:
             lines.extend(
-                [
-                    "📄 Document Processing Phase:",
-                    f"  📝 Processing time: {process_result.processing_time:.2f}s",
-                    "",
-                ]
+                ["📄 Document Processing Phase:", f"  📝 Processing time: {process_result.processing_time:.2f}s", ""]
             )
 
     else:
-        lines.extend(
-            [
-                "❌ Document reprocessing failed",
-                f"📝 {message}",
-                "",
-            ]
-        )
+        lines.extend(["❌ Document reprocessing failed", f"📝 {message}", ""])
 
         # Show any partial results or errors
         if "clear_result" in result:
             clear_result = result["clear_result"]
             if clear_result and clear_result.errors:
-                lines.extend(
-                    [
-                        "❌ Clear phase errors:",
-                        *[f"  • {error}" for error in clear_result.errors],
-                        "",
-                    ]
-                )
+                lines.extend(["❌ Clear phase errors:", *[f"  • {error}" for error in clear_result.errors], ""])
 
     lines.extend(
         [
@@ -580,14 +541,18 @@ Examples:
     parser.add_argument("--tenant", default="development", help="Tenant slug (default: development)")
     parser.add_argument("--user", default="dev_user", help="User ID (default: dev_user)")
     parser.add_argument(
-        "--language",
-        choices=["hr", "en", "multilingual"],
-        default="en",
-        help="Language code (default: en)",
+        "--language", choices=["hr", "en", "multilingual"], default="en", help="Language code (default: en)"
     )
     parser.add_argument(
+        "--scope",
+        choices=["user", "tenant", "feature", "global"],
+        default="user",
+        help="Data scope: user (default), tenant, feature, or global",
+    )
+    parser.add_argument("--feature", help="Feature name when scope is 'feature' (e.g., narodne-novine)")
+    parser.add_argument(
         "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
         help="Logging level (default: INFO)",
     )
@@ -610,54 +575,46 @@ Examples:
 
     # Create folders command
     folders_parser = subparsers.add_parser("create-folders", help="Create tenant/user folder structure")
-    folders_parser.add_argument(
-        "--languages",
-        nargs="+",
-        default=["hr", "en"],
-        help="Languages to create folders for",
-    )
+    folders_parser.add_argument("--languages", nargs="+", default=["hr", "en"], help="Languages to create folders for")
 
     # Status command
     subparsers.add_parser("status", help="Show system status")
 
     # Data management commands
     clear_parser = subparsers.add_parser(
-        "clear-data",
-        help="Clear processed data, vectors, and caches for tenant/user/language",
+        "clear-data", help="Clear processed data, vectors, and caches for tenant/user/language"
     )
+    clear_parser.add_argument("--confirm", action="store_true", help="Confirm data deletion (required for safety)")
     clear_parser.add_argument(
-        "--confirm",
-        action="store_true",
-        help="Confirm data deletion (required for safety)",
-    )
-    clear_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be cleared without actually clearing",
+        "--dry-run", action="store_true", help="Show what would be cleared without actually clearing"
     )
 
     reprocess_parser = subparsers.add_parser(
-        "reprocess",
-        help="Clear data and reprocess all documents for tenant/user/language",
+        "reprocess", help="Clear data and reprocess all documents for tenant/user/language"
     )
     reprocess_parser.add_argument(
-        "--confirm",
-        action="store_true",
-        help="Confirm data deletion and reprocessing (required for safety)",
+        "--confirm", action="store_true", help="Confirm data deletion and reprocessing (required for safety)"
     )
     reprocess_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without actually doing it",
+        "--dry-run", action="store_true", help="Show what would be done without actually doing it"
     )
 
     parsed_args = parser.parse_args(args)
+
+    # Validate scope and feature_name combination
+    if parsed_args.scope == "feature" and not parsed_args.feature:
+        parser.error("When --scope is 'feature', --feature must be specified (e.g., --feature narodne-novine)")
+
+    if parsed_args.feature and parsed_args.scope != "feature":
+        parser.error(f"--feature can only be used with --scope feature (current scope: {parsed_args.scope})")
 
     return CLIArgs(
         command=parsed_args.command,
         tenant=parsed_args.tenant,
         user=parsed_args.user,
         language=parsed_args.language,
+        scope=parsed_args.scope,
+        feature_name=parsed_args.feature if hasattr(parsed_args, "feature") else None,
         log_level=parsed_args.log_level,
         query_text=getattr(parsed_args, "query_text", None),
         top_k=getattr(parsed_args, "top_k", None),
@@ -703,6 +660,8 @@ class MultiTenantRAGCLI:
         query_text: str,
         top_k: int = 5,
         return_sources: bool = True,
+        scope: str = "user",
+        feature_name: str | None = None,
     ) -> QueryResult:
         """Execute query command using pure business logic."""
         try:
@@ -710,14 +669,23 @@ class MultiTenantRAGCLI:
             from src.pipeline.rag_system import RAGQuery
 
             # Create RAG system (injected factory)
-            rag = self.rag_system_factory(language=language, tenant_context=context)
+            rag = self.rag_system_factory(
+                language=language, tenant_context=context, scope=scope, feature_name=feature_name
+            )
             await rag.initialize()
 
-            # Create proper RAGQuery object
+            # Create proper RAGQuery object with scope context
+            scope_context = {}
+            if feature_name:
+                scope_context["feature_name"] = feature_name
+            if scope:
+                scope_context["scope"] = scope
+
             query = RAGQuery(
                 text=query_text,
                 language=language,
                 max_results=top_k,
+                context_filters=scope_context if scope_context else None,
                 metadata={"return_sources": return_sources, "return_debug_info": True},
             )
 
@@ -748,37 +716,44 @@ class MultiTenantRAGCLI:
             )
 
     async def execute_process_documents_command(
-        self, context: TenantContext, language: str, docs_path: str
+        self,
+        context: TenantContext,
+        language: str,
+        docs_path: str,
+        scope: str = "user",
+        feature_name: str | None = None,
     ) -> DocumentProcessingResult:
         """Execute document processing command using pure business logic."""
         try:
             # Convert TenantContext to TenantUserContext for folder operations
             from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+
             tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
 
             # Ensure folder structure exists
             success = self.folder_manager.ensure_context_folders(tenant_user_context, language)
             if not success:
                 return DocumentProcessingResult(
-                    success=False,
-                    processing_time=0.0,
-                    error_message="Failed to create folder structure",
+                    success=False, processing_time=0.0, error_message="Failed to create folder structure"
                 )
 
             # Initialize RAG system
-            rag = self.rag_system_factory(language=language, tenant_context=context)
+            rag = self.rag_system_factory(
+                language=language, tenant_context=context, scope=scope, feature_name=feature_name
+            )
             await rag.initialize()
 
             # Handle both file and directory paths
             from pathlib import Path
+
             path = Path(docs_path)
-            
+
             if path.is_file():
                 # Single file processing
                 document_paths = [str(path)]
             elif path.is_dir():
                 # Directory processing - find all supported document files recursively
-                supported_extensions = {'.pdf', '.docx', '.txt', '.md', '.html'}
+                supported_extensions = {".pdf", ".docx", ".txt", ".md", ".html"}
                 document_paths = []
                 for ext in supported_extensions:
                     document_paths.extend([str(p) for p in path.rglob(f"*{ext}")])
@@ -812,6 +787,7 @@ class MultiTenantRAGCLI:
         try:
             # Convert TenantContext to TenantUserContext for folder operations
             from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+
             tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
 
             collections_info = self.folder_manager.get_collection_storage_paths(tenant_user_context, language)
@@ -854,7 +830,7 @@ class MultiTenantRAGCLI:
 
         # Test RAG system creation (without full initialization)
         try:
-            rag = self.rag_system_factory(language=language, tenant_context=context)
+            self.rag_system_factory(language=language, tenant_context=context)
             # Skip full initialization for status check - just test creation
             rag_status = "created"
         except Exception as e:
@@ -865,19 +841,14 @@ class MultiTenantRAGCLI:
         try:
             # Create Tenant object from context for folder manager
             from ..models.multitenant_models import Tenant
-            tenant = Tenant(
-                id=context.tenant_id,
-                name=context.tenant_name,
-                slug=context.tenant_slug
-            )
+
+            tenant = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
             paths = self.folder_manager.get_tenant_folder_structure(tenant, None, language)
             folder_structure = {}
-            # Convert FolderPaths dataclass to dictionary for checking
-            import dataclasses
-            for field in dataclasses.fields(paths):
-                path_value = getattr(paths, field.name)
+            # Convert dict to folder checking structure
+            for path_name, path_value in paths.items():
                 if path_value is not None:
-                    folder_structure[f"{field.name}: {path_value}"] = Path(str(path_value)).exists()
+                    folder_structure[f"{path_name}: {path_value}"] = Path(str(path_value)).exists()
         except Exception as e:
             folder_structure = {}
             error_messages.append(f"Folder check: {str(e)}")
@@ -1019,7 +990,13 @@ class MultiTenantRAGCLI:
             )
 
     async def execute_reprocess_command(
-        self, context: TenantContext, language: str, dry_run: bool, confirm: bool
+        self,
+        context: TenantContext,
+        language: str,
+        dry_run: bool,
+        confirm: bool,
+        scope: str = "user",
+        feature_name: str | None = None,
     ) -> dict[str, Any]:
         """Execute reprocess command - clear data then process documents."""
         if not dry_run and not confirm:
@@ -1050,18 +1027,32 @@ class MultiTenantRAGCLI:
                     "message": "Reprocessing failed during clear step",
                 }
 
-            # Step 2: Process documents from scratch
-            tenant_slug = context.tenant_slug
-            user_username = context.user_username
-            docs_path = f"./data/{tenant_slug}/users/{user_username}/documents/{language}"
+            # Step 2: Determine document path based on scope
+            if scope == "feature" and feature_name:
+                # Use config to get the feature document path
+                from ..utils.config_loader import get_shared_config
 
-            process_result = await self.execute_process_documents_command(context, language, docs_path)
+                config = get_shared_config()
+                data_base_dir = config["paths"]["data_base_dir"]
+                docs_path = f"{data_base_dir}/features/{feature_name}/{language}"
+            elif scope == "tenant":
+                tenant_slug = context.tenant_slug
+                docs_path = f"./data/{tenant_slug}/{language}"
+            else:  # Default to user scope
+                tenant_slug = context.tenant_slug
+                user_username = context.user_username
+                docs_path = f"./data/{tenant_slug}/users/{user_username}/{language}"
 
+            process_result = await self.execute_process_documents_command(
+                context, language, docs_path, scope, feature_name
+            )
+
+            scope_desc = f"{scope}:{feature_name}" if feature_name else scope
             return {
                 "success": process_result.success,
                 "clear_result": clear_result,
                 "process_result": process_result,
-                "message": f"Reprocessed documents for {tenant_slug}/{user_username}/{language}",
+                "message": f"Reprocessed documents for {scope_desc}/{language}",
             }
 
         except Exception as e:
@@ -1087,25 +1078,29 @@ class MultiTenantRAGCLI:
             f"🏢 Tenant: {context.tenant_name} ({context.tenant_slug})",
             f"👤 User: {context.user_full_name} ({context.user_username})",
             f"🌐 Language: {args.language}",
+            f"📊 Scope: {args.scope}" + (f" (feature: {args.feature_name})" if args.feature_name else ""),
             "=" * 60,
         ]
         self.write_output(header)
 
         try:
             if args.command == "query":
-                result = await self.execute_query_command(
-                    context,
-                    args.language,
-                    args.query_text,
-                    args.top_k,
-                    not args.no_sources,
+                # Handle None arguments with proper defaults
+                query_text = args.query_text or ""
+                top_k = args.top_k or 5
+                query_result = await self.execute_query_command(
+                    context, args.language, query_text, top_k, not args.no_sources, args.scope, args.feature_name
                 )
-                formatted_output = format_query_results(result, context, args.language)
+                formatted_output = format_query_results(query_result, context, args.language)
                 self.write_output(formatted_output)
 
             elif args.command == "process-docs":
-                result = await self.execute_process_documents_command(context, args.language, args.docs_path)
-                formatted_output = format_processing_results(result, context, args.language, args.docs_path)
+                # Handle None argument with proper default
+                docs_path = args.docs_path or ""
+                process_result = await self.execute_process_documents_command(
+                    context, args.language, docs_path, args.scope, args.feature_name
+                )
+                formatted_output = format_processing_results(process_result, context, args.language, docs_path)
                 self.write_output(formatted_output)
 
             elif args.command == "list-collections":
@@ -1119,18 +1114,22 @@ class MultiTenantRAGCLI:
                 self.write_output(formatted_output)
 
             elif args.command == "create-folders":
-                result = await self.execute_create_folders_command(context, args.languages)
-                formatted_output = format_create_folders_result(result, context)
+                # Handle None argument with proper default
+                languages = args.languages or ["hr", "en"]
+                folders_result = await self.execute_create_folders_command(context, languages)
+                formatted_output = format_create_folders_result(folders_result, context)
                 self.write_output(formatted_output)
 
             elif args.command == "clear-data":
-                result = await self.execute_clear_data_command(context, args.language, args.dry_run, args.confirm)
-                formatted_output = format_clear_data_result(result, context, args.language)
+                clear_result = await self.execute_clear_data_command(context, args.language, args.dry_run, args.confirm)
+                formatted_output = format_clear_data_result(clear_result, context, args.language)
                 self.write_output(formatted_output)
 
             elif args.command == "reprocess":
-                result = await self.execute_reprocess_command(context, args.language, args.dry_run, args.confirm)
-                formatted_output = format_reprocess_result(result, context, args.language)
+                reprocess_result = await self.execute_reprocess_command(
+                    context, args.language, args.dry_run, args.confirm, args.scope, args.feature_name
+                )
+                formatted_output = format_reprocess_result(reprocess_result, context, args.language)
                 self.write_output(formatted_output)
 
             else:
@@ -1193,18 +1192,8 @@ class MockRAGSystem:
             answer = f"Mock answer for: {query['text']}"
             sources = ["mock_doc1.txt", "mock_doc2.txt"]
             retrieved_chunks = [
-                {
-                    "content": "Mock chunk 1",
-                    "similarity_score": 0.9,
-                    "final_score": 0.9,
-                    "source": "mock_doc1.txt",
-                },
-                {
-                    "content": "Mock chunk 2",
-                    "similarity_score": 0.8,
-                    "final_score": 0.8,
-                    "source": "mock_doc2.txt",
-                },
+                {"content": "Mock chunk 1", "similarity_score": 0.9, "final_score": 0.9, "source": "mock_doc1.txt"},
+                {"content": "Mock chunk 2", "similarity_score": 0.8, "final_score": 0.8, "source": "mock_doc2.txt"},
             ]
 
         return MockResponse()
@@ -1228,12 +1217,18 @@ class MockFolderManager:
     def ensure_context_folders(self, context: Any, language: str) -> bool:
         return True
 
-    def get_collection_storage_paths(self, context: Any, language: str) -> dict[str, Any]:
-        return {
-            "user_collection_name": f"user_{context.user_username}_{language}",
-            "tenant_collection_name": f"tenant_{context.tenant_slug}_{language}",
-            "base_path": f"/mock/path/{context.tenant_slug}",
-        }
+    def get_collection_storage_paths(self, context: Any, language: str) -> Any:
+        from pathlib import Path
+
+        from ..utils.folder_manager import CollectionPaths
+
+        return CollectionPaths(
+            user_collection_name=f"user_{context.user_username}_{language}",
+            tenant_collection_name=f"tenant_{context.tenant_slug}_{language}",
+            user_collection_path=Path(f"/mock/path/{context.tenant_slug}/user"),
+            tenant_collection_path=Path(f"/mock/path/{context.tenant_slug}/tenant"),
+            base_path=Path(f"/mock/path/{context.tenant_slug}"),
+        )
 
     def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> dict[str, Any]:
         return {
@@ -1271,7 +1266,7 @@ def create_mock_cli(should_fail: bool = False, output_writer: OutputWriterProtoc
     """Create a fully mocked CLI for testing."""
     output_writer = output_writer or MockOutputWriter()
 
-    def mock_rag_factory(language: str):
+    def mock_rag_factory(language: str, tenant_context=None, scope: str = "user", feature_name: str | None = None):
         return MockRAGSystem(should_fail=should_fail)
 
     return MultiTenantRAGCLI(
@@ -1289,18 +1284,13 @@ async def main():
     args = parse_cli_arguments(sys.argv[1:])
 
     # Setup new logging system with configurable backends
-    backend_kwargs = {
-        "console": {"level": args.log_level, "colored": True}
-    }
+    backend_kwargs = {"console": {"level": args.log_level, "colored": True}}
 
     # Add file logging in debug mode
     if args.log_level.upper() == "DEBUG":
-        backend_kwargs["file"] = {
-            "log_file": "logs/rag_debug.log",
-            "format_type": "text"
-        }
+        backend_kwargs["file"] = {"log_file": "logs/rag_debug.log", "format_type": "text"}
 
-    logger = setup_system_logging(["console"], **backend_kwargs)
+    setup_system_logging(["console"], **backend_kwargs)
     log_workflow_event("cli", "STARTUP", "STARTED", command=args.command, language=args.language)
 
     class StandardOutputWriter:
@@ -1320,8 +1310,10 @@ async def main():
         def exception(self, message: str) -> None:
             log_component_error("cli", "EXCEPTION", message)
 
-    def real_rag_factory(language: str, tenant_context=None):
-        log_component_info("cli", "RAG_FACTORY", f"Creating system for language={language}")
+    def real_rag_factory(language: str, tenant_context=None, scope: str = "user", feature_name: str | None = None):
+        log_component_info(
+            "cli", "RAG_FACTORY", f"Creating system for language={language}, scope={scope}, feature={feature_name}"
+        )
 
         try:
             from ..models.multitenant_models import Tenant, User
@@ -1329,11 +1321,9 @@ async def main():
 
             tenant_obj = None
             user_obj = None
-            if tenant_context:
+            if tenant_context and scope in ["user", "tenant"]:
                 tenant_obj = Tenant(
-                    id=tenant_context.tenant_id,
-                    name=tenant_context.tenant_name,
-                    slug=tenant_context.tenant_slug,
+                    id=tenant_context.tenant_id, name=tenant_context.tenant_name, slug=tenant_context.tenant_slug
                 )
                 user_obj = User(
                     id=tenant_context.user_id,
@@ -1345,11 +1335,13 @@ async def main():
 
             rag_system = create_complete_rag_system(
                 language=language,
-                tenant=tenant_obj,
-                user=user_obj
+                tenant=tenant_obj if scope in ["user", "tenant"] else None,
+                user=user_obj if scope == "user" else None,
+                scope=scope,
+                feature_name=feature_name,
             )
 
-            log_component_info("cli", "RAG_FACTORY", f"System created successfully for {language}")
+            log_component_info("cli", "RAG_FACTORY", f"System created successfully for {language}, scope={scope}")
             return rag_system
 
         except Exception as e:
@@ -1360,13 +1352,13 @@ async def main():
     from ..utils.folder_manager_providers import (
         ProductionConfigProvider,
         ProductionFileSystemProvider,
-        StandardLoggerProvider
+        StandardLoggerProvider,
     )
 
     real_folder_manager = TenantFolderManager(
         config_provider=ProductionConfigProvider(),
         filesystem_provider=ProductionFileSystemProvider(),
-        logger_provider=StandardLoggerProvider()
+        logger_provider=StandardLoggerProvider(),
     )
 
     class VectorDatabaseStorage:
@@ -1375,8 +1367,9 @@ async def main():
 
         def _ensure_initialized(self):
             if self._vector_db is None:
-                from ..vectordb.database_factory import create_vector_database
                 from ..utils.config_loader import get_paths_config
+                from ..vectordb.database_factory import create_vector_database
+
                 paths_config = get_paths_config()
                 db_path_template = paths_config["chromadb_path_template"]
                 data_base_dir = paths_config["data_base_dir"]
@@ -1400,12 +1393,14 @@ async def main():
     class TomlConfigLoader:
         def get_shared_config(self) -> dict[str, Any]:
             from ..utils.config_loader import get_shared_config
+
             return get_shared_config()
 
         def get_storage_config(self) -> dict[str, Any]:
             from ..utils.config_loader import load_config
-            config = load_config('config')
-            return config['vectordb']
+
+            config = load_config("config")
+            return config["vectordb"]
 
     cli = MultiTenantRAGCLI(
         output_writer=StandardOutputWriter(),

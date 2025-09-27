@@ -19,7 +19,22 @@
       "Bash(find:*)",
       "Bash(for file in tests/test_hybrid_retriever.py tests/test_prompt_templates.py tests/test_rag_cli.py tests/test_reranker.py tests/test_response_parser.py tests/test_storage.py)",
       "Bash(do sed -i 's/_v2\\.py/.py/g' \"$file\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(source:*)",
+      "Bash(mypy:*)",
+      "Bash(pip install:*)",
+      "Bash(curl:*)",
+      "Bash(docker run:*)",
+      "Bash(docker start:*)",
+      "Bash(npm run build:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker stop:*)"
     ],
     "deny": []
   }

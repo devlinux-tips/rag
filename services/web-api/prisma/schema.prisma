@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Chat model - stores conversation sessions
+model Chat {
+  id          String   @id @default(cuid())
+  title       String
+  feature     String   // e.g., "narodne-novine"
+  visibility  String   @default("private") // "private" or "tenant_shared"
+  tenantId    String
+  userId      String
+  language    String   // e.g., "hr", "en"
+
+  // RAG configuration for this chat
+  ragConfig   Json     @default("{\"maxDocuments\": 5, \"minConfidence\": 0.7, \"temperature\": 0.7}")
+
+  // Optional metadata
+  metadata    Json?    // tags, description, etc.
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastMessageAt DateTime?
+
+  // Relations
+  messages    Message[]
+
+  // Indexes
+  @@index([tenantId, userId])
+  @@index([feature])
+  @@index([createdAt])
+  @@index([lastMessageAt])
+}
+
+// Message model - stores individual messages in chats
+model Message {
+  id          String   @id @default(cuid())
+  chatId      String
+  role        String   // "user" or "assistant"
+  content     String   @db.Text // Raw markdown content
+  feature     String?  // Feature context (for assistant messages)
+
+  // Metadata - different based on role
+  metadata    Json?    // For assistant: ragContext, model, tokensUsed, sources, etc.
+                      // For user: edited, attachments, etc.
+
+  // Processing status (for async operations)
+  status      String   @default("completed") // "pending", "processing", "completed", "failed"
+  errorMessage String?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([chatId, createdAt])
+  @@index([status])
+}
+
+// ProcessingTask model - tracks async RAG processing
+model ProcessingTask {
+  id          String   @id @default(cuid())
+  messageId   String?
+  type        String   // "rag_query", "document_retrieval", etc.
+  status      String   @default("pending") // "pending", "processing", "completed", "failed"
+
+  // Request/Response data
+  request     Json
+  response    Json?
+  error       Json?
+
+  // Performance metrics
+  startedAt   DateTime?
+  completedAt DateTime?
+  durationMs  Int?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Indexes
+  @@index([status])
+  @@index([createdAt])
+}

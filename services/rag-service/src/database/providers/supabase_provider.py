@@ -12,6 +12,12 @@ Supabase Configuration:
 from typing import Dict, Any, List, Optional, Union
 import asyncio
 from pathlib import Path
+from datetime import datetime
+
+try:
+    from supabase import Client  # type: ignore[import-not-found]
+except ImportError:
+    Client = Any  # type: ignore[misc,assignment]
 
 from ...utils.error_handler import StorageError as DatabaseError
 from ...utils.logging_factory import (
@@ -33,7 +39,7 @@ class SupabaseProvider:
     """
 
     def __init__(self):
-        self.client: Client | None = None
+        self.client: Optional[Client] = None
         self.config: Dict[str, Any] = {}
         self.logger = get_system_logger()
 
@@ -69,7 +75,7 @@ class SupabaseProvider:
                 ) from e
 
             # Initialize connection with service role key for admin operations
-            self.client: Client = create_client(
+            self.client = create_client(
                 self.config["url"],
                 self.config["service_role_key"]
             )
@@ -153,6 +159,9 @@ class SupabaseProvider:
             tenant_slug=tenant.slug
         )
 
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             tenant_data = {
                 "name": tenant.name,
@@ -195,6 +204,9 @@ class SupabaseProvider:
 
     async def get_tenant(self, tenant_id: str) -> Tenant:
         """Get tenant by ID with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("tenant").select("*").eq("id", tenant_id).execute()
 
@@ -218,6 +230,9 @@ class SupabaseProvider:
 
     async def get_tenant_by_slug(self, slug: str) -> Tenant:
         """Get tenant by slug with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("tenant").select("*").eq("slug", slug).execute()
 
@@ -234,6 +249,9 @@ class SupabaseProvider:
 
     async def list_tenants(self, status: Optional[str] = None) -> List[Tenant]:
         """List all tenants with optional status filter and RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             query = self.client.table("tenant").select("*").order("created_at", desc=True)
 
@@ -261,6 +279,9 @@ class SupabaseProvider:
 
     async def create_user(self, user: User) -> User:
         """Create new user in Supabase with tenant isolation."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             user_data = {
                 "tenant_id": user.tenant_id,
@@ -294,6 +315,9 @@ class SupabaseProvider:
 
     async def get_user(self, user_id: str) -> User:
         """Get user by ID with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("user").select("*").eq("id", user_id).execute()
 
@@ -310,6 +334,9 @@ class SupabaseProvider:
 
     async def get_user_by_email(self, email: str, tenant_id: str) -> User:
         """Get user by email within tenant with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("user").select("*").eq("email", email).eq("tenant_id", tenant_id).execute()
 
@@ -326,6 +353,9 @@ class SupabaseProvider:
 
     async def list_tenant_users(self, tenant_id: str, status: Optional[str] = None) -> List[User]:
         """List all users in tenant with optional status filter and RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             query = self.client.table("user").select("*").eq("tenant_id", tenant_id).order("created_at", desc=True)
 
@@ -358,15 +388,18 @@ class SupabaseProvider:
             document_title=document.title, tenant_id=document.tenant_id
         )
 
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             document_data = {
                 "tenant_id": document.tenant_id,
                 "user_id": document.user_id,
                 "title": document.title,
                 "content": document.content,
-                "language": document.language.value,
-                "scope": document.scope.value,
-                "category": document.category,
+                "language": document.language if isinstance(document.language, str) else document.language.value,
+                "scope": document.scope if isinstance(document.scope, str) else document.scope.value,
+                "category": document.categories,
                 "status": document.status.value,
                 "metadata": document.metadata or {},
                 "source_path": document.source_path,
@@ -405,6 +438,9 @@ class SupabaseProvider:
 
     async def get_document(self, document_id: str) -> Document:
         """Get document by ID with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("document").select("*").eq("id", document_id).execute()
 
@@ -428,6 +464,9 @@ class SupabaseProvider:
 
     async def get_tenant_documents(self, tenant_id: str, scope: str, language: str, user_id: Optional[str] = None, status: Optional[str] = None) -> List[Document]:
         """Get documents by tenant/scope/language with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             query = self.client.table("document").select("*").eq("tenant_id", tenant_id).eq("scope", scope).eq("language", language).order("created_at", desc=True)
 
@@ -454,6 +493,9 @@ class SupabaseProvider:
 
     async def update_document_status(self, document_id: str, status: str) -> Document:
         """Update document processing status with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("document").update({"status": status}).eq("id", document_id).execute()
 
@@ -482,6 +524,9 @@ class SupabaseProvider:
             document_id=chunk.document_id, chunk_index=chunk.chunk_index
         )
 
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             chunk_data = {
                 "document_id": chunk.document_id,
@@ -489,7 +534,7 @@ class SupabaseProvider:
                 "user_id": chunk.user_id,
                 "chunk_index": chunk.chunk_index,
                 "content": chunk.content,
-                "language": chunk.language.value,
+                "language": chunk.language if isinstance(chunk.language, str) else chunk.language.value,
                 "start_char": chunk.start_char,
                 "end_char": chunk.end_char,
                 "token_count": chunk.token_count,
@@ -530,6 +575,9 @@ class SupabaseProvider:
 
     async def get_document_chunks(self, document_id: str) -> List[Chunk]:
         """Get all chunks for a document with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("chunk").select("*").eq("document_id", document_id).order("chunk_index").execute()
 
@@ -548,6 +596,9 @@ class SupabaseProvider:
 
     async def get_chunk_by_vector_id(self, vector_collection: str, vector_id: str) -> Chunk:
         """Get chunk by vector database ID with RLS enforcement."""
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             result = self.client.table("chunk").select("*").eq("vector_collection", vector_collection).eq("vector_id", vector_id).execute()
 
@@ -616,8 +667,8 @@ class SupabaseProvider:
             language_preference=result["language_preference"],
             cultural_context=BusinessContext(result["cultural_context"]),
             subscription_tier=SubscriptionTier(result["subscription_tier"]),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            created_at=datetime.fromisoformat(result["created_at"]) if result.get("created_at") else datetime.now(),
+            updated_at=datetime.fromisoformat(result["updated_at"]) if result.get("updated_at") else datetime.now()
         )
 
     def _parse_user_result(self, result: Dict[str, Any]) -> User:
@@ -641,8 +692,8 @@ class SupabaseProvider:
             language_preference=Language(result["language_preference"]),
             settings=result.get("settings") or {},
             last_login_at=result.get("last_login_at"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            created_at=datetime.fromisoformat(result["created_at"]) if result.get("created_at") else datetime.now(),
+            updated_at=datetime.fromisoformat(result["updated_at"]) if result.get("updated_at") else datetime.now()
         )
 
     def _parse_document_result(self, result: Dict[str, Any]) -> Document:
@@ -659,24 +710,25 @@ class SupabaseProvider:
             tenant_id=result["tenant_id"],
             user_id=result["user_id"],
             title=result["title"],
+            filename=result.get("filename", result["title"]),
+            file_path=result.get("file_path", ""),
             content=result["content"],
-            language=Language(result["language"]),
+            language=result["language"] if isinstance(result["language"], str) else result["language"].value,
             scope=DocumentScope(result["scope"]),
-            category=result.get("category"),
             status=DocumentStatus(result["status"]),
             metadata=result.get("metadata") or {},
+            categories=result.get("categories", []),
             source_path=result.get("source_path"),
             mime_type=result.get("mime_type"),
-            file_size=result.get("file_size"),
+            file_size=int(result["file_size"]) if result.get("file_size") is not None else 0,
             checksum=result.get("checksum"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at"),
-            processed_at=result.get("processed_at")
+            created_at=datetime.fromisoformat(result["created_at"]) if result.get("created_at") else datetime.now(),
+            updated_at=datetime.fromisoformat(result["updated_at"]) if result.get("updated_at") else datetime.now()
         )
 
     def _parse_chunk_result(self, result: Dict[str, Any]) -> Chunk:
         """Parse Supabase result into Chunk object."""
-        from ...models.multitenant_models import Language
+        from ...models.multitenant_models import Language, DocumentScope
 
         required_fields = ["id", "document_id", "tenant_id", "user_id", "chunk_index", "content", "language"]
         for field in required_fields:
@@ -688,30 +740,33 @@ class SupabaseProvider:
             document_id=result["document_id"],
             tenant_id=result["tenant_id"],
             user_id=result["user_id"],
+            scope=DocumentScope(result.get("scope", "user")),
             chunk_index=result["chunk_index"],
             content=result["content"],
-            language=Language(result["language"]),
+            language=result["language"] if isinstance(result["language"], str) else result["language"].value,
             start_char=result.get("start_char") or 0,
             end_char=result.get("end_char") or 0,
             token_count=result.get("token_count") or 0,
-            vector_id=result.get("vector_id"),
-            vector_collection=result.get("vector_collection"),
+            vector_id=result.get("vector_id") or "",
+            vector_collection=result.get("vector_collection") or "",
             metadata=result.get("metadata") or {},
-            embedding_model=result.get("embedding_model"),
-            embedding_dimension=result.get("embedding_dimension"),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at")
+            embedding_model=result.get("embedding_model") or "bge-m3",
+            embedding_dimension=int(result["embedding_dimension"]) if result.get("embedding_dimension") is not None else 768,
+            created_at=datetime.fromisoformat(result["created_at"]) if result.get("created_at") else datetime.now()
         )
 
     # ================================
     # SQL Execution Method
     # ================================
 
-    async def execute_query(self, query: str, params: Optional[Union[Dict[str, Any], list]] = None) -> Any:
+    async def execute_query(self, query: str, params: Optional[List[Any]] = None) -> Any:
         """
         Execute raw SQL query using Supabase REST API.
         Handles INSERT, UPDATE, DELETE operations for chat persistence.
         """
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             # Handle table creation
             if "CREATE TABLE" in query.upper():
@@ -722,6 +777,8 @@ class SupabaseProvider:
             # Handle INSERT operations
             if "INSERT INTO conversations" in query:
                 # Insert conversation
+                if not params or len(params) < 7:
+                    raise DatabaseError("Invalid parameters for conversation insert")
                 data = {
                     "conversation_id": params[0],
                     "tenant_slug": params[1],
@@ -736,6 +793,8 @@ class SupabaseProvider:
 
             elif "INSERT INTO chat_messages" in query:
                 # Insert chat message
+                if not params or len(params) < 7:
+                    raise DatabaseError("Invalid parameters for chat message insert")
                 data = {
                     "message_id": params[0],
                     "conversation_id": params[1],
@@ -752,11 +811,15 @@ class SupabaseProvider:
             elif "UPDATE conversations" in query:
                 # Update conversation
                 if "SET updated_at" in query and "WHERE conversation_id" in query:
+                    if not params or len(params) < 2:
+                        raise DatabaseError("Invalid parameters for conversation update")
                     result = self.client.table("conversations").update({
                         "updated_at": params[0]
                     }).eq("conversation_id", params[1]).execute()
                     return result.data
                 elif "SET message_count" in query and "WHERE conversation_id" in query:
+                    if not params or len(params) < 2:
+                        raise DatabaseError("Invalid parameters for conversation update")
                     result = self.client.table("conversations").update({
                         "message_count": params[0]
                     }).eq("conversation_id", params[1]).execute()
@@ -765,6 +828,8 @@ class SupabaseProvider:
             # Handle DELETE operations
             elif "DELETE FROM conversations" in query:
                 if "WHERE conversation_id" in query:
+                    if not params or len(params) < 1:
+                        raise DatabaseError("Invalid parameters for conversation delete")
                     result = self.client.table("conversations").delete().eq("conversation_id", params[0]).execute()
                     return result.data
 
@@ -782,11 +847,14 @@ class SupabaseProvider:
             self.logger.error("supabase_provider", "execute_query", f"Query execution failed: {e}")
             return {"status": "error", "error": str(e)}
 
-    async def fetch_all(self, query: str, params: Optional[list] = None) -> List[Dict[str, Any]]:
+    async def fetch_all(self, query: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
         """
         Fetch all rows from a query result.
         For chat persistence compatibility.
         """
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             # Handle message retrieval queries
             if "SELECT role, content, order_index" in query and "FROM chat_messages" in query:
@@ -838,19 +906,26 @@ class SupabaseProvider:
             self.logger.error("supabase_provider", "fetch_all", f"Query failed: {e}")
             return []
 
-    async def fetch_one(self, query: str, params: Optional[list] = None) -> Optional[Dict[str, Any]]:
+    async def fetch_one(self, query: str, params: Optional[List[Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Fetch one row from a query result.
         For chat persistence compatibility.
         """
+        if self.client is None:
+            raise DatabaseError("Supabase client not initialized")
+
         try:
             if "SELECT * FROM conversations" in query and "WHERE conversation_id" in query:
                 # Get single conversation
+                if not params or len(params) < 1:
+                    raise DatabaseError("Invalid parameters for conversation select")
                 result = self.client.table("conversations").select("*").eq("conversation_id", params[0]).execute()
                 return result.data[0] if result.data else None
 
             elif "SELECT message_count FROM conversations" in query and "WHERE conversation_id" in query:
                 # Get message count for conversation
+                if not params or len(params) < 1:
+                    raise DatabaseError("Invalid parameters for conversation select")
                 result = self.client.table("conversations").select("message_count").eq("conversation_id", params[0]).execute()
                 return result.data[0] if result.data else None
 

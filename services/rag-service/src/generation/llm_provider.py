@@ -4,15 +4,43 @@ Support for Ollama (local) and OpenRouter (remote) with chat message compatibili
 """
 
 import json
+import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Protocol
 
 from ..utils.error_handler import ConfigurationError
 from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start
+
+# ============================================================================
+# LLM Request/Response Logging
+# ============================================================================
+
+
+def dump_llm_request_response(timestamp: str, request_data: dict, response_data: dict, provider: str):
+    """Dump LLM request and response data to timestamped JSON files."""
+    try:
+        os.makedirs("services/rag-service/logs", exist_ok=True)
+
+        # Request dump
+        request_filename = f"services/rag-service/logs/{timestamp}_llm_{provider}_request.json"
+        with open(request_filename, "w", encoding="utf-8") as f:
+            json.dump(request_data, f, indent=2, ensure_ascii=False, default=str)
+
+        # Response dump
+        response_filename = f"services/rag-service/logs/{timestamp}_llm_{provider}_response.json"
+        with open(response_filename, "w", encoding="utf-8") as f:
+            json.dump(response_data, f, indent=2, ensure_ascii=False, default=str)
+
+        print(f"INFO: Logged LLM {provider} request/response: {timestamp}")
+
+    except Exception as e:
+        print(f"ERROR: Failed to dump LLM logs: {str(e)}")
+
 
 # ============================================================================
 # Core Data Models
@@ -508,13 +536,13 @@ class LLMProviderFactory:
 
 
 # ============================================================================
-# Unified LLM Manager
+# LLM Manager
 # ============================================================================
 
 
-class UnifiedLLMManager:
+class LLMManager:
     """
-    Unified manager for multiple LLM providers with automatic failover.
+    Manager for multiple LLM providers with automatic failover.
     Supports both Ollama (local) and OpenRouter (remote) providers.
     """
 
@@ -529,7 +557,7 @@ class UnifiedLLMManager:
         self._initialize_providers()
 
     def _validate_manager_config(self, config: dict[str, Any]) -> None:
-        """Validate unified LLM manager configuration - fail fast if missing."""
+        """Validate LLM manager configuration - fail fast if missing."""
         required_keys = ["primary_provider", "fallback_order"]
         for key in required_keys:
             if key not in config:
@@ -560,6 +588,8 @@ class UnifiedLLMManager:
 
     async def chat_completion(self, messages: list[ChatMessage], model: str | None = None, **kwargs) -> ChatResponse:
         """Generate chat completion with automatic failover."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Include milliseconds
+
         request = ChatRequest(
             messages=messages,
             model=model or self._get_default_model(),
@@ -568,6 +598,20 @@ class UnifiedLLMManager:
             stream=kwargs.get("stream", False),  # Has logical default
             stop_sequences=kwargs.get("stop_sequences"),  # Optional parameter - None is valid
         )
+
+        # Log LLM request
+        request_data = {
+            "timestamp": timestamp,
+            "provider_order": [self.primary_provider] + self.fallback_order,
+            "request": {
+                "messages": [{"role": msg.role.value, "content": msg.content} for msg in messages],
+                "model": request.model,
+                "max_tokens": request.max_tokens,
+                "temperature": request.temperature,
+                "stream": request.stream,
+                "stop_sequences": request.stop_sequences,
+            },
+        }
 
         # Try primary provider first, then fallbacks
         providers_to_try = [self.primary_provider] + self.fallback_order
@@ -578,7 +622,28 @@ class UnifiedLLMManager:
 
             try:
                 provider = self.providers[provider_name]
-                return await provider.chat_completion(request)
+                response = await provider.chat_completion(request)
+
+                # Log successful LLM response
+                response_data = {
+                    "timestamp": timestamp,
+                    "successful_provider": provider_name,
+                    "response": {
+                        "content": response.content,
+                        "finish_reason": response.finish_reason.value if response.finish_reason else None,
+                        "model": response.model,
+                        "provider": response.provider.value,
+                        "usage": {
+                            "input_tokens": response.usage.input_tokens,
+                            "output_tokens": response.usage.output_tokens,
+                            "total_tokens": response.usage.total_tokens,
+                        },
+                    },
+                }
+
+                dump_llm_request_response(timestamp, request_data, response_data, provider_name)
+
+                return response
 
             except Exception as e:
                 self.logger.warning("llm_manager", "chat_completion", f"Provider {provider_name} failed: {e}")
@@ -633,6 +698,6 @@ class UnifiedLLMManager:
 # ============================================================================
 
 
-def create_unified_llm_manager(config: dict[str, Any]) -> UnifiedLLMManager:
-    """Create unified LLM manager from configuration."""
-    return UnifiedLLMManager(config)
+def create_llm_manager(config: dict[str, Any]) -> LLMManager:
+    """Create LLM manager from configuration."""
+    return LLMManager(config)

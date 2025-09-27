@@ -20,6 +20,12 @@ from ..utils.logging_factory import (
 from .search import ConfigProvider, EmbeddingProvider, VectorSearchProvider
 
 
+class VectorDatabaseError(Exception):
+    """Exception raised for vector database operations."""
+
+    pass
+
+
 # Mock Providers for Testing
 class MockEmbeddingProvider(EmbeddingProvider):
     """Mock embedding provider for testing."""
@@ -502,6 +508,103 @@ class DefaultConfigProvider(ConfigProvider):
         return {"semantic": weights["semantic_weight"], "keyword": weights["keyword_weight"]}
 
 
+class WeaviateSearchProvider(VectorSearchProvider):
+    """Production search provider using Weaviate."""
+
+    def __init__(self, collection, embedding_provider=None):
+        """
+        Initialize Weaviate search provider.
+
+        Args:
+            collection: WeaviateCollection instance
+            embedding_provider: Provider to generate embeddings for text queries
+        """
+        get_system_logger()
+        log_component_start("search_provider", "init", provider_type="Weaviate")
+
+        self.collection = collection
+        self.embedding_provider = embedding_provider
+        self.logger = get_system_logger()
+
+        collection_name = getattr(collection, "name", "unknown")
+        log_component_end("search_provider", "init", f"Weaviate provider initialized: {collection_name}")
+
+    async def search_by_embedding(
+        self,
+        query_embedding: np.ndarray,
+        top_k: int,
+        filters: dict[str, Any] | None = None,
+        include_metadata: bool = True,
+    ) -> dict[str, Any]:
+        """Search using embedding vector."""
+        logger = get_system_logger()
+        log_component_start(
+            "search_provider",
+            "search_by_embedding",
+            embedding_shape=query_embedding.shape,
+            top_k=top_k,
+            has_filters=bool(filters),
+        )
+
+        try:
+            logger.trace("search_provider", "search_by_embedding", f"Query embedding shape: {query_embedding.shape}")
+            logger.debug("search_provider", "search_by_embedding", f"Searching for top {top_k} results")
+
+            # Use the collection's query method with embedding
+            results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+
+            logger.debug(
+                "search_provider",
+                "search_by_embedding",
+                f"Weaviate embedding search returned {len(results.results)} results",
+            )
+
+            log_component_end("search_provider", "search_by_embedding", f"Retrieved {len(results.results)} results")
+            return results
+
+        except Exception as e:
+            error_msg = f"Failed to perform embedding search: {str(e)}"
+            logger.error("search_provider", "search_by_embedding", error_msg)
+            log_error_context("search_provider", "search_by_embedding", e, {"top_k": top_k})
+            raise VectorDatabaseError(error_msg) from e
+
+    async def search_by_text(
+        self, query_text: str, top_k: int, filters: dict[str, Any] | None = None, include_metadata: bool = True
+    ) -> dict[str, Any]:
+        """Search using query text with proper embedding model."""
+        try:
+            if self.embedding_provider:
+                # Use provided embedding provider to generate query embedding
+                query_embedding = await self.embedding_provider.encode_text(query_text)
+                return await self.search_by_embedding(query_embedding, top_k, filters, include_metadata)
+            else:
+                # This should not happen since Weaviate collection doesn't have built-in text search
+                error_msg = "No embedding provider available for text search"
+                self.logger.error("search_providers", "text_search", error_msg)
+                raise VectorDatabaseError(error_msg)
+
+        except Exception as e:
+            error_msg = f"Failed to perform text search: {str(e)}"
+            self.logger.error("search_providers", "text_search", error_msg)
+            raise VectorDatabaseError(error_msg) from e
+
+    async def get_document(self, document_id: str) -> dict[str, Any] | None:
+        """Get document by ID from Weaviate."""
+        try:
+            # Note: This is a placeholder implementation
+            # Weaviate document retrieval would need to be implemented based on the specific Weaviate collection API
+            self.logger.debug("search_provider", "get_document", f"Attempting to retrieve document: {document_id}")
+
+            # For now, return None as Weaviate implementation is not complete
+            self.logger.warning("search_provider", "get_document", "Weaviate get_document not fully implemented")
+            return None
+
+        except Exception as e:
+            error_msg = f"Failed to get document {document_id}: {str(e)}"
+            self.logger.error("search_provider", "get_document", error_msg)
+            return None
+
+
 # Factory Functions
 def create_mock_embedding_provider(dimension: int = 384) -> EmbeddingProvider:
     """Create mock embedding provider for testing."""
@@ -523,9 +626,67 @@ def create_embedding_provider(model_name: str = "BAAI/bge-m3", device: str = "cp
     return SentenceTransformerEmbeddingProvider(model_name=model_name, device=device)
 
 
-def create_vector_search_provider(collection, embedding_provider=None) -> VectorSearchProvider:
-    """Create vector search provider."""
-    return ChromaDBSearchProvider(collection, embedding_provider)
+def create_vector_search_provider(vector_storage_or_collection, embedding_provider=None) -> VectorSearchProvider:
+    """Create vector search provider based on configured vector database."""
+    from ..utils.config_loader import get_config_section
+    from ..utils.logging_factory import get_system_logger
+
+    logger = get_system_logger()
+    vectordb_config = get_config_section("config", "vectordb")
+    provider = vectordb_config["provider"]
+
+    logger.info(
+        "search_providers",
+        "create_vector_search_provider",
+        f"FACTORY DEBUG: provider={provider} | input_type={type(vector_storage_or_collection).__name__} | input_none={vector_storage_or_collection is None}",
+    )
+
+    # Handle both VectorStorage objects and raw collections
+    if hasattr(vector_storage_or_collection, "collection"):
+        # This is a VectorStorage object, get the collection
+        collection = vector_storage_or_collection.collection
+        logger.info(
+            "search_providers",
+            "create_vector_search_provider",
+            f"FACTORY DEBUG: VectorStorage.collection={type(collection).__name__ if collection else 'None'} | collection_none={collection is None}",
+        )
+    else:
+        # This is already a collection
+        collection = vector_storage_or_collection
+        logger.info(
+            "search_providers",
+            "create_vector_search_provider",
+            f"FACTORY DEBUG: Direct collection={type(collection).__name__ if collection else 'None'} | collection_none={collection is None}",
+        )
+
+    if collection is None:
+        logger.error(
+            "search_providers",
+            "create_vector_search_provider",
+            "FACTORY ERROR: Collection is None - cannot create search provider",
+        )
+        raise ValueError("Collection is None - cannot create search provider")
+
+    search_provider: VectorSearchProvider
+    if provider == "weaviate":
+        # For Weaviate, create a search provider wrapper that handles text-to-embedding conversion
+        search_provider = WeaviateSearchProvider(collection, embedding_provider)
+        logger.info(
+            "search_providers",
+            "create_vector_search_provider",
+            f"FACTORY DEBUG: Created Weaviate provider {type(search_provider).__name__}",
+        )
+        return search_provider
+    elif provider == "chromadb":
+        search_provider = ChromaDBSearchProvider(collection, embedding_provider)
+        logger.info(
+            "search_providers",
+            "create_vector_search_provider",
+            f"FACTORY DEBUG: Created ChromaDB provider {type(search_provider).__name__}",
+        )
+        return search_provider
+    else:
+        raise ValueError(f"Unsupported vector database provider: {provider}")
 
 
 def create_config_provider(config_loader_func=None) -> ConfigProvider:

@@ -10,10 +10,11 @@ from typing import AsyncIterator, Dict, List, Optional, Any
 from ..database.protocols import DatabaseProvider
 from ..generation.llm_provider import (
     ChatMessage, ChatRequest, ChatResponse, MessageRole,
-    UnifiedLLMManager, StreamChunk
+    LLMManager, StreamChunk
 )
 from .chat_persistence import ChatPersistenceManager, ChatConversation
 from .rag_integration import RAGChatService, RAGChatContext
+from .exceptions import RAGPipelineError, RAGEmptyResultsError
 from ..models.multitenant_models import Tenant, User, DocumentScope
 from ..utils.logging_factory import get_system_logger, log_component_start, log_component_end
 
@@ -27,7 +28,7 @@ class ChatService:
     Manages conversations, message history, and document retrieval for enhanced responses.
     """
 
-    def __init__(self, llm_manager: UnifiedLLMManager, db_provider: DatabaseProvider):
+    def __init__(self, llm_manager: LLMManager, db_provider: DatabaseProvider):
         self.llm_manager = llm_manager
         self.chat_persistence = ChatPersistenceManager(db_provider)
         self.logger = get_system_logger()
@@ -92,7 +93,6 @@ class ChatService:
                           system_prompt: Optional[str] = None,
                           rag_context: Optional[List[str]] = None,
                           model: Optional[str] = None,
-                          enable_rag: bool = True,  # RAG enabled by default
                           scope: Optional[str] = None,  # Scope for RAG data source selection
                           **llm_kwargs) -> ChatResponse:
         """
@@ -138,7 +138,11 @@ class ChatService:
         retrieved_context = rag_context
         rag_context_obj: Optional[RAGChatContext] = None
 
-        if enable_rag and not retrieved_context and rag_service and rag_service.should_use_rag(user_message):
+        # This is a RAG system - RAG is ALWAYS enabled
+        if not rag_service:
+            raise RuntimeError(f"RAG service initialization failed. RAG system cannot operate without RAG.")
+
+        if not retrieved_context and rag_service.should_use_rag(user_message):
             try:
                 # Execute RAG search
                 rag_context_obj = await rag_service.search_documents(
@@ -245,9 +249,65 @@ class ChatService:
                 else:
                     self.logger.info("chat_service", "send_message", "No relevant documents found")
 
+            except RAGEmptyResultsError as e:
+                # Handle empty results with a generic message instead of falling back to LLM
+                self.logger.info("chat_service", "send_message", f"No documents found for query: {e}")
+
+                # Store user message
+                await self.chat_persistence.add_message(
+                    conversation_id=conversation_id,
+                    role=MessageRole.USER,
+                    content=user_message,
+                    metadata={"timestamp": time.time()}
+                )
+
+                # Return generic message for empty results
+                generic_message = "I don't have relevant information in my knowledge base to answer your question. Please try rephrasing your question or asking about a different topic."
+
+                # Store generic response
+                await self.chat_persistence.add_message(
+                    conversation_id=conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content=generic_message,
+                    metadata={
+                        "model": "rag-empty-results",
+                        "provider": "system",
+                        "empty_results": True,
+                        "original_query": user_message
+                    }
+                )
+
+                # Create ChatResponse object for empty results
+                from ..generation.llm_provider import ChatResponse, ProviderType, FinishReason, TokenUsage
+                import uuid
+
+                response = ChatResponse(
+                    id=f"empty-{uuid.uuid4().hex[:8]}",
+                    content=generic_message,
+                    model="system-generic",
+                    provider=ProviderType.OLLAMA,  # Use default provider enum
+                    finish_reason=FinishReason.COMPLETED,
+                    usage=TokenUsage(
+                        input_tokens=len(user_message.split()),
+                        output_tokens=len(generic_message.split()),
+                        total_tokens=len(user_message.split()) + len(generic_message.split())
+                    )
+                )
+
+                self.logger.info("chat_service", "send_message",
+                               f"Returned generic message for empty RAG results")
+                log_component_end("chat_service", "send_message", "Generic message for empty results")
+
+                return response
+
+            except RAGPipelineError as e:
+                # Pipeline errors should fail hard - don't continue
+                self.logger.error("chat_service", "send_message", f"RAG pipeline error: {e}")
+                raise  # Re-raise pipeline errors to fail the entire request
+
             except Exception as e:
                 self.logger.error("chat_service", "send_message", f"RAG retrieval failed: {e}")
-                # Continue without RAG context if retrieval fails
+                # For other unexpected errors, continue without RAG context
 
         # Get conversation history
         history = await self.chat_persistence.get_recent_messages(
@@ -292,7 +352,6 @@ class ChatService:
                 "primary_provider": self.llm_manager.primary_provider,
                 "llm_kwargs": llm_kwargs,
                 "conversation_id": conversation_id,
-                "enable_rag": enable_rag,
                 "rag_context_available": retrieved_context is not None,
                 "rag_chunks_count": len(retrieved_context) if retrieved_context else 0
             }
@@ -383,8 +442,7 @@ class ChatService:
                                    system_prompt: Optional[str] = None,
                                    rag_context: Optional[List[str]] = None,
                                    model: Optional[str] = None,
-                                   enable_rag: bool = True,  # RAG enabled by default
-                                   scope: Optional[str] = None,  # Scope for RAG data source selection
+                                            scope: Optional[str] = None,  # Scope for RAG data source selection
                                    **llm_kwargs) -> AsyncIterator[str]:
         """
         Send message and get streaming response with conversation persistence.
@@ -419,7 +477,11 @@ class ChatService:
         retrieved_context = rag_context
         rag_context_obj: Optional[RAGChatContext] = None
 
-        if enable_rag and not retrieved_context and rag_service and rag_service.should_use_rag(user_message):
+        # This is a RAG system - RAG is ALWAYS enabled
+        if not rag_service:
+            raise RuntimeError(f"RAG service initialization failed. RAG system cannot operate without RAG.")
+
+        if not retrieved_context and rag_service.should_use_rag(user_message):
             try:
                 # Execute RAG search
                 rag_context_obj = await rag_service.search_documents(
@@ -473,9 +535,53 @@ class ChatService:
                 else:
                     self.logger.info("chat_service", "send_message_streaming", "No relevant documents found")
 
+            except RAGEmptyResultsError as e:
+                # Handle empty results with a generic message for streaming
+                self.logger.info("chat_service", "send_message_streaming", f"No documents found for query: {e}")
+
+                # Store user message
+                await self.chat_persistence.add_message(
+                    conversation_id=conversation_id,
+                    role=MessageRole.USER,
+                    content=user_message,
+                    metadata={"timestamp": time.time()}
+                )
+
+                # Return generic message for empty results
+                generic_message = "I don't have relevant information in my knowledge base to answer your question. Please try rephrasing your question or asking about a different topic."
+
+                # Store generic response
+                await self.chat_persistence.add_message(
+                    conversation_id=conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content=generic_message,
+                    metadata={
+                        "model": "rag-empty-results",
+                        "provider": "system",
+                        "empty_results": True,
+                        "streaming": True,
+                        "original_query": user_message
+                    }
+                )
+
+                # Stream the generic message
+                words = generic_message.split()
+                for i, word in enumerate(words):
+                    yield word + (" " if i < len(words) - 1 else "")
+
+                self.logger.info("chat_service", "send_message_streaming",
+                               f"Streamed generic message for empty RAG results")
+                log_component_end("chat_service", "send_message_streaming", "Generic message for empty results")
+                return
+
+            except RAGPipelineError as e:
+                # Pipeline errors should fail hard - don't continue
+                self.logger.error("chat_service", "send_message_streaming", f"RAG pipeline error: {e}")
+                raise  # Re-raise pipeline errors to fail the entire request
+
             except Exception as e:
                 self.logger.error("chat_service", "send_message_streaming", f"RAG retrieval failed: {e}")
-                # Continue without RAG context if retrieval fails
+                # For other unexpected errors, continue without RAG context
 
         # Get conversation history
         history = await self.chat_persistence.get_recent_messages(
@@ -586,7 +692,7 @@ class ChatService:
 # Factory function
 def create_chat_service(llm_config: Dict[str, Any], db_provider: DatabaseProvider) -> ChatService:
     """Create chat service with LLM manager and database provider."""
-    from ..generation.llm_provider import UnifiedLLMManager
+    from ..generation.llm_provider import LLMManager
 
-    llm_manager = UnifiedLLMManager(llm_config)
+    llm_manager = LLMManager(llm_config)
     return ChatService(llm_manager, db_provider)

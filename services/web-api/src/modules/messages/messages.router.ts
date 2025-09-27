@@ -1,0 +1,377 @@
+import { z } from 'zod';
+import { router, protectedProcedure } from '../../trpc/trpc';
+import { TRPCError } from '@trpc/server';
+import { prisma } from '../../lib/prisma';
+import { ragService } from '../../services/rag.service';
+
+// Validation schemas
+const sendMessageSchema = z.object({
+  chatId: z.string(),
+  content: z.string().min(1).max(10000),
+  ragConfig: z.object({
+    maxDocuments: z.number().min(1).max(20).optional(),
+    minConfidence: z.number().min(0).max(1).optional(),
+    temperature: z.number().min(0).max(2).optional(),
+    language: z.string().optional(),
+  }).optional(),
+});
+
+export const messagesRouter = router({
+  /**
+   * List messages in a chat
+   */
+  list: protectedProcedure
+    .input(z.object({
+      chatId: z.string(),
+      limit: z.number().min(1).max(100).default(50),
+      cursor: z.string().optional(),
+      order: z.enum(['asc', 'desc']).default('desc'),
+    }))
+    .query(async ({ input, ctx }) => {
+      // First verify the user has access to the chat
+      const chat = await prisma.chat.findUnique({
+        where: { id: input.chatId },
+      });
+
+      if (!chat) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Chat not found',
+        });
+      }
+
+      // Check access
+      const hasAccess =
+        chat.userId === ctx.auth.user.id ||
+        (chat.tenantId === ctx.auth.tenant.id && chat.visibility === 'tenant_shared');
+
+      if (!hasAccess) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Access denied to this chat',
+        });
+      }
+
+      // Get messages with pagination
+      const messages = await prisma.message.findMany({
+        where: { chatId: input.chatId },
+        take: input.limit,
+        skip: input.cursor ? 1 : 0,
+        cursor: input.cursor ? { id: input.cursor } : undefined,
+        orderBy: { createdAt: input.order },
+      });
+
+      // Get total count
+      const totalCount = await prisma.message.count({
+        where: { chatId: input.chatId },
+      });
+
+      return {
+        messages,
+        pagination: {
+          hasMore: messages.length === input.limit,
+          nextCursor: messages.length > 0
+            ? messages[messages.length - 1].id
+            : null,
+          totalCount,
+        },
+      };
+    }),
+
+  /**
+   * Send a message and get RAG response
+   */
+  send: protectedProcedure
+    .input(sendMessageSchema)
+    .mutation(async ({ input, ctx }) => {
+      // First verify the user has access to the chat
+      const chat = await prisma.chat.findUnique({
+        where: { id: input.chatId },
+      });
+
+      if (!chat) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Chat not found',
+        });
+      }
+
+      // Check access (only owner or tenant members can send messages)
+      const hasAccess =
+        chat.userId === ctx.auth.user.id ||
+        (chat.tenantId === ctx.auth.tenant.id && chat.visibility === 'tenant_shared');
+
+      if (!hasAccess) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Access denied to this chat',
+        });
+      }
+
+      // Create user message
+      const userMessage = await prisma.message.create({
+        data: {
+          chatId: input.chatId,
+          role: 'user',
+          content: input.content,
+          metadata: {
+            edited: false,
+          },
+        },
+      });
+
+      // Create processing task
+      const processingTask = await prisma.processingTask.create({
+        data: {
+          messageId: userMessage.id,
+          type: 'rag_query',
+          status: 'processing',
+          request: {
+            content: input.content,
+            ragConfig: input.ragConfig,
+            feature: chat.feature,
+          },
+          startedAt: new Date(),
+        },
+      });
+
+      try {
+        // Merge chat's ragConfig with request ragConfig
+        const ragConfig = {
+          ...(chat.ragConfig as any),
+          ...input.ragConfig,
+        };
+
+        // Call RAG service
+        const startTime = Date.now();
+
+        // For development fallback if RAG service is unavailable
+        const useMock = process.env.USE_MOCK_RAG === 'true';
+
+        let ragResponse;
+
+        if (useMock) {
+          // Mock response for development
+          const mockResponse = {
+          response: `### Analysis Results\n\nBased on the **${chat.feature}** documents, here are the key findings:\n\n1. **First Point**: Important information with *emphasis*\n2. **Second Point**: Additional details\n3. **Third Point**: Supporting evidence\n\n| Category | Value | Status |\n|----------|-------|--------|\n| Relevance | 92% | ✅ High |\n| Confidence | 0.89 | ⚠️ Good |\n\n> 💡 **Note**: This analysis is based on the latest available documents.\n\n\`\`\`json\n{\n  "source": "document_123",\n  "date": "2024-01-01"\n}\n\`\`\`\n\n---\n\nFor more information, see [Official Documentation](https://example.com).`,
+          sources: [
+            {
+              documentId: 'doc_123',
+              title: 'Sample Document',
+              relevance: 0.92,
+              chunk: 'Relevant excerpt from the document...'
+            }
+          ],
+          documentsRetrieved: 5,
+          documentsUsed: 3,
+          confidence: 0.89,
+          searchTimeMs: 234,
+          responseTimeMs: 1000,
+          model: 'qwen2.5:7b',
+          tokensUsed: {
+            input: 150,
+            output: 300,
+            total: 450
+          }
+        };
+
+          ragResponse = mockResponse;
+        } else {
+          // Call actual RAG service
+          ragResponse = await ragService.query(
+            input.content,
+            ctx.auth,
+            chat.feature,
+            {
+              maxDocuments: ragConfig.maxDocuments,
+              minConfidence: ragConfig.minConfidence,
+              temperature: ragConfig.temperature,
+            }
+          );
+        }
+
+        const endTime = Date.now();
+
+        // Create assistant message with RAG response
+        const assistantMessage = await prisma.message.create({
+          data: {
+            chatId: input.chatId,
+            role: 'assistant',
+            content: ragResponse.response,
+            feature: chat.feature,
+            metadata: {
+              ragContext: {
+                documentsRetrieved: ragResponse.documentsRetrieved,
+                documentsUsed: ragResponse.documentsUsed,
+                confidence: ragResponse.confidence,
+                searchTimeMs: ragResponse.searchTimeMs,
+                sources: ragResponse.sources,
+              },
+              model: ragResponse.model,
+              provider: 'ollama',
+              tokensUsed: ragResponse.tokensUsed,
+              responseTimeMs: endTime - startTime,
+              processingTaskId: processingTask.id,
+            },
+          },
+        });
+
+        // Update processing task
+        await prisma.processingTask.update({
+          where: { id: processingTask.id },
+          data: {
+            status: 'completed',
+            response: ragResponse as any,
+            completedAt: new Date(),
+            durationMs: endTime - startTime,
+          },
+        });
+
+        // Update chat's lastMessageAt
+        await prisma.chat.update({
+          where: { id: input.chatId },
+          data: { lastMessageAt: new Date() },
+        });
+
+        return {
+          userMessage,
+          assistantMessage,
+          processingTask: {
+            id: processingTask.id,
+            status: 'completed',
+            duration: endTime - startTime,
+          },
+        };
+      } catch (error) {
+        // Update processing task with error
+        await prisma.processingTask.update({
+          where: { id: processingTask.id },
+          data: {
+            status: 'failed',
+            error: {
+              message: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: new Date().toISOString(),
+            },
+            completedAt: new Date(),
+          },
+        });
+
+        // Create error message
+        await prisma.message.create({
+          data: {
+            chatId: input.chatId,
+            role: 'assistant',
+            content: '❌ Sorry, I encountered an error processing your request. Please try again.',
+            feature: chat.feature,
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            metadata: {
+              processingTaskId: processingTask.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            },
+          },
+        });
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to process message',
+          cause: error,
+        });
+      }
+    }),
+
+  /**
+   * Delete a message
+   */
+  delete: protectedProcedure
+    .input(z.object({
+      messageId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Get the message and its chat
+      const message = await prisma.message.findUnique({
+        where: { id: input.messageId },
+        include: {
+          chat: true,
+        },
+      });
+
+      if (!message) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Message not found',
+        });
+      }
+
+      // Only chat owner can delete messages
+      if (message.chat.userId !== ctx.auth.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only chat owner can delete messages',
+        });
+      }
+
+      // Delete the message
+      await prisma.message.delete({
+        where: { id: input.messageId },
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Edit a user message (not assistant messages)
+   */
+  edit: protectedProcedure
+    .input(z.object({
+      messageId: z.string(),
+      content: z.string().min(1).max(10000),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Get the message and its chat
+      const message = await prisma.message.findUnique({
+        where: { id: input.messageId },
+        include: {
+          chat: true,
+        },
+      });
+
+      if (!message) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Message not found',
+        });
+      }
+
+      // Only allow editing user messages
+      if (message.role !== 'user') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Only user messages can be edited',
+        });
+      }
+
+      // Only chat owner can edit messages
+      if (message.chat.userId !== ctx.auth.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only chat owner can edit messages',
+        });
+      }
+
+      // Update the message
+      const updatedMessage = await prisma.message.update({
+        where: { id: input.messageId },
+        data: {
+          content: input.content,
+          metadata: {
+            ...(message.metadata as any),
+            edited: true,
+            editedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      return updatedMessage;
+    }),
+});

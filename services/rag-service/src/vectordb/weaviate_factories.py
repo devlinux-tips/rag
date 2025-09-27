@@ -13,7 +13,7 @@ from weaviate.classes.config import Configure, VectorDistances  # type: ignore[i
 from weaviate.classes.query import Filter  # type: ignore[import-not-found]
 
 from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
-from .storage import VectorCollection, VectorDatabase
+from .storage import VectorCollection, VectorDatabase, VectorSearchResult, VectorSearchResults
 from .weaviate_config import WeaviateConfiguration, create_weaviate_configuration
 
 
@@ -248,8 +248,12 @@ class WeaviateCollection(VectorCollection):
         where: dict[str, Any] | None = None,
         where_document: dict[str, Any] | None = None,
         include: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Query Weaviate collection."""
+    ) -> VectorSearchResults:
+        """Query Weaviate collection and return standard VectorSearchResults."""
+        import time
+
+        start_time = time.time()
+
         logger = get_system_logger()
         log_component_start(
             "weaviate_collection",
@@ -289,20 +293,170 @@ class WeaviateCollection(VectorCollection):
                 # Get all documents (limited)
                 response = collection.query.fetch_objects(limit=n_results, return_metadata=["certainty", "distance"])
 
-            # Convert response to ChromaDB-compatible format
-            result = self._convert_response_to_chromadb_format(response)
+            # Convert Weaviate response directly to VectorSearchResults
+            results = []
+            for obj in response.objects:
+                # Extract content and metadata from Weaviate object
+                content = obj.properties.get("content", "") or obj.properties.get("text", "")
+                metadata = dict(obj.properties)  # All properties become metadata
+                metadata.pop("content", None)  # Remove content from metadata
+                metadata.pop("text", None)  # Remove text from metadata
 
-            log_component_end(
-                "weaviate_collection", "query", f"Query returned {len(result.get('documents', [[]]))} results"
+                # Extract distance from Weaviate metadata (lower = more similar)
+                # AI DEBUGGING: Comprehensive trace logging for distance extraction
+                logger = get_system_logger()
+
+                # Log raw metadata structure for AI debugging
+                metadata_structure = {
+                    "has_distance": hasattr(obj.metadata, "distance"),
+                    "distance_value": getattr(obj.metadata, "distance", "NOT_FOUND"),
+                    "distance_type": type(getattr(obj.metadata, "distance", None)).__name__,
+                    "has_certainty": hasattr(obj.metadata, "certainty"),
+                    "certainty_value": getattr(obj.metadata, "certainty", "NOT_FOUND"),
+                    "certainty_type": type(getattr(obj.metadata, "certainty", None)).__name__,
+                    "metadata_attrs": [attr for attr in dir(obj.metadata) if not attr.startswith("_")],
+                    "metadata_dict": vars(obj.metadata) if hasattr(obj.metadata, "__dict__") else "NO_DICT",
+                }
+                logger.trace(
+                    "weaviate_distance_extraction",
+                    "metadata_analysis",
+                    f"METADATA_STRUCTURE | obj_id={str(obj.uuid)[:8]} | "
+                    f"has_distance={metadata_structure['has_distance']} | "
+                    f"distance_val={metadata_structure['distance_value']} | "
+                    f"distance_type={metadata_structure['distance_type']} | "
+                    f"has_certainty={metadata_structure['has_certainty']} | "
+                    f"certainty_val={metadata_structure['certainty_value']} | "
+                    f"certainty_type={metadata_structure['certainty_type']} | "
+                    f"available_attrs={metadata_structure['metadata_attrs']}",
+                )
+
+                # Distance extraction with comprehensive logging
+                distance = None
+                extraction_method = None
+
+                if hasattr(obj.metadata, "distance") and obj.metadata.distance is not None:
+                    raw_distance = obj.metadata.distance
+                    distance = float(raw_distance)
+                    extraction_method = "direct_distance"
+                    logger.trace(
+                        "weaviate_distance_extraction",
+                        "distance_conversion",
+                        f"DISTANCE_DIRECT | obj_id={str(obj.uuid)[:8]} | "
+                        f"raw_distance={raw_distance} | raw_type={type(raw_distance).__name__} | "
+                        f"converted_distance={distance} | extraction_method={extraction_method}",
+                    )
+                elif hasattr(obj.metadata, "certainty") and obj.metadata.certainty is not None:
+                    raw_certainty = obj.metadata.certainty
+                    distance = 1.0 - float(raw_certainty)
+                    extraction_method = "certainty_conversion"
+                    logger.trace(
+                        "weaviate_distance_extraction",
+                        "certainty_conversion",
+                        f"CERTAINTY_CONVERT | obj_id={str(obj.uuid)[:8]} | "
+                        f"raw_certainty={raw_certainty} | raw_type={type(raw_certainty).__name__} | "
+                        f"converted_distance={distance} | formula=1.0-certainty | extraction_method={extraction_method}",
+                    )
+                else:
+                    distance = 1.0
+                    extraction_method = "default_fallback"
+                    logger.warning(
+                        "weaviate_distance_extraction",
+                        "fallback_distance",
+                        f"FALLBACK_DISTANCE | obj_id={str(obj.uuid)[:8]} | "
+                        f"no_distance_or_certainty=true | default_distance={distance} | extraction_method={extraction_method}",
+                    )
+
+                # Log final distance result for AI debugging
+                logger.trace(
+                    "weaviate_distance_extraction",
+                    "final_result",
+                    f"DISTANCE_FINAL | obj_id={str(obj.uuid)[:8]} | "
+                    f"final_distance={distance} | extraction_method={extraction_method} | "
+                    f"distance_range_ok={0.0 <= distance <= 2.0} | "
+                    f"similarity_preview={1.0 - (distance / 2.0)}",
+                )
+
+                result = VectorSearchResult(
+                    id=str(obj.uuid), content=str(content), metadata=metadata, distance=distance
+                )
+                results.append(result)
+
+            search_time_ms = (time.time() - start_time) * 1000
+
+            vector_results = VectorSearchResults(
+                results=results, total_count=len(results), search_time_ms=search_time_ms
             )
 
-            return result
+            log_component_end("weaviate_collection", "query", f"Query returned {len(results)} results")
+
+            return vector_results
 
         except Exception as e:
             error_msg = f"Failed to query Weaviate: {str(e)}"
             logger.error("weaviate_collection", "query", error_msg)
             log_error_context(
                 "weaviate_collection", "query", e, {"n_results": n_results, "class_name": self.class_name}
+            )
+            raise
+
+    async def search(self, query_text: str, k: int = 5, similarity_threshold: float = 0.3) -> list[dict[str, Any]]:
+        """
+        Search wrapper method for SearchEngineAdapter compatibility.
+
+        This method provides a simplified interface that matches what SearchEngineAdapter expects.
+        """
+        logger = get_system_logger()
+        log_component_start(
+            "weaviate_collection", "search", query_text=query_text[:50], k=k, similarity_threshold=similarity_threshold
+        )
+
+        try:
+            # Use the existing query method with text-based search
+            vector_results = self.query(query_texts=[query_text], n_results=k)
+
+            # Convert VectorSearchResults to list of SearchResult-compatible dicts
+            results = []
+            for result in vector_results.results:
+                # Convert distance to similarity score (distance: lower = more similar)
+                similarity = result.score  # Use the score property which converts distance to similarity
+
+                # Log similarity values for debugging
+                logger.debug(
+                    "weaviate_collection",
+                    "search",
+                    f"Document similarity: {similarity:.4f} | threshold: {similarity_threshold} | "
+                    f"distance: {result.distance:.4f} | content_preview: {result.content[:50]}...",
+                )
+
+                # Skip results below threshold
+                if similarity < similarity_threshold:
+                    logger.debug(
+                        "weaviate_collection",
+                        "search",
+                        f"FILTERED OUT: similarity {similarity:.4f} < threshold {similarity_threshold}",
+                    )
+                    continue
+
+                results.append({"content": result.content, "metadata": result.metadata, "similarity_score": similarity})
+
+            logger.info(
+                "weaviate_collection",
+                "search",
+                f"Search returned {len(results)} results above threshold {similarity_threshold}",
+            )
+
+            log_component_end("weaviate_collection", "search", f"Returned {len(results)} results")
+
+            return results
+
+        except Exception as e:
+            error_msg = f"Failed to search Weaviate: {str(e)}"
+            logger.error("weaviate_collection", "search", error_msg)
+            log_error_context(
+                "weaviate_collection",
+                "search",
+                e,
+                {"query_text": query_text[:50], "k": k, "class_name": self.class_name},
             )
             raise
 
@@ -328,12 +482,37 @@ class WeaviateCollection(VectorCollection):
                 # Get documents with optional filtering
                 response = collection.query.fetch_objects(limit=limit or 100, offset=offset or 0)
 
-            # Convert response to ChromaDB-compatible format
-            result = self._convert_response_to_chromadb_format(response, include_embeddings=False)
+            # Convert Weaviate response directly to VectorSearchResults
+            results = []
+            for obj in response.objects:
+                # Extract content and metadata from Weaviate object
+                content = obj.properties.get("content", "") or obj.properties.get("text", "")
+                metadata = dict(obj.properties)  # All properties become metadata
+                metadata.pop("content", None)  # Remove content from metadata
+                metadata.pop("text", None)  # Remove text from metadata
 
-            log_component_end("weaviate_collection", "get", f"Retrieved {len(result.get('documents', [[]]))} documents")
+                result = VectorSearchResult(
+                    id=str(obj.uuid),
+                    content=str(content),
+                    metadata=metadata,
+                    distance=0.0,  # No distance for get operations
+                )
+                results.append(result)
 
-            return result
+            vector_results = VectorSearchResults(results=results, total_count=len(results), search_time_ms=0.0)
+
+            # Convert to ChromaDB format for backward compatibility
+            formatted_result: dict[str, Any] = {"documents": [], "metadatas": [], "distances": [], "ids": []}
+            chunks_data = vector_results.to_chunks_format()
+            if chunks_data:
+                formatted_result["documents"] = [[chunk["content"] for chunk in chunks_data]]
+                formatted_result["metadatas"] = [[chunk["metadata"] for chunk in chunks_data]]
+                formatted_result["distances"] = [[chunk["distance"] for chunk in chunks_data]]
+                formatted_result["ids"] = [[chunk["document_id"] for chunk in chunks_data]]
+
+            log_component_end("weaviate_collection", "get", f"Retrieved {len(results)} documents")
+
+            return formatted_result
 
         except Exception as e:
             error_msg = f"Failed to get documents from Weaviate: {str(e)}"
@@ -458,44 +637,6 @@ class WeaviateCollection(VectorCollection):
         except Exception as e:
             self.logger.error(f"Failed to count documents in Weaviate: {str(e)}")
             return 0
-
-    def _convert_response_to_chromadb_format(self, response: Any, include_embeddings: bool = False) -> dict[str, Any]:
-        """Convert Weaviate response to ChromaDB-compatible format."""
-        ids = []
-        documents = []
-        metadatas = []
-        distances = []
-        embeddings = []
-
-        for obj in response.objects:
-            ids.append(str(obj.uuid))
-            documents.append(obj.properties.get("content", ""))
-
-            metadata = {
-                "source_file": obj.properties.get("source_file", ""),
-                "chunk_index": obj.properties.get("chunk_index", 0),
-                "language": obj.properties.get("language", ""),
-                "timestamp": obj.properties.get("timestamp", ""),
-            }
-            metadatas.append(metadata)
-
-            # Convert certainty to distance (ChromaDB format)
-            if hasattr(obj, "metadata") and obj.metadata:
-                certainty = obj.metadata.certainty or 0.0
-                distance = 1.0 - certainty  # Convert certainty to distance
-                distances.append(distance)
-            else:
-                distances.append(0.0)
-
-            if include_embeddings and obj.vector:
-                embeddings.append(obj.vector)
-
-        result = {"ids": [ids], "documents": [documents], "metadatas": [metadatas], "distances": [distances]}
-
-        if include_embeddings and embeddings:
-            result["embeddings"] = [embeddings]
-
-        return result
 
 
 class WeaviateDatabase(VectorDatabase):

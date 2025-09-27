@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Union, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
-    from surrealdb import Surreal  # type: ignore[import-not-found]
+    from surrealdb import Surreal  # type: ignore[import-not-found,import-untyped]
 else:
     Surreal = Any
 import asyncio
@@ -96,7 +96,7 @@ class SurrealDBProvider:
             try:
                 # Import SurrealDB here to handle optional dependency
                 try:
-                    from surrealdb import Surreal  # type: ignore[import-not-found]
+                    from surrealdb import Surreal  # type: ignore[import-not-found,import-untyped]
                 except ImportError as e:
                     raise DatabaseError(
                         "SurrealDB not installed. Install with: pip install surrealdb"

@@ -91,7 +91,7 @@ class QueryProcessor(Protocol):
 class Categorizer(Protocol):
     """Protocol for query categorization operations."""
 
-    def categorize_query(self, query: str, context: dict[str, Any] | None = None) -> CategoryMatch:
+    def categorize_query(self, query: str, scope_context: dict[str, Any] | None = None) -> CategoryMatch:
         """Categorize query and determine retrieval strategy."""
         ...
 
@@ -628,17 +628,102 @@ class HierarchicalRetriever:
 
         # Step 3: Execute search with expanded results for processing
         expanded_results = max_results * 2
-        raw_results = await self._search_engine.search(
-            query_text=processed_query.processed, k=expanded_results, similarity_threshold=similarity_threshold
-        )
+        # Use relaxed threshold for search engine to allow strategy-specific processing
+        # Final threshold is applied in Step 5
+        try:
+            logger.debug(
+                "hierarchical_retriever",
+                "search_engine_call",
+                f"Calling search engine with query: '{processed_query.processed[:100]}...', k={expanded_results}",
+            )
+            raw_results = await self._search_engine.search(
+                query_text=processed_query.processed, k=expanded_results, similarity_threshold=0.0
+            )
+            logger.debug(
+                "hierarchical_retriever", "search_engine_result", f"Search engine returned {len(raw_results)} results"
+            )
+        except Exception as e:
+            logger.error(
+                "hierarchical_retriever",
+                "search_engine_error",
+                f"SEARCH ENGINE FAILED: {type(e).__name__}: {str(e)} | query='{processed_query.processed[:100]}' | k={expanded_results}",
+            )
+            # Import traceback to get full stack trace
+            import traceback
+
+            logger.error("hierarchical_retriever", "search_engine_traceback", traceback.format_exc())
+            raise
 
         # Step 4: Apply strategy-specific processing
         processed_results = apply_strategy_specific_processing(
             raw_results, strategy_type, processed_query, self._config
         )
 
-        # Step 5: Filter and limit results
-        filtered_results = filter_results_by_threshold(processed_results, similarity_threshold)[:max_results]
+        # Step 5: Filter by final_score (not similarity_score) and limit results
+        # AI DEBUGGING: Comprehensive trace logging for filtering analysis
+        logger = get_system_logger()
+
+        # Log pre-filtering state for AI debugging
+        logger.trace(
+            "hierarchical_filter",
+            "pre_filtering_analysis",
+            f"FILTER_ANALYSIS | processed_results_count={len(processed_results)} | "
+            f"similarity_threshold={similarity_threshold} | max_results={max_results} | "
+            f"strategy_type={strategy_type.value}",
+        )
+
+        # Log each result's filtering eligibility for AI debugging
+        passing_results = []
+        failing_results = []
+        for i, result in enumerate(processed_results):
+            passes_filter = result.final_score >= similarity_threshold
+            filter_status = "PASS" if passes_filter else "FAIL"
+
+            logger.trace(
+                "hierarchical_filter",
+                "result_filtering",
+                f"RESULT_{i:02d} | final_score={result.final_score:.6f} | "
+                f"similarity_score={result.similarity_score:.6f} | "
+                f"threshold={similarity_threshold} | passes={passes_filter} | "
+                f"status={filter_status} | content_preview={str(result.content)[:50]}",
+            )
+
+            if passes_filter:
+                passing_results.append(result)
+            else:
+                failing_results.append(result)
+
+        # Log filtering summary for AI debugging
+        logger.trace(
+            "hierarchical_filter",
+            "filtering_summary",
+            f"FILTERING_SUMMARY | total_processed={len(processed_results)} | "
+            f"passing_filter={len(passing_results)} | failing_filter={len(failing_results)} | "
+            f"threshold={similarity_threshold} | max_results={max_results}",
+        )
+
+        # Log score distribution for AI debugging
+        if processed_results:
+            scores = [r.final_score for r in processed_results]
+            logger.trace(
+                "hierarchical_filter",
+                "score_distribution",
+                f"SCORE_DIST | min_score={min(scores):.6f} | max_score={max(scores):.6f} | "
+                f"avg_score={sum(scores) / len(scores):.6f} | threshold={similarity_threshold} | "
+                f"scores_above_threshold={len([s for s in scores if s >= similarity_threshold])}",
+            )
+
+        # Apply filtering and limiting
+        filtered_results = passing_results[:max_results]
+
+        # Log post-filtering results for AI debugging
+        logger.trace(
+            "hierarchical_filter",
+            "post_filtering_result",
+            f"POST_FILTER | final_count={len(filtered_results)} | "
+            f"applied_max_results_limit={len(passing_results) > max_results} | "
+            f"original_passing={len(passing_results)} | final_returned={len(filtered_results)}",
+        )
 
         # Step 6: Convert to dict format for compatibility
         self._log_debug(f"🔧 Converting {len(filtered_results)} results to dict format...")
