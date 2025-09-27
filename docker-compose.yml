@@ -83,6 +83,7 @@ services:
       - ./services/rag-service/data:/app/data
       - ./services/rag-service/models:/app/models
       - ./services/rag-service/config:/app/config
+      - ./logs:/app/services/rag-service/logs
     depends_on:
       weaviate:
         condition: service_started

@@ -249,7 +249,7 @@ claude-flow.ps1
 hive-mind-prompt-*.txt
 **/data/cache/**
 **/test_db
-**/logs/chat_debug/**
+**/logs/**
 
 crawler/data/**
 
