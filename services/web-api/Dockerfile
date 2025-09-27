@@ -18,8 +18,8 @@ RUN npm ci
 # Copy Prisma schema (for future use)
 COPY services/web-api/prisma ./prisma
 
-# Skip Prisma generation for now to avoid SSL issues
-# RUN npx prisma generate
+# Generate Prisma client for TypeScript build
+RUN npx prisma generate
 
 # Copy source code
 COPY services/web-api/src ./src
