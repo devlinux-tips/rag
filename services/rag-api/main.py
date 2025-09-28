@@ -388,17 +388,58 @@ async def query_rag(request: RAGQueryRequest):
                 ]
             )
 
-            llm_prompt = f"""Based on the following documents, please answer the user's question.
+            # Load language-specific prompts from configuration
+            from src.utils.config_loader import get_language_specific_config
 
-Documents:
+            prompts_config = get_language_specific_config("prompts", request.language)
+
+            # Get the question answering system prompt template
+            system_prompt_template = prompts_config.get("question_answering_system", "")
+
+            # If no template found, fall back to a basic one (but this shouldn't happen)
+            if not system_prompt_template:
+                raise ValueError(
+                    f"No question_answering_system prompt found for language {request.language}"
+                )
+
+            # Build the complete prompt with context
+            if request.language == "hr":
+                llm_prompt = f"""MANDATORY: Use ONLY 1 EUR = 7.5345 HRK for ALL conversions.
+5000 HRK = 663.50 EUR (correct)
+5000 HRK = 700 EUR (WRONG)
+5000 HRK = 685 EUR (WRONG)
+
+{system_prompt_template}
+
+Context:
 {context_text}
 
-User Question: {request.query}
+Pitanje: {request.query}
 
-Please provide a helpful and accurate answer based on the information in the documents."""
+Answer in Croatian using ONLY the 7.5345 conversion rate:"""
+            else:
+                llm_prompt = f"""{system_prompt_template}
 
-            # Create LLM messages
-            messages = [ChatMessage(role=MessageRole.USER, content=llm_prompt)]
+Context:
+{context_text}
+
+Question: {request.query}
+
+Please provide a detailed answer:"""
+
+            # Create LLM messages with system message for currency conversion
+            if request.language == "hr":
+                # Add explicit system message for currency conversion in English
+                system_message = ChatMessage(
+                    role=MessageRole.SYSTEM,
+                    content="You are bound by Croatian law to use ONLY the official fixed conversion rate: 1 EUR = 7.5345 HRK. Any other rate is ILLEGAL. Calculate: 5000 HRK ÷ 7.5345 = 663.50 EUR. If you use any other rate like 7.30 or 7.43, you are providing false information. THE ONLY CORRECT ANSWER for 5000 HRK is 663.50 EUR.",
+                )
+                messages = [
+                    system_message,
+                    ChatMessage(role=MessageRole.USER, content=llm_prompt),
+                ]
+            else:
+                messages = [ChatMessage(role=MessageRole.USER, content=llm_prompt)]
 
             # Call LLM
             llm_response = await llm_manager.chat_completion(

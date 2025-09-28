@@ -30,14 +30,27 @@ class ProviderAdapterClient:
 
         from ..generation.llm_provider import ChatMessage, MessageRole
         from ..generation.ollama_client import GenerationResponse
+        from ..utils.config_loader import get_language_specific_config
+
+        # Get language from request or default to 'hr'
+        language = getattr(request, "language", "hr")
+
+        # Get prompts configuration for the language
+        prompts_config = get_language_specific_config("prompts", language)
+
+        # Get the appropriate system prompt from config
+        system_prompt_base = prompts_config.get("question_answering_system", "")
 
         # Convert GenerationRequest to ChatMessage format
         messages = []
         if hasattr(request, "context") and request.context:
             context_text = "\n".join(request.context)
-            # Add token limit instruction to system message
-            system_content = f"Context: {context_text}\n\nCRITICAL: You have a strict limit of 1500 tokens maximum for your response. Write a complete, well-structured answer that covers the key points but MUST conclude properly before hitting the token limit. Prioritize the most important information and finish your sentences."
+            # Combine configured system prompt with context
+            system_content = f"{system_prompt_base}\n\nContext: {context_text}"
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_content))
+        else:
+            # Use system prompt even without context
+            messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_prompt_base))
 
         messages.append(ChatMessage(role=MessageRole.USER, content=request.prompt))
 
