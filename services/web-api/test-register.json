@@ -1,0 +1,6 @@
+{
+  "email": "john@example.com",
+  "password": "SecurePassword123@",
+  "name": "John Doe",
+  "tenantName": "Acme Corporation"
+}

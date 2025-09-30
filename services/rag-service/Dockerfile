@@ -37,17 +37,22 @@ FROM dependencies as application
 # Set working directory
 WORKDIR /app
 
-# Copy application code
-COPY --chown=raguser:raguser . .
-
-# Create required directories with proper permissions
+# Create required directories first (as root)
 RUN mkdir -p \
     /app/data \
     /app/models \
     /app/system/logs \
     /app/system/temp \
-    /app/system/backups \
-    && chown -R raguser:raguser /app
+    /app/system/backups
+
+# Copy only necessary application code with proper ownership
+COPY --chown=raguser:raguser services/rag-service/src /app/src
+COPY --chown=raguser:raguser services/rag-service/config /app/config
+COPY --chown=raguser:raguser services/rag-service/*.py /app/
+COPY --chown=raguser:raguser rag.py /app/
+
+# Set ownership only for empty directories (much faster)
+RUN chown -R raguser:raguser /app/data /app/models /app/system
 
 # Switch to non-root user
 USER raguser
@@ -56,8 +61,9 @@ USER raguser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.path.insert(0, '/app/src'); from utils.config_loader import get_unified_config; get_unified_config()" || exit 1
 
-# Default command - can be overridden in docker-compose
-CMD ["python", "rag.py", "--help"]
+# Default command - keep container running for CLI operations
+# Can be overridden in docker-compose
+CMD ["tail", "-f", "/dev/null"]
 
 # Expose ports for web services
 EXPOSE 8080

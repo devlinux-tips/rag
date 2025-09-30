@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { authConfig } from '../config/auth.config';
-import { AuthContext, JWTPayload, UnauthorizedError } from '../types/auth.types';
+import { authService } from '../services/auth.service';
+import { AuthContext, UnauthorizedError } from '../types/auth.types';
 
 // Extend Express Request type to include auth context
 declare global {
@@ -13,58 +12,35 @@ declare global {
 }
 
 /**
- * Extract authentication context from request
- * Supports both mock mode (development) and JWT mode (production)
+ * Extract authentication context from JWT token
+ * FAIL-FAST: No token = immediate rejection
  */
 export async function extractAuthContext(req: Request): Promise<AuthContext> {
-  // Mock mode - return predefined context
-  if (authConfig.mode === 'mock') {
-    return {
-      user: {
-        id: authConfig.mockUser.id,
-        email: authConfig.mockUser.email
-      },
-      tenant: {
-        id: authConfig.mockUser.tenantId,
-        slug: authConfig.mockUser.tenantSlug
-      },
-      language: authConfig.mockUser.language,
-      features: authConfig.mockUser.features,
-      permissions: authConfig.mockUser.permissions
-    };
-  }
-
   // JWT mode - validate and extract from token
   const token = extractTokenFromHeader(req);
   if (!token) {
     throw new UnauthorizedError('No authentication token provided');
   }
 
-  try {
-    const decoded = jwt.verify(token, authConfig.jwtSecret) as JWTPayload;
+  // Use auth service to verify token - FAIL-FAST validation
+  const decoded = authService.verifyAccessToken(token);
 
-    return {
-      user: {
-        id: decoded.userId,
-        email: decoded.email
-      },
-      tenant: {
-        id: decoded.tenantId,
-        slug: decoded.tenantSlug
-      },
-      language: decoded.language,
-      features: decoded.features || [],
-      permissions: decoded.permissions || []
-    };
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      throw new UnauthorizedError('Token expired');
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new UnauthorizedError('Invalid token');
-    }
-    throw error;
-  }
+  return {
+    user: {
+      id: decoded.userId,
+      email: decoded.email,
+      name: decoded.name,
+      role: decoded.role,
+    },
+    tenant: {
+      id: decoded.tenantId,
+      slug: decoded.tenantSlug,
+      name: decoded.tenantName,
+    },
+    language: decoded.language,
+    features: decoded.features,
+    permissions: decoded.permissions
+  };
 }
 
 /**

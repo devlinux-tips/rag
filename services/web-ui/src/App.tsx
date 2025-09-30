@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { ChatInterface } from './components/ChatInterface';
 import { Sidebar } from './components/Sidebar';
+import { SignupPage } from './pages/SignupPage';
+import { LoginPage } from './pages/LoginPage';
+import { useAuth } from './contexts/AuthContext';
 import { trpc } from './utils/trpc';
 
-function App() {
+function ChatApp() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // Force sidebar refresh
@@ -146,6 +150,31 @@ function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+function App() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-900">
+        <div className="text-center">
+          <svg className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/signup" element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />} />
+      <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} />
+      <Route path="/" element={isAuthenticated ? <ChatApp /> : <Navigate to="/login" replace />} />
+    </Routes>
   );
 }
 

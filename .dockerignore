@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Data files (these should be mounted, not copied)
+*.pdf
+*.jsonl
+*.json
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large data directories
+crawler/data/
+data/
+services/rag-service/data/
+services/rag-service/models/
+services/web-ui/node_modules/
+services/web-api/node_modules/
+
+# Build directories
+services/web-ui/dist/
+services/web-api/dist/
+services/web-ui/build/
+services/web-api/build/
+
+# Temporary files
+*.tmp
+temp/
+tmp/

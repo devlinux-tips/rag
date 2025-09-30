@@ -6,44 +6,67 @@ const envFile = process.env.NODE_ENV === 'production' ? '.env' : '.env.developme
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 export interface AuthConfig {
-  mode: 'mock' | 'jwt' | 'production';
+  mode: 'jwt' | 'production';
   jwtSecret: string;
-  mockUser: {
-    id: string;
-    email: string;
-    tenantId: string;
-    tenantSlug: string;
-    language: string;
-    features: string[];
-    permissions: string[];
-  };
+}
+
+// FAIL-FAST: Direct access without fallbacks
+function getRequiredEnvVar(name: string, fallbackForDev?: string): string {
+  const value = process.env[name];
+
+  // In production, ALL required env vars must be set
+  if (process.env.NODE_ENV === 'production') {
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${name}`);
+    }
+    return value;
+  }
+
+  // In development, allow fallbacks but warn
+  if (!value) {
+    if (fallbackForDev) {
+      console.warn(`⚠️  Using default value for ${name}. Set explicitly for production.`);
+      return fallbackForDev;
+    } else {
+      throw new Error(`Missing required environment variable: ${name}`);
+    }
+  }
+
+  return value;
 }
 
 export const authConfig: AuthConfig = {
-  mode: (process.env.AUTH_MODE || 'mock') as AuthConfig['mode'],
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
-  mockUser: {
-    id: process.env.MOCK_USER_ID || 'dev_user_123',
-    email: process.env.MOCK_USER_EMAIL || 'dev@example.com',
-    tenantId: process.env.MOCK_TENANT_ID || 'dev_tenant',
-    tenantSlug: process.env.MOCK_TENANT_SLUG || 'development',
-    language: process.env.MOCK_LANGUAGE || 'hr',
-    features: (process.env.MOCK_FEATURES || 'narodne-novine').split(','),
-    permissions: (process.env.MOCK_PERMISSIONS || 'chat:create,chat:read,chat:write,chat:delete').split(',')
-  }
+  mode: (getRequiredEnvVar('AUTH_MODE', 'jwt')) as AuthConfig['mode'],
+  jwtSecret: getRequiredEnvVar('JWT_SECRET', 'dev-secret-change-in-production'),
 };
 
-// Validate configuration at startup
+// Validate configuration at startup - FAIL-FAST
 export function validateAuthConfig(): void {
-  if (authConfig.mode === 'production' && authConfig.jwtSecret === 'dev-secret-change-in-production') {
-    throw new Error('JWT_SECRET must be changed for production environment');
+  // Validate mode
+  const validModes = ['jwt', 'production'];
+  if (!validModes.includes(authConfig.mode)) {
+    throw new Error(`Invalid AUTH_MODE: ${authConfig.mode}. Must be one of: ${validModes.join(', ')}`);
   }
 
-  if (authConfig.mode === 'mock') {
-    console.log('⚠️  Running in MOCK authentication mode - DO NOT USE IN PRODUCTION');
-    console.log(`📌 Mock user: ${authConfig.mockUser.email} (${authConfig.mockUser.id})`);
-    console.log(`📌 Mock tenant: ${authConfig.mockUser.tenantSlug} (${authConfig.mockUser.tenantId})`);
-    console.log(`📌 Mock language: ${authConfig.mockUser.language}`);
-    console.log(`📌 Mock features: ${authConfig.mockUser.features.join(', ')}`);
+  // JWT Secret validation
+  if (!authConfig.jwtSecret) {
+    throw new Error('JWT_SECRET is required for JWT authentication');
+  }
+
+  // Production mode validation
+  if (authConfig.mode === 'production') {
+    if (authConfig.jwtSecret === 'dev-secret-change-in-production') {
+      throw new Error('JWT_SECRET must be set to a secure value for production environment');
+    }
+
+    if (authConfig.jwtSecret.length < 32) {
+      throw new Error('JWT_SECRET must be at least 32 characters long for production');
+    }
+  }
+
+  console.log(`✅ Authentication mode: JWT`);
+
+  if (authConfig.mode !== 'production' && authConfig.jwtSecret === 'dev-secret-change-in-production') {
+    console.warn('⚠️  Using default JWT_SECRET for development. Change for production!');
   }
 }

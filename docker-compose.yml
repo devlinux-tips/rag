@@ -15,8 +15,21 @@ services:
       DEFAULT_VECTORIZER_MODULE: 'none'  # Use custom embeddings
       ENABLE_MODULES: ''
       CLUSTER_HOSTNAME: 'node1'
+      # Performance settings - USE ALL RESOURCES!
+      GOGC: 100
+      LIMIT_RESOURCES: 'false'
+      PERSISTENCE_LSM_ACCESS_STRATEGY: 'mmap'
+      # Use most of the memory (leave some for OS)
+      GOMEMLIMIT: 200GiB  # Give Weaviate 200GB RAM
+      PERSISTENCE_LSM_MAX_SEGMENT_SIZE: '10GB'
+      # Use all cores!
+      GOMAXPROCS: 140  # Use 140 of 144 cores
     volumes:
-      - weaviate_data:/var/lib/weaviate
+      # Mount to specific directory with enough space
+      # Change this path to your large storage location
+      - ./weaviate_data:/var/lib/weaviate
+      # Or use absolute path to different disk:
+      # - /mnt/large-disk/weaviate_data:/var/lib/weaviate
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "timeout 5s bash -c 'cat < /dev/null > /dev/tcp/localhost/8080' || exit 1"]
@@ -58,6 +71,38 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # RAG Service (for CLI and data processing)
+  rag-service:
+    build:
+      context: .
+      dockerfile: services/rag-service/Dockerfile
+    container_name: rag_service
+    environment:
+      # Use container networking
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: 8080
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
+      PYTHONPATH: /app
+    volumes:
+      # Mount data directories
+      - ./services/rag-service/data:/app/data
+      - ./services/rag-service/models:/app/models
+      - ./services/rag-service/config:/app/config
+      - ./services/rag-service/src:/app/src
+      - ./services/rag-service:/app
+      - ./logs:/app/logs
+    depends_on:
+      weaviate:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: tail -f /dev/null  # Keep container running for CLI operations
 
   # RAG API (Python service)
   rag-api:
@@ -111,9 +156,9 @@ services:
       NODE_ENV: production
       PORT: 3000
 
-      # Authentication
-      AUTH_MODE: mock
-      JWT_SECRET: dev-secret-change-in-production
+      # Authentication - JWT ONLY
+      AUTH_MODE: jwt
+      JWT_SECRET: dev-secret-change-in-production-PLEASE-USE-SECURE-SECRET
 
       # Service URLs (container networking)
       PYTHON_RAG_URL: http://rag_api:8082
@@ -133,16 +178,9 @@ services:
       # Rate limiting
       RATE_LIMIT_WINDOW_MS: 60000
       RATE_LIMIT_MAX_REQUESTS: 60
-
-      # Mock user configuration
-      MOCK_USER_ID: dev_user
-      MOCK_USER_EMAIL: dev@example.com
-      MOCK_TENANT_ID: development
-      MOCK_TENANT_SLUG: development
-      MOCK_LANGUAGE: hr
-      MOCK_FEATURES: narodne-novine,financial-reports
-      MOCK_PERMISSIONS: chat:create,chat:read,chat:write,chat:delete,user:read,user:write,tenant:read
     depends_on:
+      weaviate:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:

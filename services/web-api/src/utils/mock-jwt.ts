@@ -9,8 +9,11 @@ export function generateMockJWT(overrides?: Partial<JWTPayload>): string {
   const payload: JWTPayload = {
     userId: 'test_user_123',
     email: 'test@example.com',
+    name: 'Test User',
+    role: 'user',
     tenantId: 'test_tenant',
     tenantSlug: 'testing',
+    tenantName: 'Test Organization',
     language: 'hr',
     features: ['narodne-novine'],
     permissions: ['chat:create', 'chat:read', 'chat:write'],
@@ -30,8 +33,11 @@ export const mockTokens = {
   fullAccess: generateMockJWT({
     userId: 'admin_user',
     email: 'admin@example.com',
+    name: 'Admin User',
+    role: 'admin',
     tenantId: 'test_tenant',
     tenantSlug: 'testing',
+    tenantName: 'Test Organization',
     language: 'hr',
     permissions: [
       'chat:create', 'chat:read', 'chat:write', 'chat:delete',
@@ -45,6 +51,9 @@ export const mockTokens = {
   readOnly: generateMockJWT({
     userId: 'viewer_user',
     email: 'viewer@example.com',
+    name: 'Viewer User',
+    role: 'user',
+    tenantName: 'Test Organization',
     language: 'hr',
     permissions: ['chat:read', 'user:read', 'tenant:read'],
     features: ['narodne-novine']
@@ -54,6 +63,9 @@ export const mockTokens = {
   noFeatures: generateMockJWT({
     userId: 'limited_user',
     email: 'limited@example.com',
+    name: 'Limited User',
+    role: 'user',
+    tenantName: 'Test Organization',
     language: 'hr',
     features: [],
     permissions: ['chat:read']
@@ -63,8 +75,11 @@ export const mockTokens = {
   differentTenant: generateMockJWT({
     userId: 'other_user',
     email: 'other@example.com',
+    name: 'Other User',
+    role: 'user',
     tenantId: 'other_tenant',
     tenantSlug: 'other',
+    tenantName: 'Other Organization',
     language: 'en',
     features: ['narodne-novine']
   }),
@@ -73,9 +88,14 @@ export const mockTokens = {
   expired: jwt.sign({
     userId: 'expired_user',
     email: 'expired@example.com',
+    name: 'Expired User',
+    role: 'user',
     tenantId: 'test_tenant',
     tenantSlug: 'testing',
+    tenantName: 'Test Organization',
     language: 'hr',
+    features: ['narodne-novine'],
+    permissions: ['chat:read'],
     iat: Math.floor(Date.now() / 1000) - 7200,
     exp: Math.floor(Date.now() / 1000) - 3600
   }, authConfig.jwtSecret)

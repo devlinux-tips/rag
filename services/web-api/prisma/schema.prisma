@@ -10,6 +10,96 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Tenant model - multi-tenant organization
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // URL-safe identifier
+  status    String   @default("active") // "active", "suspended", "trial"
+
+  // Feature configuration
+  features  Json     @default("[]") // Array of enabled feature strings
+  settings  Json     @default("{}") // Tenant-specific configuration
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users     User[]
+
+  // Indexes
+  @@index([status])
+  @@index([createdAt])
+}
+
+// User model - authentication and authorization
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String   // bcrypt hashed
+  name        String
+  role        String   @default("user") // "user", "admin", "owner"
+
+  // Multi-tenant relationship
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Authorization
+  features    Json     @default("[]") // Array of enabled feature strings for this user
+  permissions Json     @default("[]") // Array of permission strings
+
+  // Profile settings
+  language    String   @default("hr") // Default language preference
+  timezone    String   @default("Europe/Zagreb")
+  settings    Json     @default("{}")
+
+  // Security
+  emailVerified      Boolean   @default(false)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  passwordChangedAt  DateTime  @default(now())
+
+  // Refresh tokens
+  refreshTokens RefreshToken[]
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Indexes
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+  @@index([createdAt])
+}
+
+// Refresh token model - JWT refresh token management
+model RefreshToken {
+  id          String   @id @default(cuid())
+  token       String   @unique // The actual refresh token
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Token metadata
+  deviceInfo  String?  // User agent or device identifier
+  ipAddress   String?  // IP address where token was issued
+
+  // Expiration
+  expiresAt   DateTime
+  isRevoked   Boolean  @default(false)
+  revokedAt   DateTime?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Indexes
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
 // Chat model - stores conversation sessions
 model Chat {
   id          String   @id @default(cuid())
