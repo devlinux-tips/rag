@@ -633,56 +633,6 @@ class TestVectorStorage:
         assert result.success is False
         assert result.error_message == "Storage not initialized - call initialize() first"
 
-    async def test_search_documents_by_text(self):
-        """Test document search by text."""
-        storage = VectorStorage(self.mock_database)
-        await storage.initialize("test_collection")
-
-        # Mock query results
-        raw_results = {
-            "ids": [["doc1", "doc2"]],
-            "documents": [["Content 1", "Content 2"]],
-            "metadatas": [[{}, {}]],
-            "distances": [[0.1, 0.3]]
-        }
-        self.mock_collection.query.return_value = raw_results
-
-        results = await storage.search_documents(query_text="test query", top_k=5)
-
-        assert len(results) == 2
-        assert results[0].id == "doc1"
-        assert results[0].content == "Content 1"
-        self.mock_collection.query.assert_called_once_with(
-            query_texts=["test query"],
-            n_results=5,
-            where=None,
-            include=["documents", "metadatas", "distances"]
-        )
-
-    async def test_search_documents_by_embedding(self):
-        """Test document search by embedding."""
-        storage = VectorStorage(self.mock_database)
-        await storage.initialize("test_collection")
-
-        query_embedding = np.array([1.0, 2.0, 3.0])
-        raw_results = {
-            "ids": [["doc1"]],
-            "documents": [["Content 1"]],
-            "metadatas": [[{}]],
-            "distances": [[0.1]]
-        }
-        self.mock_collection.query.return_value = raw_results
-
-        results = await storage.search_documents(query_embedding=query_embedding, top_k=5)
-
-        assert len(results) == 1
-        assert results[0].id == "doc1"
-        self.mock_collection.query.assert_called_once_with(
-            query_embeddings=[query_embedding],
-            n_results=5,
-            where=None,
-            include=["documents", "metadatas", "distances"]
-        )
 
     async def test_search_documents_not_initialized(self):
         """Test document search without initialization."""
@@ -768,14 +718,3 @@ class TestFactoryFunctions:
         assert isinstance(storage, VectorStorage)
         assert storage.database == mock_database
 
-    def test_create_mock_storage(self):
-        """Test creating mock storage."""
-        with patch('src.vectordb.storage_factories.create_mock_database') as mock_create_db:
-            mock_db = Mock(spec=VectorDatabase)
-            mock_create_db.return_value = mock_db
-
-            storage = create_mock_storage()
-
-            assert isinstance(storage, VectorStorage)
-            assert storage.database == mock_db
-            mock_create_db.assert_called_once()

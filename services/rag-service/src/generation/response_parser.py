@@ -510,10 +510,10 @@ class ParsingConfig:
 # ===== PROTOCOLS =====
 
 
-class ConfigProvider(Protocol):
+class ParsingConfigProvider(Protocol):
     """Protocol for parsing configuration providers."""
 
-    def get_parsing_config(self, language: str) -> dict[str, Any]:
+    def get_parsing_config(self, language: str) -> ParsingConfig:
         """Get parsing configuration for language."""
         ...
 
@@ -524,7 +524,7 @@ class ConfigProvider(Protocol):
 class MultilingualResponseParser:
     """Parser for multilingual LLM responses with language-specific behavior."""
 
-    def __init__(self, config_provider: ConfigProvider, language: str = "hr"):
+    def __init__(self, config_provider: ParsingConfigProvider, language: str = "hr"):
         """
         Initialize parser with dependency injection.
 
@@ -652,17 +652,49 @@ class MultilingualResponseParser:
 # ===== FACTORY FUNCTIONS =====
 
 
-def create_response_parser(config_provider: ConfigProvider, language: str = "hr") -> MultilingualResponseParser:
+class ConfigProviderAdapter:
+    """Adapter to convert general ConfigProvider to ParsingConfigProvider."""
+
+    def __init__(self, config_provider):
+        """Initialize adapter with general config provider."""
+        self._config_provider = config_provider
+
+    def get_parsing_config(self, language: str) -> ParsingConfig:
+        """Get parsing config by loading from general config provider."""
+        config_dict = self._config_provider.get_parsing_config(language)
+        return ParsingConfig(
+            no_answer_patterns=config_dict.get("no_answer_patterns", []),
+            source_patterns=config_dict.get("source_patterns", []),
+            confidence_indicators=config_dict.get("confidence_indicators", {}),
+            language_patterns=config_dict.get("language_patterns", {}),
+            cleaning_prefixes=config_dict.get("cleaning_prefixes", []),
+            display_settings=config_dict.get("display_settings", {}),
+        )
+
+
+def create_response_parser(config_provider, language: str = "hr") -> MultilingualResponseParser:
     """
     Factory function to create multilingual response parser.
 
     Args:
-        config_provider: Configuration provider
+        config_provider: Configuration provider (will be adapted if not ParsingConfigProvider)
         language: Language code for language-specific behavior
 
     Returns:
         Configured MultilingualResponseParser instance
     """
+    # If config_provider doesn't have get_parsing_config that returns ParsingConfig, wrap it
+    if not isinstance(config_provider, type) and hasattr(config_provider, "get_parsing_config"):
+        # Check if it returns dict (general ConfigProvider) vs ParsingConfig
+        try:
+            test_config = config_provider.get_parsing_config(language)
+            if isinstance(test_config, dict):
+                # Wrap with adapter
+                config_provider = ConfigProviderAdapter(config_provider)
+        except Exception:
+            # If it fails, wrap it anyway
+            config_provider = ConfigProviderAdapter(config_provider)
+
     return MultilingualResponseParser(config_provider, language)
 
 
@@ -673,7 +705,7 @@ def create_mock_config_provider(
     language_patterns: dict[str, list[str]] | None = None,
     cleaning_prefixes: list[str] | None = None,
     display_settings: dict[str, str] | None = None,
-) -> ConfigProvider:
+) -> ParsingConfigProvider:
     """
     Factory function to create mock configuration provider.
 
@@ -690,7 +722,7 @@ def create_mock_config_provider(
     """
 
     class MockConfigProvider:
-        def get_parsing_config(self, language: str) -> dict[str, Any]:
+        def get_parsing_config(self, language: str) -> ParsingConfig:
             default_no_answer = ["ne znam", "ne mogu", "nema podataka", "don't know", "no information"]
             default_source = [r"izvor:", r"prema:", r"dokumentu:", r"source:", r"according to:"]
             default_confidence = {
@@ -711,13 +743,13 @@ def create_mock_config_provider(
                 "sources_prefix": "Sources",
             }
 
-            return {
-                "no_answer_patterns": no_answer_patterns or default_no_answer,
-                "source_patterns": source_patterns or default_source,
-                "confidence_indicators": confidence_indicators or default_confidence,
-                "language_patterns": language_patterns or default_language,
-                "cleaning_prefixes": cleaning_prefixes or default_prefixes,
-                "display_settings": display_settings or default_display,
-            }
+            return ParsingConfig(
+                no_answer_patterns=no_answer_patterns or default_no_answer,
+                source_patterns=source_patterns or default_source,
+                confidence_indicators=confidence_indicators or default_confidence,
+                language_patterns=language_patterns or default_language,
+                cleaning_prefixes=cleaning_prefixes or default_prefixes,
+                display_settings=display_settings or default_display,
+            )
 
     return MockConfigProvider()

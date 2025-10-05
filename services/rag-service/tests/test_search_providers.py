@@ -939,9 +939,14 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertEqual(provider.model_name, "BAAI/bge-m3")
         self.assertEqual(provider.device, "cpu")
 
-    def test_create_vector_search_provider(self):
+    @patch('src.utils.config_loader.get_config_section')
+    def test_create_vector_search_provider(self, mock_get_config):
         """Test creating ChromaDB search provider."""
-        mock_collection = Mock()
+        # Mock config to return chromadb as provider
+        mock_get_config.return_value = {"provider": "chromadb"}
+
+        # Create a mock collection without a .collection attribute
+        mock_collection = Mock(spec=['name', 'count', 'query'])
         provider = create_vector_search_provider(mock_collection)
 
         self.assertIsInstance(provider, ChromaDBSearchProvider)

@@ -742,6 +742,18 @@ class TestSystemConfig(unittest.TestCase):
             "shared": {
                 "cache_dir": "test/cache"
             },
+            "vectordb": {
+                "chromadb": {
+                    "db_path_template": "{data_base_dir}/{tenant_slug}/chromadb",
+                    "persist": True,
+                    "allow_reset": False,
+                },
+                "collection_name_template": "{tenant}_{language}_collection",
+                "distance_metric": "cosine",
+            },
+            "paths": {
+                "data_base_dir": "data"
+            },
         }
 
         language_config = {

@@ -94,6 +94,9 @@ class MockVectorStorage:
 
     def __init__(self):
         self._documents = []
+        self.collection = None  # Add collection attribute for RAG system checks
+        self.collection_name = "mock_collection"  # Add collection_name for initialization checks
+        self._pending_collection_name = "mock_collection"  # Add _pending_collection_name for RAG system
 
     def add(self, ids: list[str], documents: list[str], metadatas: list[dict], embeddings: list) -> None:
         """Add documents with embeddings to storage."""
@@ -107,7 +110,16 @@ class MockVectorStorage:
             self._documents.append({"content": doc, "metadata": meta, "embedding": emb})
 
     def create_collection(self) -> None:
-        pass
+        self.collection = "mock_collection"  # Set collection when created
+
+    async def initialize(self, collection_name: str | None = None, **kwargs) -> None:
+        """Initialize the vector storage with a collection."""
+        if collection_name:
+            self.collection_name = collection_name
+            self._pending_collection_name = collection_name
+        self.collection = "mock_collection"
+        # Call create_collection to match expected behavior
+        self.create_collection()
 
     def get_document_count(self) -> int:
         return len(self._documents)

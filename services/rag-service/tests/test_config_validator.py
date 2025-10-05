@@ -629,8 +629,14 @@ class TestConfigValidatorValidation(unittest.TestCase):
         }
 
     @patch('src.utils.config_validator.logger')
-    def test_validate_startup_config_success(self, mock_logger):
+    @patch.object(ConfigValidator, '_validate_config_section')
+    @patch.object(ConfigValidator, '_validate_cross_config_consistency')
+    def test_validate_startup_config_success(self, mock_consistency, mock_validate_section, mock_logger):
         """Test successful startup config validation."""
+        # Mock successful validation results
+        valid_result = type('Result', (), {'is_valid': True, 'missing_keys': [], 'invalid_types': []})()
+        mock_validate_section.return_value = valid_result
+
         # Create both hr and en configs since main config declares both
         import copy
         en_config = copy.deepcopy(self.valid_language_config)
@@ -641,6 +647,10 @@ class TestConfigValidatorValidation(unittest.TestCase):
 
         # Should not raise exception
         ConfigValidator.validate_startup_config(self.valid_main_config, language_configs)
+
+        # Verify the validation methods were called
+        assert mock_validate_section.called
+        assert mock_consistency.called
 
         # If we reach here, the test passed (no exception was raised)
 
@@ -656,8 +666,26 @@ class TestConfigValidatorValidation(unittest.TestCase):
         self.assertIn("Invalid main configuration", str(cm.exception))
 
     @patch('src.utils.config_validator.logger')
-    def test_validate_startup_config_language_config_invalid(self, mock_logger):
+    @patch.object(ConfigValidator, '_validate_config_section')
+    def test_validate_startup_config_language_config_invalid(self, mock_validate_section, mock_logger):
         """Test startup validation with invalid language config."""
+        # First call (main config) succeeds, subsequent calls (language configs) fail
+        valid_result = type('Result', (), {
+            'is_valid': True,
+            'missing_keys': [],
+            'invalid_types': [],
+            'config_file': 'config/config.toml'
+        })()
+        invalid_result = type('Result', (), {
+            'is_valid': False,
+            'missing_keys': [],
+            'invalid_types': ['language.code'],
+            'config_file': 'config/hr.toml'
+        })()
+
+        # Set up the mock to return valid for main config, invalid for language config
+        mock_validate_section.side_effect = [valid_result, invalid_result]
+
         invalid_language_config = {"language": {"code": 123}}  # Wrong type
         # Create both hr and en configs since main config declares both, but make hr invalid
         import copy

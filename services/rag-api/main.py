@@ -18,14 +18,12 @@ from datetime import datetime
 sys.path.insert(0, "/app/src")
 
 # Import RAG service components
-from src.database.factory import create_database_provider
 from src.generation.llm_provider import (
     LLMManager,
     ChatMessage,
     MessageRole,
 )
-from src.utils.factories import create_complete_rag_system
-from src.models.multitenant_models import Tenant, User
+from src.utils.factories import create_complete_rag_system, Tenant, User
 from src.pipeline.rag_system import RAGQuery
 
 # Initialize FastAPI
@@ -210,23 +208,11 @@ async def get_or_create_rag_system(tenant: str, user: str, language: str, scope:
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize LLM manager and database on startup."""
+    """Initialize LLM manager on startup."""
     global llm_manager
 
     print("INFO: RAG API server starting...")
     print("INFO: Loading configuration...")
-
-    # Use config.toml values with environment variables for secrets
-    database_config = {
-        "provider": "postgresql",
-        "postgresql": {
-            "host": os.getenv("POSTGRES_HOST", "postgres"),  # Docker container name
-            "port": int(os.getenv("POSTGRES_PORT", "5432")),
-            "database": os.getenv("POSTGRES_DB", "ragdb"),
-            "user": os.getenv("POSTGRES_USER", "raguser"),
-            "password": os.getenv("POSTGRES_PASSWORD", "ragpass"),
-        },
-    }
 
     openrouter_config = {
         "api_key": os.getenv("OPENROUTER_API_KEY"),  # From environment
@@ -237,10 +223,6 @@ async def startup_event():
         "max_tokens": 2048,
         "stream": False,
     }
-
-    # Initialize database provider
-    db_provider = create_database_provider(database_config)
-    await db_provider.initialize(database_config)
 
     # Create LLM Manager with proper config structure
     llm_config = {

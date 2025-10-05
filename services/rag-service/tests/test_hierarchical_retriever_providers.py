@@ -198,7 +198,7 @@ class TestMockCategorizer(unittest.TestCase):
         result = self.categorizer.categorize_query("test", context)
 
         self.assertEqual(len(self.categorizer.call_history), 1)
-        self.assertEqual(self.categorizer.call_history[0]["context"], context)
+        self.assertEqual(self.categorizer.call_history[0]["scope_context"], context)
 
 
 class TestMockSearchEngine(unittest.IsolatedAsyncioTestCase):
@@ -627,7 +627,7 @@ class TestCategorizer(unittest.TestCase):
         categorizer = Categorizer("en")
         result = categorizer.categorize_query("api documentation", {"context": "test"})
 
-        mock_categorizer.categorize_query.assert_called_once_with("api documentation")
+        mock_categorizer.categorize_query.assert_called_once_with("api documentation", {"context": "test"})
         self.assertEqual(result, expected_result)
 
 

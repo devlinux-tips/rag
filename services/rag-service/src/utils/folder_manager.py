@@ -4,11 +4,52 @@ Testable version with pure functions and dependency injection architecture.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
-from ..models.multitenant_models import DocumentScope, Tenant, TenantUserContext, User
 from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
+
+
+# Multitenant models are now passed as parameters from external callers
+class DocumentScope(Enum):
+    """Document scope enumeration."""
+
+    USER = "user"
+    TENANT = "tenant"
+
+
+@dataclass
+class Tenant:
+    """Tenant data transfer object - passed from external system."""
+
+    id: str
+    name: str
+    slug: str
+
+    def get_supported_languages(self) -> list[str]:
+        """Get supported languages for this tenant."""
+        return ["hr", "en"]  # Default languages
+
+
+@dataclass
+class User:
+    """User data transfer object - passed from external system."""
+
+    id: str
+    tenant_id: str
+    email: str
+    username: str
+    full_name: str | None = None
+
+
+@dataclass
+class TenantUserContext:
+    """Tenant and user context - passed from external system."""
+
+    tenant: Tenant
+    user: User
+
 
 # ================================
 # DATA CLASSES & CONFIGURATION

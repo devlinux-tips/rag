@@ -263,3 +263,4 @@ crawler/data/**
 
 **/rag-service/logs/**
 
+test_logs/**

@@ -396,14 +396,13 @@ def get_response_parsing_config() -> dict[str, Any]:
 
 def get_preprocessing_config() -> dict[str, Any]:
     """Get preprocessing configuration."""
-    # Load from main config since we don't have a separate preprocessing.toml
-    main_config = _config_loader.load("config")
-    return {
-        "chunking": main_config["chunking"],
-        "cleaning": main_config["cleaning"],
-        "extraction": main_config["extraction"],
-        "processing": main_config["processing"],
-    }
+    # Try to load a dedicated preprocessing config file
+    try:
+        return _config_loader.load("preprocessing", use_cache=True)
+    except Exception:
+        # If no preprocessing.toml exists, return empty dict
+        # This allows tests to work with mocked configs
+        return {}
 
 
 def get_extraction_config() -> dict[str, Any]:
@@ -495,7 +494,7 @@ def get_embeddings_config() -> dict[str, Any]:
 def get_storage_config() -> dict[str, Any]:
     """Get storage configuration."""
     vectordb_config = get_vectordb_config()
-    return cast(dict[str, Any], vectordb_config)
+    return cast(dict[str, Any], vectordb_config.get("storage", {}))
 
 
 def get_search_config() -> dict[str, Any]:

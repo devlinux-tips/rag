@@ -725,10 +725,19 @@ class MultiTenantRAGCLI:
     ) -> DocumentProcessingResult:
         """Execute document processing command using pure business logic."""
         try:
-            # Convert TenantContext to TenantUserContext for folder operations
-            from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+            # Import multitenant types from folder_manager (where they're now defined)
+            from ..utils.folder_manager import Tenant, TenantUserContext, User
 
-            tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
+            # Create tenant user context from CLI context
+            tenant_obj = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
+            user_obj = User(
+                id=context.user_id,
+                tenant_id=tenant_obj.id,
+                email=context.user_email,
+                username=context.user_username,
+                full_name=context.user_full_name,
+            )
+            tenant_user_context = TenantUserContext(tenant=tenant_obj, user=user_obj)
 
             # Ensure folder structure exists
             success = self.folder_manager.ensure_context_folders(tenant_user_context, language)
@@ -785,10 +794,19 @@ class MultiTenantRAGCLI:
     async def execute_list_collections_command(self, context: TenantContext, language: str) -> CollectionInfo:
         """Execute list collections command using pure business logic."""
         try:
-            # Convert TenantContext to TenantUserContext for folder operations
-            from ..models.multitenant_models import DEFAULT_DEVELOPMENT_CONTEXT
+            # Import multitenant types from folder_manager (where they're now defined)
+            from ..utils.folder_manager import Tenant, TenantUserContext, User
 
-            tenant_user_context = DEFAULT_DEVELOPMENT_CONTEXT
+            # Create tenant user context from CLI context
+            tenant_obj = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
+            user_obj = User(
+                id=context.user_id,
+                tenant_id=tenant_obj.id,
+                email=context.user_email,
+                username=context.user_username,
+                full_name=context.user_full_name,
+            )
+            tenant_user_context = TenantUserContext(tenant=tenant_obj, user=user_obj)
 
             collections_info = self.folder_manager.get_collection_storage_paths(tenant_user_context, language)
 
@@ -839,8 +857,8 @@ class MultiTenantRAGCLI:
 
         # Check folder structure
         try:
-            # Create Tenant object from context for folder manager
-            from ..models.multitenant_models import Tenant
+            # Import Tenant from folder_manager (where it's now defined)
+            from ..utils.folder_manager import Tenant
 
             tenant = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
             paths = self.folder_manager.get_tenant_folder_structure(tenant, None, language)
@@ -1222,23 +1240,34 @@ class MockFolderManager:
 
         from ..utils.folder_manager import CollectionPaths
 
+        # Access context attributes properly based on TenantUserContext structure
+        tenant_slug = context.tenant.slug if hasattr(context, "tenant") else getattr(context, "tenant_slug", "unknown")
+        user_username = (
+            context.user.username if hasattr(context, "user") else getattr(context, "user_username", "unknown")
+        )
+
         return CollectionPaths(
-            user_collection_name=f"user_{context.user_username}_{language}",
-            tenant_collection_name=f"tenant_{context.tenant_slug}_{language}",
-            user_collection_path=Path(f"/mock/path/{context.tenant_slug}/user"),
-            tenant_collection_path=Path(f"/mock/path/{context.tenant_slug}/tenant"),
-            base_path=Path(f"/mock/path/{context.tenant_slug}"),
+            user_collection_name=f"user_{user_username}_{language}",
+            tenant_collection_name=f"tenant_{tenant_slug}_{language}",
+            user_collection_path=Path(f"/mock/path/{tenant_slug}/user"),
+            tenant_collection_path=Path(f"/mock/path/{tenant_slug}/tenant"),
+            base_path=Path(f"/mock/path/{tenant_slug}"),
         )
 
     def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> dict[str, Any]:
+        # Access tenant_slug properly based on Tenant structure
+        tenant_slug = tenant.slug if hasattr(tenant, "slug") else getattr(tenant, "tenant_slug", "unknown")
+
         return {
-            "data_folder": Path(f"/mock/{tenant.tenant_slug}/data"),
-            "models_folder": Path(f"/mock/{tenant.tenant_slug}/models"),
-            "config_folder": Path(f"/mock/{tenant.tenant_slug}/config"),
+            "data_folder": Path(f"/mock/{tenant_slug}/data"),
+            "models_folder": Path(f"/mock/{tenant_slug}/models"),
+            "config_folder": Path(f"/mock/{tenant_slug}/config"),
         }
 
     def create_tenant_folder_structure(self, tenant: Any, user: Any, languages: list[str]) -> tuple[bool, list[str]]:
-        created_folders = [f"/mock/{tenant.tenant_slug}/{lang}" for lang in languages]
+        # Access tenant_slug properly based on Tenant structure
+        tenant_slug = tenant.slug if hasattr(tenant, "slug") else getattr(tenant, "tenant_slug", "unknown")
+        created_folders = [f"/mock/{tenant_slug}/{lang}" for lang in languages]
         return True, created_folders
 
 
@@ -1316,8 +1345,8 @@ async def main():
         )
 
         try:
-            from ..models.multitenant_models import Tenant, User
-            from ..utils.factories import create_complete_rag_system
+            # Import Tenant and User from factories (where they're now defined)
+            from ..utils.factories import Tenant, User, create_complete_rag_system
 
             tenant_obj = None
             user_obj = None

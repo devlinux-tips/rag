@@ -324,7 +324,7 @@ class TestPureFunctions:
     def test_determine_retrieval_strategy_category_specific(self):
         """Test retrieval strategy with category-specific strategy."""
         strategy_config = {
-            "category_technical": "advanced_search",
+            "technical": "advanced_search",  # Use the actual enum value
             "default": "basic_search"
         }
 
@@ -356,7 +356,7 @@ class TestPureFunctions:
     def test_determine_retrieval_strategy_complexity_based(self):
         """Test retrieval strategy based on complexity."""
         strategy_config = {
-            "complexity_analytical": "deep_search",
+            "complexity_analytical": "deep_search",  # Use complexity_ prefix
             "default": "basic_search"
         }
 
@@ -401,9 +401,9 @@ class TestPureFunctions:
     def test_determine_retrieval_strategy_priority(self):
         """Test retrieval strategy priority order."""
         strategy_config = {
-            "category_technical": "tech_search",
+            "technical": "tech_search",  # Use actual enum value
             "cultural_context": "cultural_search",
-            "complexity_complex": "complex_search",
+            "complexity_complex": "complex_search",  # Use complexity_ prefix
             "default": "basic_search"
         }
 
@@ -441,7 +441,7 @@ class TestPureFunctions:
             patterns={"technical": ["programming", "code"]},
             cultural_keywords={"programming": ["python"]},
             complexity_thresholds={"simple": 0.5, "moderate": 1.5, "complex": 2.5, "analytical": 3.5},
-            retrieval_strategies={"default": "basic_search", "category_technical": "tech_search"}
+            retrieval_strategies={"default": "basic_search", "technical": "tech_search"}  # Use actual enum value
         )
 
         result = categorize_query_pure("How to code in Python programming?", config)

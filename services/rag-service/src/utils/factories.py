@@ -5,8 +5,8 @@ Component factory utilities for RAG system dependency injection.
 from pathlib import Path
 from typing import Any
 
-from ..models.multitenant_models import Tenant, User
 from ..pipeline.rag_system import create_rag_system
+from .folder_manager import Tenant, User
 from .json_logging import write_debug_json
 from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
 

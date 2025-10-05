@@ -92,7 +92,7 @@ def get_python_targets(repo_root, current_path):
 
         if rag_service_path:
             # WHITELIST: Only include core src subdirectories
-            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "models", "pipeline", "vectordb", "cli"]
+            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "pipeline", "vectordb", "cli"]
 
             src_path = rag_service_path / "src"
             if (repo_root / src_path).exists():
@@ -106,7 +106,7 @@ def get_python_targets(repo_root, current_path):
         # If we're in repository root, format both rag-service and rag-api
         rag_service_path = repo_root / "services" / "rag-service"
         if rag_service_path.exists():
-            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "models", "pipeline", "vectordb", "cli"]
+            core_dirs = ["utils", "generation", "preprocessing", "retrieval", "pipeline", "vectordb", "cli"]
 
             src_path = rag_service_path / "src"
             if src_path.exists():

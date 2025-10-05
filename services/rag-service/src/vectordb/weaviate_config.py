@@ -13,13 +13,13 @@ from ..utils.logging_factory import get_system_logger, log_component_end, log_co
 class WeaviateHNSWConfig:
     """HNSW index configuration for Weaviate."""
 
-    type: str
-    ef_construction: int
-    ef: int
-    max_connections: int
-    ef_dynamic: int
-    cleanup_interval_seconds: int
-    vector_cache_max_objects: int
+    type: str = "hnsw"
+    ef_construction: int = 128
+    ef: int = -1
+    max_connections: int = 32
+    ef_dynamic: int = 100
+    cleanup_interval_seconds: int = 300
+    vector_cache_max_objects: int = 1000000
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "WeaviateHNSWConfig":
@@ -68,11 +68,11 @@ class WeaviateHNSWConfig:
 class WeaviateCompressionConfig:
     """Vector compression configuration for Weaviate."""
 
-    enabled: bool
-    type: str
-    rescore_limit: int
-    training_limit: int
-    cache: bool
+    enabled: bool = False
+    type: str = "pq"
+    rescore_limit: int = 100
+    training_limit: int = 100000
+    cache: bool = False
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "WeaviateCompressionConfig":
@@ -117,10 +117,10 @@ class WeaviateCompressionConfig:
 class WeaviateBackupConfig:
     """Backup configuration for Weaviate."""
 
-    enabled: bool
-    backend: str
-    backup_id: str
-    include_meta: bool
+    enabled: bool = False
+    backend: str = "filesystem"
+    backup_id: str = "default"
+    include_meta: bool = True
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "WeaviateBackupConfig":
@@ -152,13 +152,18 @@ class WeaviateBackupConfig:
 class WeaviateConnectionConfig:
     """Connection configuration for Weaviate."""
 
-    host: str
-    port: int
-    grpc_port: int
-    scheme: str
-    timeout: float
-    startup_period: int
-    additional_headers: dict[str, str]
+    host: str = "localhost"
+    port: int = 8080
+    grpc_port: int = 50051
+    scheme: str = "http"
+    timeout: float = 30.0
+    startup_period: int = 5
+    additional_headers: dict[str, str] | None = None
+
+    def __post_init__(self):
+        """Initialize additional headers if None."""
+        if self.additional_headers is None:
+            self.additional_headers = {}
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "WeaviateConnectionConfig":
@@ -208,13 +213,13 @@ class WeaviateConnectionConfig:
 class WeaviateGeneralConfig:
     """General Weaviate configuration."""
 
-    vectorizer: str
-    collection_name_template: str
-    distance_metric: str
-    batch_size: int
-    timeout: float
-    max_retries: int
-    retry_delay: float
+    vectorizer: str = "none"
+    collection_name_template: str = "{tenant}_{language}_collection"
+    distance_metric: str = "cosine"
+    batch_size: int = 100
+    timeout: float = 30.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "WeaviateGeneralConfig":
