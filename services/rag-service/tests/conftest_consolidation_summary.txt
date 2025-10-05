@@ -1,0 +1,262 @@
+CONSOLIDATION SUMMARY
+================================================================================
+
+MockCategorizer: 3 methods
+  - __init__
+  - categorize_query
+  - set_mock_response
+
+MockCollection: 9 methods
+  - __init__
+  - add
+  - count
+  - delete
+  - get
+  - metadata
+  - name
+  - query
+  - update
+
+MockConfigLoader: 2 methods
+  - get_shared_config
+  - get_storage_config
+
+MockConfigProvider: 35 methods
+  - __init__
+  - _create_default_config
+  - _create_default_settings
+  - _create_default_test_config
+  - _default_config
+  - _get_language_default_config
+  - add_category_template
+  - get_categorization_config
+  - get_chunking_config
+  - get_cleaning_config
+  - get_config_section
+  - get_document_cleaning_config
+  - get_extraction_config
+  - get_folder_config
+  - get_language_config
+  - get_language_settings
+  - get_language_specific_config
+  - get_parsing_config
+  - get_prompt_config
+  - get_ranking_config
+  - get_scoring_weights
+  - get_search_config
+  - get_shared_config
+  - get_shared_language_config
+  - load_config
+  - remove_template
+  - set_categorization_config
+  - set_chunking_config
+  - set_cleaning_config
+  - set_config
+  - set_document_cleaning_config
+  - set_language_config
+  - set_settings
+  - set_shared_config
+  - set_shared_language_config
+
+MockDatabase: 6 methods
+  - __init__
+  - create_collection
+  - delete_collection
+  - get_collection
+  - list_collections
+  - reset
+
+MockDeviceDetector: 9 methods
+  - __init__
+  - clear_calls
+  - detect_best_device
+  - get_calls
+  - is_device_available
+  - set_available_devices
+  - set_best_device
+  - set_device_info
+  - set_exception
+
+MockEmbeddingModel: 8 methods
+  - __init__
+  - clear_calls
+  - device
+  - encode
+  - get_calls
+  - get_sentence_embedding_dimension
+  - max_seq_length
+  - set_embedding_dimension
+
+MockEmbeddingProvider: 1 methods
+  - __init__
+
+MockEnvironmentProvider: 6 methods
+  - __init__
+  - clear_records
+  - get_environment_variables
+  - get_locale_calls
+  - set_environment_variable
+  - set_locale
+
+MockFileSystemProvider: 16 methods
+  - __init__
+  - add_file
+  - add_text_file
+  - clear_history
+  - create_folder
+  - file_exists
+  - folder_exists
+  - get_created_folders
+  - get_file_size_mb
+  - get_folder_stats
+  - open_binary
+  - open_text
+  - remove_folder
+  - set_folder_exists
+  - set_folder_stats
+  - set_should_fail
+
+MockFolderManager: 4 methods
+  - create_tenant_folder_structure
+  - ensure_context_folders
+  - get_collection_storage_paths
+  - get_tenant_folder_structure
+
+MockHttpClient: 6 methods
+  - __init__
+  - clear_calls
+  - get_calls
+  - set_exception
+  - set_response
+  - set_streaming_response
+
+MockLanguageDataProvider: 9 methods
+  - __init__
+  - get_morphological_patterns
+  - get_question_patterns
+  - get_stop_words
+  - get_synonym_groups
+  - set_morphological_patterns
+  - set_question_patterns
+  - set_stop_words
+  - set_synonym_groups
+
+MockLanguageProvider: 11 methods
+  - __init__
+  - clear_calls
+  - detect_language_content
+  - get_calls
+  - get_confidence_settings
+  - get_error_template
+  - get_formal_prompts
+  - get_language_features
+  - set_confidence_settings
+  - set_error_template
+  - set_formal_prompts
+
+MockLogger: 4 methods
+  - __init__
+  - error
+  - exception
+  - info
+
+MockLoggerProvider: 8 methods
+  - __init__
+  - clear_messages
+  - debug
+  - error
+  - get_all_messages
+  - get_messages
+  - info
+  - warning
+
+MockModelLoader: 8 methods
+  - __init__
+  - clear_calls
+  - get_calls
+  - is_model_available
+  - load_model
+  - set_available_models
+  - set_exception
+  - set_model
+
+MockOutputWriter: 3 methods
+  - __init__
+  - flush
+  - write
+
+MockPatternProvider: 6 methods
+  - __init__
+  - _create_default_patterns
+  - add_detection_pattern
+  - add_stopwords
+  - get_language_patterns
+  - set_patterns
+
+MockQueryProcessor: 3 methods
+  - __init__
+  - process_query
+  - set_mock_response
+
+MockRAGSystem: 1 methods
+  - __init__
+
+MockReranker: 2 methods
+  - __init__
+  - set_delay
+
+MockSearchEngine: 4 methods
+  - __init__
+  - create_mock_results
+  - set_delay
+  - set_mock_results
+
+MockStorage: 2 methods
+  - get_document_count
+  - list_collections
+
+MockVectorSearchProvider: 3 methods
+  - __init__
+  - _matches_filters
+  - add_document
+
+
+================================================================================
+Helper Functions: 37
+  - create_chromadb_database
+  - create_complex_test_config
+  - create_config_provider
+  - create_default_setup
+  - create_embedding_provider
+  - create_hierarchical_retriever
+  - create_invalid_config
+  - create_minimal_config
+  - create_minimal_test_config
+  - create_minimal_test_providers
+  - create_mock_cli
+  - create_mock_config_provider
+  - create_mock_database
+  - create_mock_embedding_provider
+  - create_mock_language_provider
+  - create_mock_model_loader
+  - create_mock_ranker
+  - create_mock_score_calculator
+  - create_mock_search_provider
+  - create_mock_setup
+  - create_mock_stop_words_provider
+  - create_mock_storage
+  - create_multilingual_test_providers
+  - create_prompt_builder
+  - create_providers
+  - create_query_processor
+  - create_test_categorization_setup
+  - create_test_config
+  - create_test_folder_manager
+  - create_test_language_manager
+  - create_test_patterns
+  - create_test_prompt_builder
+  - create_test_providers
+  - create_test_settings
+  - create_vector_database
+  - create_vector_search_provider
+  - log_component_start

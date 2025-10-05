@@ -801,12 +801,3 @@ def create_vector_storage(database: VectorDatabase) -> VectorStorage:
         "storage_factory", "create_vector_storage", f"Created vector storage with {type(database).__name__}"
     )
     return storage
-
-
-def create_mock_storage() -> VectorStorage:
-    """Factory function to create mock storage for testing."""
-    # TODO: Implement mock database for testing
-    # from .storage_factories import create_mock_database
-    # mock_db = create_mock_database()
-    raise NotImplementedError("Mock storage not implemented yet")
-    # return VectorStorage(mock_db)

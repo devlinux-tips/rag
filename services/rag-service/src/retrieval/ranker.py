@@ -951,23 +951,3 @@ def create_document_ranker(
         language_provider = create_language_provider()
 
     return DocumentRanker(config_provider, language_provider, language)
-
-
-def create_mock_ranker(language: str = "hr", config_dict: dict[str, Any] | None = None) -> DocumentRanker:
-    """
-    Factory function to create mock ranker for testing.
-
-    Args:
-        language: Language code
-        config_dict: Optional configuration override
-
-    Returns:
-        DocumentRanker with mock providers
-    """
-    # Import here to avoid circular imports
-    from .ranker_providers import create_mock_config_provider, create_mock_language_provider
-
-    config_provider = create_mock_config_provider(config_dict or {})
-    language_provider = create_mock_language_provider()
-
-    return DocumentRanker(config_provider, language_provider, language)

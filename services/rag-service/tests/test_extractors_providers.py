@@ -8,9 +8,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.preprocessing.extractors_providers import (
-    MockConfigProvider,
-    MockFileSystemProvider,
-    MockLoggerProvider,
     ConfigProvider,
     FileSystemProvider,
     LoggerProvider,
@@ -18,6 +15,11 @@ from src.preprocessing.extractors_providers import (
     create_file_system_provider,
     create_logger_provider,
     create_providers,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockFileSystemProvider,
+    MockLoggerProvider,
     create_test_providers,
 )
 

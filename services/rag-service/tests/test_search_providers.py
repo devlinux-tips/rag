@@ -12,21 +12,23 @@ import numpy as np
 import pytest
 
 from src.vectordb.search_providers import (
-    # Mock Providers
-    MockEmbeddingProvider,
-    MockVectorSearchProvider,
-    MockConfigProvider,
     # Production Providers
     SentenceTransformerEmbeddingProvider,
     ChromaDBSearchProvider,
     DefaultConfigProvider,
+    create_embedding_provider,
+    create_vector_search_provider,
+    create_config_provider,
+)
+from tests.conftest import (
+    # Mock Providers
+    MockEmbeddingProvider,
+    MockVectorSearchProvider,
+    MockConfigProvider,
     # Factory Functions
     create_mock_embedding_provider,
     create_mock_search_provider,
     create_mock_config_provider,
-    create_embedding_provider,
-    create_vector_search_provider,
-    create_config_provider,
 )
 from src.vectordb.search import ConfigProvider, EmbeddingProvider, VectorSearchProvider
 
@@ -418,7 +420,7 @@ class TestMockConfigProvider(unittest.TestCase):
     def test_default_config_structure(self):
         """Test default config structure is complete."""
         provider = MockConfigProvider()
-        config = provider._default_config()
+        config = provider._default_search_config()
 
         # Verify search section
         search = config["search"]

@@ -6,7 +6,8 @@ Tests language configuration providers for dependency injection patterns.
 import unittest
 from unittest.mock import Mock, patch
 
-from src.generation.language_providers import DefaultLanguageProvider, MockLanguageProvider
+from src.generation.language_providers import DefaultLanguageProvider
+from tests.conftest import MockLanguageProvider
 from src.utils.config_loader import ConfigError as ConfigurationError
 
 

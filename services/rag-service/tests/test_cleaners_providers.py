@@ -12,15 +12,17 @@ from src.preprocessing.cleaners_providers import (
     ConfigProvider,
     EnvironmentProvider,
     LoggerProvider,
-    MockConfigProvider,
-    MockEnvironmentProvider,
-    MockLoggerProvider,
     create_config_provider,
     create_environment_provider,
     create_logger_provider,
+    create_providers,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockEnvironmentProvider,
+    MockLoggerProvider,
     create_minimal_test_providers,
     create_multilingual_test_providers,
-    create_providers,
     create_test_providers,
 )
 

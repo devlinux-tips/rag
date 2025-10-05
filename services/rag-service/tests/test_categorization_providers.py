@@ -11,10 +11,12 @@ from typing import Any
 from src.retrieval.categorization_providers import (
     ConfigProvider,
     DefaultConfigProvider,
-    MockConfigProvider,
     NoOpLoggerProvider,
-    MockLoggerProvider,
     create_config_provider,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockLoggerProvider,
     create_test_categorization_setup,
     create_minimal_test_config,
     create_complex_test_config,

@@ -12,8 +12,10 @@ from typing import Any
 
 from src.generation.http_clients import (
     AsyncHttpxClient,
-    MockHttpClient,
     FallbackAsyncClient,
+)
+from tests.conftest import (
+    MockHttpClient,
 )
 
 # Import the exceptions and HttpResponse from ollama_client
@@ -521,7 +523,7 @@ class TestHttpClientsIntegration:
         """Test that the module can be imported without errors."""
         import src.generation.http_clients
         assert hasattr(src.generation.http_clients, 'AsyncHttpxClient')
-        assert hasattr(src.generation.http_clients, 'MockHttpClient')
+        # MockHttpClient is in tests.conftest, not production module
         assert hasattr(src.generation.http_clients, 'FallbackAsyncClient')
 
     def test_all_clients_have_same_interface(self):

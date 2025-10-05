@@ -7,12 +7,14 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.retrieval.ranker_providers import (
-    MockConfigProvider,
-    MockLanguageProvider,
     DefaultConfigProvider,
     DefaultLanguageProvider,
     create_config_provider,
     create_language_provider,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockLanguageProvider,
     create_mock_config_provider,
     create_mock_language_provider,
 )

@@ -8,13 +8,15 @@ from unittest.mock import MagicMock, patch
 
 from src.retrieval.query_processor_providers import (
     ConfigProvider,
-    MockConfigProvider,
-    MockLanguageDataProvider,
     LanguageDataProvider,
     create_default_config,
-    create_mock_language_provider,
     create_language_provider,
     create_providers,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockLanguageDataProvider,
+    create_mock_language_provider,
     create_test_providers,
 )
 from src.retrieval.query_processor import QueryProcessingConfig

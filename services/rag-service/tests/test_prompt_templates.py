@@ -22,12 +22,14 @@ from src.generation.prompt_templates import (
     PromptTemplateProvider,
     build_complete_prompt,
     classify_query_type,
-    create_mock_config_provider,
     create_multilingual_prompts,
     create_prompt_builder_for_query,
     format_context_with_headers,
     truncate_context_chunks,
     validate_query_for_prompt,
+)
+from tests.conftest import (
+    create_mock_config_provider,
 )
 
 

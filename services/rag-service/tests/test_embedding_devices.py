@@ -9,6 +9,8 @@ from typing import Any
 
 from src.vectordb.embedding_devices import (
     TorchDeviceDetector,
+)
+from tests.conftest import (
     MockDeviceDetector,
 )
 from src.vectordb.embeddings import DeviceInfo

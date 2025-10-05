@@ -16,18 +16,17 @@ from src.retrieval.reranker import (
     normalize_scores_to_range,
     calculate_reranking_metrics,
     create_query_document_pairs,
-
     # Data structures
     RerankerConfig,
     RerankingResult,
     DocumentItem,
-
     # Core classes
     MultilingualReranker,
-
     # Factory functions
     create_multilingual_reranker,
     create_multilingual_reranker_from_config,
+)
+from tests.conftest import (
     create_mock_model_loader,
     create_mock_score_calculator,
 )

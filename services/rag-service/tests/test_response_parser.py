@@ -20,7 +20,6 @@ from src.generation.response_parser import (
     calculate_confidence_score,
     check_no_answer_patterns,
     clean_response_text,
-    create_mock_config_provider,
     create_response_parser,
     detect_language_by_patterns,
     extract_source_references,
@@ -28,6 +27,9 @@ from src.generation.response_parser import (
     format_display_text,
     normalize_whitespace,
     remove_prefixes,
+)
+from tests.conftest import (
+    create_mock_config_provider,
 )
 
 

@@ -11,17 +11,19 @@ from typing import Any
 from src.retrieval.categorization import CategoryMatch, CategoryType, QueryComplexity
 from src.retrieval.hierarchical_retriever import ProcessedQuery, RetrievalConfig, SearchResult
 from src.retrieval.hierarchical_retriever_providers import (
+    QueryProcessor,
+    Categorizer,
+    SearchEngineAdapter,
+    RerankerAdapter,
+    create_hierarchical_retriever,
+)
+from tests.conftest import (
     MockQueryProcessor,
     MockCategorizer,
     MockSearchEngine,
     MockReranker,
     MockLoggerProvider,
-    QueryProcessor,
-    Categorizer,
-    SearchEngineAdapter,
-    RerankerAdapter,
-    create_mock_setup,
-    create_hierarchical_retriever,
+    create_mock_retriever_setup,
     create_test_config,
 )
 
@@ -774,9 +776,9 @@ class TestRerankerAdapter(unittest.IsolatedAsyncioTestCase):
 class TestFactoryFunctions(unittest.TestCase):
     """Test factory functions for creating provider setups."""
 
-    def test_create_mock_setup_default(self):
+    def test_create_mock_retriever_setup_default(self):
         """Test creating default mock setup."""
-        result = create_mock_setup()
+        result = create_mock_retriever_setup()
 
         self.assertEqual(len(result), 6)
         query_processor, categorizer, search_engine, reranker, logger, config = result
@@ -791,13 +793,13 @@ class TestFactoryFunctions(unittest.TestCase):
         # Should have default search results
         self.assertEqual(len(search_engine.mock_results), 5)
 
-    def test_create_mock_setup_with_parameters(self):
+    def test_create_mock_retriever_setup_with_parameters(self):
         """Test creating mock setup with custom parameters."""
         query_responses = {"test": ProcessedQuery("test", "processed", "general", [], [], {})}
         category_responses = {"test": CategoryMatch(CategoryType.TECHNICAL, 0.9, [], [], QueryComplexity.SIMPLE, "dense")}
         search_results = [SearchResult("test", {}, 0.8, 0.8, {})]
 
-        result = create_mock_setup(
+        result = create_mock_retriever_setup(
             query_responses=query_responses,
             category_responses=category_responses,
             search_results=search_results,
@@ -814,9 +816,9 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertEqual(search_engine.delay_seconds, 0.1)
         self.assertEqual(reranker.delay_seconds, 0.1)
 
-    def test_create_mock_setup_config_structure(self):
+    def test_create_mock_retriever_setup_config_structure(self):
         """Test that created mock setup has proper config structure."""
-        _, _, _, _, _, config = create_mock_setup()
+        _, _, _, _, _, config = create_mock_retriever_setup()
 
         self.assertEqual(config.default_max_results, 5)
         self.assertIn("semantic_focused", config.similarity_thresholds)
@@ -906,7 +908,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
     def test_config_consistency_across_factories(self):
         """Test that all factory functions create consistent configurations."""
-        mock_config = create_mock_setup()[5]
+        mock_config = create_mock_retriever_setup()[5]
         test_config = create_test_config()
 
         # Should have same structure

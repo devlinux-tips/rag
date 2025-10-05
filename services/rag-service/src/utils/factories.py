@@ -267,7 +267,6 @@ def create_complete_rag_system(
         from ..retrieval.hierarchical_retriever_providers import create_hierarchical_retriever
         from ..retrieval.query_processor_providers import create_query_processor
         from ..retrieval.ranker import create_document_ranker
-        from ..retrieval.reranker import create_multilingual_reranker
         from ..retrieval.retriever import create_document_retriever
         from ..vectordb.database_factory import create_vector_database
         from ..vectordb.embeddings import create_embedding_generator
@@ -412,12 +411,8 @@ def create_complete_rag_system(
         # Hierarchical retriever
         hierarchical_retriever = create_hierarchical_retriever(search_engine=search_engine, language=language)
 
-        # Ranker (using mock components for now)
-        from ..retrieval.reranker import create_mock_model_loader, create_mock_score_calculator
-
-        mock_model_loader = create_mock_model_loader()
-        mock_score_calculator = create_mock_score_calculator()
-        ranker = create_multilingual_reranker(model_loader=mock_model_loader, score_calculator=mock_score_calculator)
+        # Ranker - Not implemented (only interface exists, no concrete implementation)
+        ranker = None
 
         # Generation client - Use provider system with primary_provider setting
         from ..generation.llm_provider import LLMManager

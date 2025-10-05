@@ -15,7 +15,6 @@ from src.retrieval.ranker import (
     LanguageFeatures,
     ProcessedQuery,
     LanguageProvider,
-
     # Pure functions
     calculate_keyword_relevance_score,
     calculate_content_quality_score,
@@ -26,12 +25,12 @@ from src.retrieval.ranker import (
     combine_ranking_signals,
     apply_diversity_filtering,
     create_ranking_explanation,
-
     # Main class
     DocumentRanker,
-
     # Factory functions
     create_document_ranker,
+)
+from tests.conftest import (
     create_mock_ranker,
 )
 from src.utils.config_models import RankingConfig, RankingMethod

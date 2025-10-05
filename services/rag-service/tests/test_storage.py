@@ -14,11 +14,9 @@ from src.vectordb.storage import (
     DocumentMetadata,
     StorageResult,
     QueryResult,
-
     # Protocols
     VectorCollection,
     VectorDatabase,
-
     # Pure functions
     validate_documents_for_storage,
     validate_embeddings_for_storage,
@@ -27,12 +25,12 @@ from src.vectordb.storage import (
     calculate_batch_sizes,
     extract_document_ids,
     merge_search_results,
-
     # Main class
     VectorStorage,
-
     # Factory functions
     create_vector_storage,
+)
+from tests.conftest import (
     create_mock_storage,
 )
 

@@ -479,7 +479,7 @@ enable_audit_logging = true
 # ============================================================================
 [openrouter]
 base_url = "https://openrouter.ai/api/v1"
-api_key = "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"
+api_key = "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"
 model = "qwen/qwen3-30b-a3b-instruct-2507"
 timeout = 30.0
 temperature = 0.1

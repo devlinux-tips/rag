@@ -10,19 +10,21 @@ from typing import Any
 from src.generation.enhanced_prompt_templates import PromptConfig, PromptType
 from src.retrieval.categorization import CategoryType
 from src.generation.enhanced_prompt_templates_providers import (
-    MockConfigProvider,
-    MockLoggerProvider,
     ConfigProvider,
     StandardLoggerProvider,
-    create_mock_setup,
     create_prompt_builder,
-    create_test_config,
     create_minimal_config,
     create_invalid_config,
     create_development_prompt_builder,
-    create_test_prompt_builder,
     build_category_templates,
     create_template_variants,
+)
+from tests.conftest import (
+    MockConfigProvider,
+    MockLoggerProvider,
+    create_mock_setup,
+    create_test_config,
+    create_test_prompt_builder,
 )
 
 
@@ -31,12 +33,14 @@ class TestMockConfigProvider(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.provider = MockConfigProvider()
+        # Use create_mock_setup to get PromptConfig mode
+        self.provider, _ = create_mock_setup()
 
     def test_initialization_default(self):
         """Test default initialization creates proper config."""
-        provider = MockConfigProvider()
+        provider, _ = create_mock_setup()
 
+        # create_mock_setup creates a MockConfigProvider in PromptConfig mode
         self.assertIsInstance(provider.config, PromptConfig)
         self.assertEqual(provider.config.language, "hr")
         self.assertEqual(provider.call_history, [])
@@ -738,7 +742,7 @@ class TestIntegrationHelpers(unittest.TestCase):
         self.assertEqual(result, mock_builder)
 
     @patch('src.generation.enhanced_prompt_templates.create_enhanced_prompt_builder')
-    @patch('src.generation.enhanced_prompt_templates_providers.create_mock_setup')
+    @patch('tests.conftest.create_mock_setup')
     def test_create_test_prompt_builder_default(self, mock_create_setup, mock_create_builder):
         """Test creating test prompt builder with defaults."""
         mock_config_provider = Mock()
@@ -766,7 +770,7 @@ class TestIntegrationHelpers(unittest.TestCase):
         self.assertEqual(result[1], (mock_config_provider, mock_logger_provider))
 
     @patch('src.generation.enhanced_prompt_templates.create_enhanced_prompt_builder')
-    @patch('src.generation.enhanced_prompt_templates_providers.create_mock_setup')
+    @patch('tests.conftest.create_mock_setup')
     def test_create_test_prompt_builder_custom(self, mock_create_setup, mock_create_builder):
         """Test creating test prompt builder with custom parameters."""
         custom_config = Mock()

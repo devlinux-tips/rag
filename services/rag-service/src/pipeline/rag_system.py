@@ -1411,7 +1411,7 @@ def create_rag_system(
     query_processor: QueryProcessorProtocol,
     retriever: Any,
     hierarchical_retriever: RetrieverProtocol,
-    ranker: RankerProtocol,
+    ranker: RankerProtocol | None,
     generation_client: GenerationClientProtocol,
     response_parser: ResponseParserProtocol,
     prompt_builder: PromptBuilderProtocol,

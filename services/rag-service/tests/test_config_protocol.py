@@ -13,11 +13,13 @@ from typing import Any
 from src.utils.config_protocol import (
     ConfigProvider,
     DefaultConfigProvider,
-    MockConfigProvider,
     set_config_provider,
     get_config_provider,
     reset_config_provider,
     _default_provider,
+)
+from tests.conftest import (
+    MockConfigProvider,
 )
 
 

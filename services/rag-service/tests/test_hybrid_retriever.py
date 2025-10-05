@@ -17,19 +17,18 @@ from src.retrieval.hybrid_retriever import (
     combine_hybrid_scores,
     rank_results_by_score,
     calculate_corpus_statistics,
-
     # Data structures
     HybridConfig,
     HybridResult,
     DenseResult,
-
     # Core classes
     BM25Scorer,
     HybridRetriever,
-
     # Factory functions
     create_hybrid_retriever,
     create_hybrid_retriever_from_config,
+)
+from tests.conftest import (
     create_mock_stop_words_provider,
 )
 from src.utils.config_models import HybridRetrievalConfig

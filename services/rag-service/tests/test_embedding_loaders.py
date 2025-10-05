@@ -12,6 +12,8 @@ from typing import Any
 from src.vectordb.embedding_loaders import (
     SentenceTransformerLoader,
     SentenceTransformerAdapter,
+)
+from tests.conftest import (
     MockModelLoader,
     MockEmbeddingModel,
 )

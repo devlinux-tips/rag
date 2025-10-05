@@ -571,6 +571,7 @@ class MultilingualRAGPrompts:
             "comparison": "comparison",
             "explanatory": "explanatory",
             "factual": "factual_qa",
+            "question": "question_answering",  # Question queries use Q&A template
             "default": "question_answering",
         }
 
@@ -734,79 +735,3 @@ def create_prompt_builder_for_query(config_provider: ConfigProvider, query: str,
     config = prompts._config
 
     return PromptBuilder(template, config)
-
-
-def create_mock_config_provider(
-    templates: dict[str, PromptTemplate] | None = None,
-    keyword_patterns: dict[str, list[str]] | None = None,
-    formatting: dict[str, str] | None = None,
-) -> ConfigProvider:
-    """
-    Factory function to create mock configuration provider.
-
-    Args:
-        templates: Custom templates (uses defaults if None)
-        keyword_patterns: Custom keyword patterns (uses defaults if None)
-        formatting: Custom formatting (uses defaults if None)
-
-    Returns:
-        Mock ConfigProvider
-    """
-
-    class MockConfigProvider:
-        def get_prompt_config(self, language: str) -> PromptConfig:
-            default_templates = {
-                "question_answering": PromptTemplate(
-                    system_prompt="You are a helpful assistant.",
-                    user_template="Question: {query}\n\nAnswer:",
-                    context_template="Context:\n{context}\n\n",
-                ),
-                "summarization": PromptTemplate(
-                    system_prompt="You are a helpful assistant that summarizes text.",
-                    user_template="Summarize: {query}",
-                    context_template="Text to summarize:\n{context}\n\n",
-                ),
-                "factual_qa": PromptTemplate(
-                    system_prompt="You answer factual questions accurately.",
-                    user_template="Question: {query}\n\nAnswer:",
-                    context_template="Facts:\n{context}\n\n",
-                ),
-                "explanatory": PromptTemplate(
-                    system_prompt="You provide detailed explanations.",
-                    user_template="Explain: {query}",
-                    context_template="Information:\n{context}\n\n",
-                ),
-                "comparison": PromptTemplate(
-                    system_prompt="You compare and contrast topics.",
-                    user_template="Compare: {query}",
-                    context_template="Information to compare:\n{context}\n\n",
-                ),
-                "tourism": PromptTemplate(
-                    system_prompt="You are a tourism expert.",
-                    user_template="Tourism question: {query}",
-                    context_template="Tourism information:\n{context}\n\n",
-                ),
-            }
-
-            default_patterns = {
-                "cultural": ["culture", "history", "tradition"],
-                "tourism": ["hotel", "restaurant", "attraction", "travel"],
-                "summarization": ["summarize", "summary", "brief"],
-                "comparison": ["compare", "difference", "versus"],
-                "explanatory": ["explain", "how", "why", "what"],
-                "factual": ["when", "where", "who"],
-            }
-
-            default_formatting = {
-                "header_template": "Document {index}:",
-                "chunk_separator": "\n\n",
-                "context_separator": "\n---\n",
-            }
-
-            return PromptConfig(
-                templates=templates or default_templates,
-                keyword_patterns=keyword_patterns or default_patterns,
-                formatting=formatting or default_formatting,
-            )
-
-    return MockConfigProvider()

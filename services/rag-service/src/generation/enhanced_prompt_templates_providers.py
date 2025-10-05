@@ -11,123 +11,6 @@ from src.retrieval.categorization import CategoryType
 from ..utils.logging_factory import get_system_logger, log_component_end, log_component_start, log_data_transformation
 
 # ================================
-# MOCK PROVIDERS FOR TESTING
-# ================================
-
-
-class MockConfigProvider:
-    """Mock configuration provider for testing."""
-
-    def __init__(self, config: PromptConfig | None = None):
-        """Initialize with optional mock configuration."""
-        self.config = config or self._create_default_config()
-        self.call_history: list[str] = []
-
-    def _create_default_config(self) -> PromptConfig:
-        """Create default test configuration."""
-        category_templates = {
-            CategoryType.GENERAL: {
-                PromptType.SYSTEM: "You are a helpful assistant. Answer questions based on the provided context.",
-                PromptType.USER: "Question: {query}\n\nContext: {context}\n\nAnswer:",
-                PromptType.FOLLOWUP: "Previous question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up question: {followup_query}\n\nAnswer:",
-            },
-            CategoryType.TECHNICAL: {
-                PromptType.SYSTEM: "You are a technical expert. Provide detailed technical answers based on the context.",
-                PromptType.USER: "Technical question: {query}\n\nTechnical documentation: {context}\n\nDetailed answer:",
-                PromptType.FOLLOWUP: "Previous technical question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up: {followup_query}\n\nTechnical answer:",
-            },
-            CategoryType.CULTURAL: {
-                PromptType.SYSTEM: "You are a cultural expert. Provide culturally sensitive answers based on context.",
-                PromptType.USER: "Cultural question: {query}\n\nCultural context: {context}\n\nCulturally aware answer:",
-                PromptType.FOLLOWUP: "Previous cultural question: {original_query}\nPrevious answer: {original_answer}\n\nFollow-up: {followup_query}\n\nCultural answer:",
-            },
-        }
-
-        messages = {
-            "no_context": "No relevant context available.",
-            "error_template_missing": "Template not found for this category.",
-            "truncation_notice": "Some content was truncated due to length limits.",
-        }
-
-        formatting = {
-            "source_label": "Source",
-            "truncation_indicator": "...",
-            "min_chunk_size": "100",
-            "max_context_length": "2000",
-        }
-
-        return PromptConfig(
-            category_templates=category_templates, messages=messages, formatting=formatting, language="hr"
-        )
-
-    def set_config(self, config: PromptConfig) -> None:
-        """Set mock configuration."""
-        self.config = config
-
-    def add_category_template(self, category: CategoryType, prompt_type: PromptType, template: str) -> None:
-        """Add a template for specific category and type."""
-        if category not in self.config.category_templates:
-            self.config.category_templates[category] = {}
-        self.config.category_templates[category][prompt_type] = template
-
-    def remove_template(self, category: CategoryType, prompt_type: PromptType) -> None:
-        """Remove a template (for testing missing template scenarios)."""
-        if category in self.config.category_templates:
-            if prompt_type in self.config.category_templates[category]:
-                del self.config.category_templates[category][prompt_type]
-
-    def get_prompt_config(self, language: str) -> PromptConfig:
-        """Get prompt configuration for language."""
-        self.call_history.append(f"get_prompt_config({language})")
-
-        # Return config with requested language
-        config_copy = PromptConfig(
-            category_templates=self.config.category_templates,
-            messages=self.config.messages,
-            formatting=self.config.formatting,
-            language=language,
-        )
-        return config_copy
-
-
-class MockLoggerProvider:
-    """Mock logger provider that captures messages for testing."""
-
-    def __init__(self):
-        """Initialize message capture."""
-        self.messages: dict[str, list[str]] = {"info": [], "debug": [], "warning": [], "error": []}
-
-    def info(self, message: str) -> None:
-        """Capture info message."""
-        self.messages["info"].append(message)
-
-    def debug(self, message: str) -> None:
-        """Capture debug message."""
-        self.messages["debug"].append(message)
-
-    def warning(self, message: str) -> None:
-        """Capture warning message."""
-        self.messages["warning"].append(message)
-
-    def error(self, message: str) -> None:
-        """Capture error message."""
-        self.messages["error"].append(message)
-
-    def clear_messages(self) -> None:
-        """Clear all captured messages."""
-        for level in self.messages:
-            self.messages[level].clear()
-
-    def get_messages(self, level: str | None = None) -> dict[str, list[str]] | list[str]:
-        """Get captured messages by level or all messages."""
-        if level:
-            if level not in self.messages:
-                return []
-            return self.messages[level]
-        return self.messages
-
-
-# ================================
 # STANDARD PROVIDERS
 # ================================
 
@@ -214,45 +97,6 @@ class StandardLoggerProvider:
 # ================================
 # CONVENIENCE FACTORY FUNCTIONS
 # ================================
-
-
-def create_mock_setup(
-    config: PromptConfig | None = None,
-    custom_templates: dict[CategoryType, dict[PromptType, str]] | None = None,
-    custom_messages: dict[str, str] | None = None,
-    custom_formatting: dict[str, str] | None = None,
-    language: str = "hr",
-) -> tuple:
-    """
-    Create complete mock setup for testing.
-
-    Args:
-        config: Optional mock configuration
-        custom_templates: Optional custom category templates
-        custom_messages: Optional custom messages
-        custom_formatting: Optional custom formatting options
-        language: Language for the configuration
-
-    Returns:
-        Tuple of (config_provider, logger_provider)
-    """
-    # Create mock components
-    config_provider = MockConfigProvider(config)
-    logger_provider = MockLoggerProvider()
-
-    # Customize configuration if provided
-    if custom_templates or custom_messages or custom_formatting:
-        base_config = config_provider.config
-
-        updated_config = PromptConfig(
-            category_templates=custom_templates or base_config.category_templates,
-            messages=custom_messages or base_config.messages,
-            formatting=custom_formatting or base_config.formatting,
-            language=language,
-        )
-        config_provider.set_config(updated_config)
-
-    return config_provider, logger_provider
 
 
 def create_prompt_builder(logger_name: str | None = None) -> tuple:
@@ -387,29 +231,6 @@ def create_development_prompt_builder():
     )
 
     return builder
-
-
-def create_test_prompt_builder(
-    language: str = "hr",
-    config: PromptConfig | None = None,
-    custom_templates: dict[CategoryType, dict[PromptType, str]] | None = None,
-    custom_messages: dict[str, str] | None = None,
-    custom_formatting: dict[str, str] | None = None,
-):
-    """Create prompt builder configured for testing."""
-    from .enhanced_prompt_templates import create_enhanced_prompt_builder
-
-    config_provider, logger_provider = create_mock_setup(
-        config=config,
-        custom_templates=custom_templates,
-        custom_messages=custom_messages,
-        custom_formatting=custom_formatting,
-        language=language,
-    )
-
-    return create_enhanced_prompt_builder(
-        language=language, config_provider=config_provider, logger_provider=logger_provider
-    ), (config_provider, logger_provider)
 
 
 # ================================
