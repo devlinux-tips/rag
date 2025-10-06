@@ -274,3 +274,49 @@ class RerankerAdapter:
 # ================================
 # CONVENIENCE FACTORY FUNCTIONS
 # ================================
+
+
+def create_hierarchical_retriever(search_engine, reranker=None, language: str = "hr"):
+    """
+    Create hierarchical retriever with all dependencies.
+
+    Args:
+        search_engine: Search engine instance (ChromaDB or Weaviate)
+        reranker: Optional reranker instance
+        language: Language code for processing
+
+    Returns:
+        HierarchicalRetriever instance with configured adapters
+    """
+    from .hierarchical_retriever import HierarchicalRetriever, RetrievalConfig
+
+    # Create adapter instances
+    query_processor = QueryProcessor(language=language)
+    categorizer = Categorizer(language=language)
+    search_adapter = SearchEngineAdapter(search_engine)
+    reranker_adapter = RerankerAdapter(reranker, language=language) if reranker else None
+
+    # Create default config
+    config = RetrievalConfig(
+        default_max_results=10,
+        similarity_thresholds=get_similarity_thresholds(),
+        boost_weights={
+            "keyword": 0.2,
+            "technical": 0.1,
+            "exact_match": 0.2,
+            "temporal": 0.15,
+            "faq": 0.1,
+            "comparative": 0.1,
+        },
+        strategy_mappings={},
+        performance_tracking=False,
+    )
+
+    # Create and return retriever
+    return HierarchicalRetriever(
+        query_processor=query_processor,
+        categorizer=categorizer,
+        search_engine=search_adapter,
+        config=config,
+        reranker=reranker_adapter,
+    )

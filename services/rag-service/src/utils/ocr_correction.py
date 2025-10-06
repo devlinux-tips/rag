@@ -180,30 +180,30 @@ def apply_ocr_corrections(text: str, config: dict[str, Any], language: str | Non
         ocr_flags = config
 
     # Apply corrections based on config flags
-    if ocr_flags.get("fix_spaced_capitals", False):
+    if "fix_spaced_capitals" in ocr_flags and ocr_flags["fix_spaced_capitals"]:
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced capitals correction")
         text = fix_spaced_capitals(text)
         corrections_applied.append("spaced_capitals")
 
-    if ocr_flags.get("fix_spaced_punctuation", False):
+    if "fix_spaced_punctuation" in ocr_flags and ocr_flags["fix_spaced_punctuation"]:
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying spaced punctuation correction")
         text = fix_spaced_punctuation(text)
         corrections_applied.append("spaced_punctuation")
 
-    if ocr_flags.get("fix_common_ocr_errors", False):
+    if "fix_common_ocr_errors" in ocr_flags and ocr_flags["fix_common_ocr_errors"]:
         logger.debug("ocr_correction", "apply_ocr_corrections", "Applying common OCR errors correction")
         text = fix_common_ocr_errors(text)
         corrections_applied.append("common_ocr_errors")
 
-    if ocr_flags.get("fix_spaced_diacritics", False):
+    if "fix_spaced_diacritics" in ocr_flags and ocr_flags["fix_spaced_diacritics"]:
         logger.debug(
             "ocr_correction", "apply_ocr_corrections", f"Applying spaced diacritics correction for language: {language}"
         )
         text = fix_spaced_diacritics(text, language)
         corrections_applied.append("spaced_diacritics")
 
-    # Apply word replacements (both legacy and new format)
-    word_replacements_raw = ocr_flags.get("word_replacements", {})
+    # Apply word replacements (both legacy and new format) - optional, so check existence
+    word_replacements_raw = ocr_flags.get("word_replacements", {})  # OK - word_replacements are optional
     if word_replacements_raw and isinstance(word_replacements_raw, dict):
         word_replacements: dict[str, str] = word_replacements_raw
         logger.debug("ocr_correction", "apply_ocr_corrections", f"Applying {len(word_replacements)} word replacements")

@@ -662,13 +662,27 @@ class ConfigProviderAdapter:
     def get_parsing_config(self, language: str) -> ParsingConfig:
         """Get parsing config by loading from general config provider."""
         config_dict = self._config_provider.get_parsing_config(language)
+
+        # Validate required config keys
+        required_keys = [
+            "no_answer_patterns",
+            "source_patterns",
+            "confidence_indicators",
+            "language_patterns",
+            "cleaning_prefixes",
+            "display_settings",
+        ]
+        for key in required_keys:
+            if key not in config_dict:
+                raise ValueError(f"Missing required config: parsing.{key} for language {language}")
+
         return ParsingConfig(
-            no_answer_patterns=config_dict.get("no_answer_patterns", []),
-            source_patterns=config_dict.get("source_patterns", []),
-            confidence_indicators=config_dict.get("confidence_indicators", {}),
-            language_patterns=config_dict.get("language_patterns", {}),
-            cleaning_prefixes=config_dict.get("cleaning_prefixes", []),
-            display_settings=config_dict.get("display_settings", {}),
+            no_answer_patterns=config_dict["no_answer_patterns"],
+            source_patterns=config_dict["source_patterns"],
+            confidence_indicators=config_dict["confidence_indicators"],
+            language_patterns=config_dict["language_patterns"],
+            cleaning_prefixes=config_dict["cleaning_prefixes"],
+            display_settings=config_dict["display_settings"],
         )
 
 

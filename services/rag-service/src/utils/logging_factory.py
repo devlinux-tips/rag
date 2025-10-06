@@ -116,7 +116,10 @@ class ElasticsearchLoggingBackend(LoggingBackend):
 
     def __init__(self, es_config: dict[str, Any]):
         self.es_config = es_config
-        self.index_prefix = es_config.get("index_prefix", "rag-logs")
+        # Validate required config keys
+        if "index_prefix" not in es_config:
+            raise ValueError("Missing required config: elasticsearch.index_prefix")
+        self.index_prefix = es_config["index_prefix"]
         self.es_client = None
         self._init_elasticsearch()
 
@@ -125,11 +128,19 @@ class ElasticsearchLoggingBackend(LoggingBackend):
         try:
             from elasticsearch import Elasticsearch  # type: ignore[import-not-found]
 
+            # Validate required config keys
+            if "hosts" not in self.es_config:
+                raise ValueError("Missing required config: elasticsearch.hosts")
+            if "verify_certs" not in self.es_config:
+                raise ValueError("Missing required config: elasticsearch.verify_certs")
+            if "timeout" not in self.es_config:
+                raise ValueError("Missing required config: elasticsearch.timeout")
+
             self.es_client = Elasticsearch(
-                hosts=self.es_config.get("hosts", ["localhost:9200"]),
-                http_auth=self.es_config.get("auth"),
-                verify_certs=self.es_config.get("verify_certs", True),
-                request_timeout=self.es_config.get("timeout", 30),
+                hosts=self.es_config["hosts"],
+                http_auth=self.es_config.get("auth"),  # Optional - auth can be None
+                verify_certs=self.es_config["verify_certs"],
+                request_timeout=self.es_config["timeout"],
             )
 
             # Test connection
@@ -214,7 +225,9 @@ class LoggingFactory:
         if backend_type == "console":
             return ConsoleLoggingBackend(**kwargs)
         elif backend_type == "elasticsearch":
-            es_config = self.config.get("elasticsearch", {})
+            if "elasticsearch" not in self.config:
+                raise ValueError("Missing required config: logging.elasticsearch")
+            es_config = self.config["elasticsearch"]
             es_config.update(kwargs)
             return ElasticsearchLoggingBackend(es_config)
         elif backend_type == "file":
@@ -228,7 +241,9 @@ class LoggingFactory:
 
         for backend_type in backend_types:
             try:
-                backend = self.create_backend(backend_type, **backend_kwargs.get(backend_type, {}))
+                # Get backend-specific kwargs, empty dict if none provided (optional)
+                type_kwargs = backend_kwargs.get(backend_type, {})  # OK - kwargs are optional
+                backend = self.create_backend(backend_type, **type_kwargs)
                 self.backends.append(backend)
             except Exception as e:
                 print(f"Failed to setup {backend_type} backend: {e}")
@@ -309,7 +324,9 @@ def setup_system_logging(backend_types: list[str] | None = None, **kwargs) -> Mu
     if backend_types is None:
         # Default based on config or environment
         config = get_logging_config()
-        backend_types = config.get("backends", ["console"])
+        if "backends" not in config:
+            raise ValueError("Missing required config: logging.backends")
+        backend_types = config["backends"]
 
     _current_logger = _logging_factory.setup_logging(backend_types, **kwargs)
     return _current_logger

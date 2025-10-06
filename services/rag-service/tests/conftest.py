@@ -3,6 +3,8 @@ Pytest configuration and shared test fixtures.
 All mock classes and test helpers belong here, NOT in production code.
 """
 
+import logging
+import sys
 import pytest
 import numpy as np
 from typing import Any, cast
@@ -10,23 +12,34 @@ from pathlib import Path
 
 from src.utils.language_manager import LanguageSettings, LanguagePatterns, ConfigProvider
 from src.utils.language_manager_providers import DefaultConfigProvider, DefaultPatternProvider, StandardLoggerProvider
-from src.utils.folder_manager import FolderConfig, FolderStats
-from src.utils.config_models import RetrievalConfig
+
+# FolderConfig and FolderStats removed - folder_manager.py was deleted
+# as it was never used in production (only in tests)
+# Tests that depend on these will be removed
+from dataclasses import dataclass, field
+from typing import Optional, Any
 from src.generation.enhanced_prompt_templates import PromptConfig, PromptType
 from src.generation.prompt_templates import PromptTemplate
 from src.generation.response_parser import ParsingConfig, ParsingConfigProvider
 from src.generation.ollama_client import HttpResponse
 from src.cli.rag_cli import OutputWriterProtocol, MultiTenantRAGCLI
-from src.retrieval.hierarchical_retriever import ProcessedQuery, HierarchicalRetriever, SearchResult
+from src.retrieval.hierarchical_retriever import ProcessedQuery, HierarchicalRetriever, SearchResult, RetrievalConfig
 from src.retrieval.hierarchical_retriever_providers import get_similarity_thresholds
-from src.retrieval.categorization import CategoryMatch, CategoryType
+from src.retrieval.categorization import CategoryMatch, CategoryType, QueryComplexity
 from src.retrieval.ranker import DocumentRanker, LanguageFeatures, LanguageProvider
 from src.retrieval.reranker import ModelLoader, ScoreCalculator
 from src.retrieval.hybrid_retriever import StopWordsProvider
 from src.vectordb.embeddings import DeviceInfo, EmbeddingModel
 from src.vectordb.search import EmbeddingProvider, VectorSearchProvider
 from src.vectordb.storage import VectorCollection, VectorSearchResults, VectorStorage, VectorDatabase
-from src.utils.logging_factory import get_system_logger
+from src.utils.logging_factory import (
+    get_system_logger,
+    log_data_transformation,
+    log_performance_metric,
+    log_component_end,
+    log_component_start,
+    log_decision_point,
+)
 from src.retrieval.query_processor_providers import create_default_config, create_language_provider
 
 # This file contains all mock classes and test helpers
@@ -39,7 +52,7 @@ from src.retrieval.query_processor_providers import create_default_config, creat
 class MockConfigProvider:
     """Mock configuration provider for testing."""
 
-    def __init__(self, config_dict: dict[str, Any] | PromptConfig | None = None):
+    def __init__(self, config_dict: dict[str, Any] | PromptConfig | LanguageSettings | None = None):
         """
         Initialize with test configuration.
 
@@ -72,25 +85,46 @@ class MockConfigProvider:
                     "phrase_match_boost": 1.5,
                 },
             },
+            "ranking": {
+                "method": "language_enhanced",
+                "enable_diversity": True,
+                "diversity_threshold": 0.8,
+                "boost_recent": False,
+                "boost_authoritative": True,
+                "content_length_factor": 0.1,
+                "keyword_density_factor": 0.15,
+                "language_specific_boost": True,
+                "weights": {
+                    "semantic_similarity": 0.4,
+                    "keyword_overlap": 0.2,
+                    "length_match": 0.15,
+                    "cultural_relevance": 0.15,
+                    "quality_signals": 0.1,
+                },
+                "penalties": {
+                    "too_short": 0.3,
+                    "too_long": 0.2,
+                },
+            },
         }
 
         # Initialize mock_configs first to detect if config_dict contains mock configs
-        self.mock_configs = {}
+        self.mock_configs: dict[str, Any] = {}
 
         # Initialize all attributes first
         self.mock_language_configs: dict[str, dict[str, Any]] = {}
         self.mock_shared_config: dict[str, Any] = {}
-        self.configs = {}
-        self.settings = None
-        self.extraction_config = {}
-        self.chunking_configs = {}
-        self.document_cleaning_configs = {}
-        self.cleaning_config = {}
-        self.shared_language_configs = {}
-        self.call_history = []
+        self.configs: dict[str, Any] = {}
+        self.extraction_config: dict[str, Any] = {}
+        self.chunking_configs: dict[str, Any] = {}
+        self.document_cleaning_configs: dict[str, Any] = {}
+        self.cleaning_config: dict[str, Any] = {}
+        self.shared_language_configs: dict[str, Any] = {}
+        self.call_history: list[str] = []
         self.prompt_config: PromptConfig | None = None
         self.settings: LanguageSettings | None = None
-        self.folder_config: FolderConfig | None = None
+        self.config: dict[str, Any] | PromptConfig | LanguageSettings
+        self.config_dict: dict[str, Any]
         # Store custom prompt config components for old PromptConfig
         self._custom_templates: dict[str, Any] | None = None
         self._custom_keyword_patterns: dict[str, list[str]] | None = None
@@ -104,10 +138,6 @@ class MockConfigProvider:
         elif isinstance(config_dict, LanguageSettings):
             # LanguageSettings mode
             self.settings = config_dict
-            self.config_dict = defaults.copy()
-        elif isinstance(config_dict, FolderConfig):
-            # FolderConfig mode
-            self.folder_config = config_dict
             self.config_dict = defaults.copy()
         elif config_dict:
             # Check for structured factory-style config with specific keys
@@ -151,31 +181,19 @@ class MockConfigProvider:
         # Determine mode based on what was passed
         if isinstance(config_dict, PromptConfig):
             # Explicit PromptConfig mode: config is PromptConfig
-            self.config = self.prompt_config
+            self.config = config_dict  # Use config_dict directly, which we know is PromptConfig
         elif isinstance(config_dict, LanguageSettings):
             # LanguageSettings mode: config is LanguageSettings
-            self.config = self.settings
-        elif isinstance(config_dict, FolderConfig):
-            # FolderConfig mode: config is FolderConfig
-            self.config = self.folder_config
+            self.config = config_dict  # Use config_dict directly, which we know is LanguageSettings
         else:
             # Default/dict mode: Create all defaults
             # Don't create PromptConfig eagerly - let get_prompt_config decide which type to create
             # Create default LanguageSettings if not set
             if self.settings is None:
                 self.settings = self._create_default_settings()
-            # Create default FolderConfig if not set
-            if self.folder_config is None:
-                self.folder_config = self._create_default_folder_config()
 
-            # Detect context: folder_manager tests vs others
-            import inspect
-            frame = inspect.currentframe()
-            caller_filename = frame.f_back.f_code.co_filename if frame and frame.f_back else ""
-            is_folder_test = "test_folder_manager" in caller_filename or "test_config_protocol" in caller_filename
-
-            # Default to FolderConfig for folder_manager tests, dict for others
-            self.config = self.folder_config if is_folder_test else self.config_dict
+            # Default mode: use config_dict
+            self.config = self.config_dict
 
         # Store parsing-related kwargs for get_parsing_config
         self._parsing_config_overrides: dict[str, Any] = {}
@@ -282,21 +300,6 @@ class MockConfigProvider:
             chunk_overlap=50,
         )
 
-    def _create_default_folder_config(self) -> FolderConfig:
-        """Create default test folder configuration."""
-        return FolderConfig(
-            data_base_dir="/mock/data",
-            models_base_dir="/mock/models",
-            system_dir="/mock/system",
-            tenant_root_template="{data_base_dir}/{tenant_slug}",
-            user_documents_template="{data_base_dir}/{tenant_slug}/users/{user_id}/documents/{language}",
-            tenant_shared_template="{data_base_dir}/{tenant_slug}/shared/{language}",
-            user_processed_template="{data_base_dir}/{tenant_slug}/users/{user_id}/processed/{language}",
-            tenant_processed_template="{data_base_dir}/{tenant_slug}/processed/{language}",
-            chromadb_path_template="{data_base_dir}/{tenant_slug}/chromadb",
-            models_path_template="{models_base_dir}/{language}",
-            collection_name_template="{tenant_slug}_{user_id}_{language}",
-        )
 
     def _create_default_test_config(self) -> dict[str, Any]:
         """Create default test configuration."""
@@ -466,14 +469,6 @@ class MockConfigProvider:
         }
 
 
-    def get_folder_config(self) -> FolderConfig:
-        """Get folder configuration."""
-        self.call_history.append("get_folder_config")
-        if self.folder_config is not None:
-            return self.folder_config
-        # Create default if not set
-        self.folder_config = self._create_default_folder_config()
-        return self.folder_config
 
 
     def get_language_config(self, language: str) -> dict[str, Any]:
@@ -769,11 +764,15 @@ class MockConfigProvider:
 
     def get_scoring_weights(self) -> dict[str, float]:
         """Get scoring weights for hybrid search."""
-        return self.config["scoring"]["weights"]
+        if isinstance(self.config, dict):
+            return self.config["scoring"]["weights"]
+        return self.config_dict["scoring"]["weights"]
 
     def get_search_config(self) -> dict[str, Any]:
         """Get search configuration."""
-        return self.config["search"]
+        if isinstance(self.config, dict):
+            return self.config["search"]
+        return self.config_dict["search"]
 
     def get_shared_config(self) -> dict[str, Any]:
         """Get mock shared configuration."""
@@ -827,16 +826,11 @@ class MockConfigProvider:
         Supports multiple patterns:
         - set_config(name, dict) - for mock_configs dict
         - set_config(PromptConfig) - for prompt config mode
-        - set_config(FolderConfig) - for folder config mode
         - set_config(LanguageSettings) - for language settings mode
         """
         if isinstance(config_name, PromptConfig):
             # Setting PromptConfig directly
             self.prompt_config = config_name
-            self.config = config_name
-        elif isinstance(config_name, FolderConfig):
-            # Setting FolderConfig directly
-            self.folder_config = config_name
             self.config = config_name
         elif isinstance(config_name, LanguageSettings):
             # Setting LanguageSettings directly
@@ -847,7 +841,7 @@ class MockConfigProvider:
             self.mock_configs[config_name] = config_data
             self.configs[config_name] = config_data  # For query_processor test compatibility
         else:
-            raise TypeError("set_config requires either (name, data) or (PromptConfig/FolderConfig/LanguageSettings)")
+            raise TypeError("set_config requires either (name, data) or (PromptConfig/LanguageSettings)")
 
     def set_document_cleaning_config(self, language: str, config: dict[str, Any]) -> None:
         """Set mock document cleaning configuration."""
@@ -871,6 +865,8 @@ class MockConfigProvider:
             # Two-arg version: set_language_config(language, config)
             # This should take priority over language_configs
             language = section_or_language
+            if not isinstance(language_or_config, dict):
+                raise TypeError(f"Expected dict for config, got {type(language_or_config)}")
             self.mock_language_configs[language] = language_or_config
             # Also remove from language_configs if present to avoid confusion
             if language in self.language_configs:
@@ -1070,38 +1066,30 @@ def create_mock_setup(
         Returns: (MockConfigProvider, MockLoggerProvider)
 
     Args:
-        config: FolderConfig, LanguageSettings, or PromptConfig
+        config: LanguageSettings or PromptConfig
         custom_templates: Custom category templates (prompt mode)
         custom_messages: Custom messages (prompt mode)
         custom_formatting: Custom formatting (prompt mode)
         language: Language code
         settings: Language settings (language manager mode)
         patterns: Language patterns (language manager mode)
-        filesystem_config: Filesystem configuration (folder manager mode)
-        folder_stats: Folder statistics (folder manager mode)
-        existing_folders: Existing folders (folder manager mode)
-        filesystem_failures: Filesystem failures (folder manager mode)
 
     Returns:
         Tuple of providers (2 or 3 depending on mode)
     """
     # Detect mode based on arguments
-    is_folder_mode = isinstance(config, FolderConfig) or any([filesystem_config, folder_stats, existing_folders, filesystem_failures])
     is_language_mode = isinstance(config, LanguageSettings) or settings is not None or patterns is not None or custom_patterns is not None or custom_stopwords is not None
     is_prompt_mode = isinstance(config, PromptConfig) or any([custom_templates, custom_messages, custom_formatting])
 
     # If no mode detected (all defaults), check test context
-    if not (is_folder_mode or is_language_mode or is_prompt_mode):
+    if not (is_language_mode or is_prompt_mode):
         # Detect from test file in call stack
         import traceback
         stack = traceback.extract_stack()
-        is_folder_test = any("test_folder_manager" in frame.filename for frame in stack)
         is_language_test = any("test_language_manager" in frame.filename for frame in stack)
         is_prompt_test = any("test_enhanced_prompt" in frame.filename or "test_prompt_templates" in frame.filename for frame in stack)
 
-        if is_folder_test:
-            is_folder_mode = True
-        elif is_language_test:
+        if is_language_test:
             is_language_mode = True
         elif is_prompt_test:
             is_prompt_mode = True
@@ -1111,52 +1099,8 @@ def create_mock_setup(
 
     logger_provider = MockLoggerProvider()
 
-    # FOLDER MANAGER MODE
-    if is_folder_mode:
-        filesystem_provider = MockFileSystemProvider()
-
-        if existing_folders:
-            # Support both dict and list formats
-            if isinstance(existing_folders, dict):
-                for folder, exists in existing_folders.items():
-                    filesystem_provider.set_folder_exists(folder, exists)
-            else:
-                for folder in existing_folders:
-                    filesystem_provider.set_folder_exists(folder, True)
-
-        if folder_stats:
-            for folder, stats in folder_stats.items():
-                # Support both FolderStats objects and dicts
-                if isinstance(stats, FolderStats):
-                    filesystem_provider.set_folder_stats(folder, stats)
-                else:
-                    # Create FolderStats from dict
-                    folder_stats_obj = FolderStats(count=stats.get("count", 0), size_bytes=stats.get("size_bytes", 0))
-                    filesystem_provider.set_folder_stats(folder, folder_stats_obj)
-
-        if filesystem_failures:
-            # Support both dict and list formats
-            if isinstance(filesystem_failures, dict):
-                for operation, should_fail in filesystem_failures.items():
-                    filesystem_provider.set_should_fail(operation, should_fail)
-            else:
-                for operation in filesystem_failures:
-                    filesystem_provider.set_should_fail(operation, True)
-
-        if isinstance(config, FolderConfig):
-            config_provider = MockConfigProvider(config)
-        elif filesystem_config:
-            # Create FolderConfig from filesystem_config dict
-            folder_config = FolderConfig(**filesystem_config)
-            config_provider = MockConfigProvider(folder_config)
-        else:
-            # Use defaults
-            config_provider = MockConfigProvider()
-
-        return (config_provider, filesystem_provider, logger_provider)
-
     # LANGUAGE MANAGER MODE
-    elif is_language_mode:
+    if is_language_mode:
         pattern_provider = MockPatternProvider()
 
         if patterns:
@@ -1237,7 +1181,6 @@ class MockFileSystemProvider:
         """Initialize with in-memory filesystem simulation."""
         self.created_folders: list[str] = []
         self.existing_folders: dict[str, bool] = {}
-        self.folder_stats: dict[str, FolderStats] = {}
         self.call_history: list[dict] = []
         self.should_fail: dict[str, bool] = {}
         # File system attributes for extractor tests
@@ -1300,14 +1243,6 @@ class MockFileSystemProvider:
             raise FileNotFoundError(f"Mock file not found: {file_path}")
         return self.file_sizes_mb[path_str]
 
-    def get_folder_stats(self, folder_path: Path) -> FolderStats:
-        """Mock folder statistics."""
-        self.call_history.append({"operation": "get_folder_stats", "path": str(folder_path)})
-
-        path_str = str(folder_path)
-        if path_str not in self.folder_stats:
-            raise ValueError(f"Mock folder stats not configured for {folder_path}")
-        return self.folder_stats[path_str]
 
     def open_binary(self, file_path: Path) -> bytes:
         """Open mock file in binary mode."""
@@ -1340,9 +1275,6 @@ class MockFileSystemProvider:
         """Set whether a folder should be considered to exist."""
         self.existing_folders[str(folder_path)] = exists
 
-    def set_folder_stats(self, folder_path: Path, stats: FolderStats) -> None:
-        """Set mock statistics for a folder."""
-        self.folder_stats[str(folder_path)] = stats
 
     def set_should_fail(self, operation: str, should_fail: bool = True) -> None:
         """Set whether an operation should fail."""
@@ -1383,7 +1315,7 @@ class MockFolderManager:
     def get_collection_storage_paths(self, context: Any, language: str) -> Any:
         from pathlib import Path
 
-        from ..utils.folder_manager import CollectionPaths
+        from ..utils.folder_manager import CollectionPaths  # type: ignore[import-not-found]
 
         # Access context attributes properly based on TenantUserContext structure
         tenant_slug = context.tenant.slug if hasattr(context, "tenant") else getattr(context, "tenant_slug", "unknown")
@@ -1415,25 +1347,29 @@ class MockFolderManager:
 # ENVIRONMENT MOCKS
 # ============================================================================
 
-class MockEnvironmentProvider:
-    """Mock environmentprovider for testing."""
+class MockEnvironmentProvider:  # type: ignore[no-redef]
+    """Mock environment provider for testing (extended version with locale support)."""
 
     def __init__(self):
         """Initialize mock environment."""
         self.environment_variables: dict[str, str] = {}
         self.locale_calls: list[tuple] = []
+        self.environment = "development"
+        self.is_production_flag = False
+
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.is_production_flag
+
+    def set_environment(self, environment: str) -> None:
+        """Set the environment."""
+        self.environment = environment
+        self.is_production_flag = environment == "production"
 
     def clear_records(self) -> None:
         """Clear all recorded operations."""
         self.environment_variables.clear()
         self.locale_calls.clear()
-
-
-
-
-# ============================================================================
-# RETRIEVAL MOCKS
-# ============================================================================
 
     def get_environment_variables(self) -> dict[str, str]:
         """Get recorded environment variables."""
@@ -1987,7 +1923,7 @@ class MockModelLoader:
         self.call_log.append({"method": "is_model_available", "model_name": model_name})
         available = model_name in self.available_models
 
-        log_decision_point("mock_loader", "is_model_available", model=model_name, mock_available=available)
+        log_decision_point("mock_loader", "is_model_available", f"model={model_name}", f"available={available}")
         log_component_end("mock_loader", "is_model_available", f"Mock model {model_name}: {available}")
         return available
 
@@ -2434,7 +2370,7 @@ class MockCollection:
 
         search_results = []
         for doc_id, doc_data in doc_items:
-            result = VectorSearchResult(
+            result = VectorSearchResult(  # type: ignore[name-defined]
                 id=str(doc_id),
                 content=doc_data.get("document", ""),
                 metadata=doc_data.get("metadata", {}),
@@ -2491,7 +2427,7 @@ class MockDatabase:
         if name not in self._collections:
             self._collections[name] = MockCollection(name)
 
-        return self._collections[name]
+        return self._collections[name]  # type: ignore[return-value]
 
     def delete_collection(self, name: str) -> None:
         """Delete mock collection."""
@@ -2502,7 +2438,7 @@ class MockDatabase:
         """Get existing mock collection."""
         if name not in self._collections:
             raise ValueError(f"Collection {name} does not exist")
-        return self._collections[name]
+        return self._collections[name]  # type: ignore[return-value]
 
     def list_collections(self) -> list[str]:
         """List all mock collections."""
@@ -2604,7 +2540,7 @@ def create_chromadb_database(
     db_path: str, distance_metric: str = "cosine", persist: bool = True, allow_reset: bool = False
 ) -> VectorDatabase:
     """Factory function to create ChromaDB database."""
-    return ChromaDBDatabase(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)
+    return ChromaDBDatabase(db_path=db_path, distance_metric=distance_metric, persist=persist, allow_reset=allow_reset)  # type: ignore[name-defined]
 
 def create_complex_test_config():
     """Create complex test configuration with comprehensive categorization settings."""
@@ -2641,7 +2577,7 @@ def create_complex_test_config():
 
 def create_config_provider(config_loader_func=None) -> ConfigProvider:
     """Create default configuration provider."""
-    return DefaultConfigProvider(config_loader=config_loader_func)
+    return DefaultConfigProvider(config_loader=config_loader_func)  # type: ignore[call-arg]
 
 def create_default_setup(logger_name: str | None = None) -> tuple:
     """
@@ -2667,7 +2603,7 @@ create_production_setup = create_default_setup
 
 def create_embedding_provider(model_name: str = "BAAI/bge-m3", device: str = "cpu") -> EmbeddingProvider:
     """Create production embedding provider."""
-    return SentenceTransformerEmbeddingProvider(model_name=model_name, device=device)
+    return SentenceTransformerEmbeddingProvider(model_name=model_name, device=device)  # type: ignore[name-defined]
 
 def create_hierarchical_retriever(
     search_engine, language: str = "hr", reranker=None, enable_performance_tracking: bool = True
@@ -2694,13 +2630,13 @@ def create_hierarchical_retriever(
     )
 
     # Import the actual HierarchicalRetriever class
-    from .hierarchical_retriever import HierarchicalRetriever
+    from .hierarchical_retriever import HierarchicalRetriever  # type: ignore[import-not-found]
 
     # Create components
-    query_processor = QueryProcessor(language)
-    categorizer = Categorizer(language)
-    search_engine_adapter = SearchEngineAdapter(search_engine)
-    reranker_adapter = RerankerAdapter(reranker, language) if reranker else None
+    query_processor = QueryProcessor(language)  # type: ignore[name-defined]
+    categorizer = Categorizer(language)  # type: ignore[name-defined]
+    search_engine_adapter = SearchEngineAdapter(search_engine)  # type: ignore[name-defined]
+    reranker_adapter = RerankerAdapter(reranker, language) if reranker else None  # type: ignore[name-defined]
 
     # Use Python's standard logger for HierarchicalRetriever (different from structured logger)
     import logging
@@ -2853,7 +2789,7 @@ def create_mock_cli(should_fail: bool = False, output_writer: OutputWriterProtoc
     def mock_rag_factory(language: str, tenant_context=None, scope: str = "user", feature_name: str | None = None):
         return MockRAGSystem(should_fail=should_fail)
 
-    return MultiTenantRAGCLI(
+    return MultiTenantRAGCLI(  # type: ignore[call-arg]
         output_writer=output_writer,
         logger=MockLogger(),
         rag_system_factory=mock_rag_factory,
@@ -2901,7 +2837,7 @@ async def main():
 
         try:
             # Import Tenant and User from factories (where they're now defined)
-            from ..utils.factories import Tenant, User, create_complete_rag_system
+            from ..utils.factories import Tenant, User, create_complete_rag_system  # type: ignore[import-not-found]
 
             tenant_obj = None
             user_obj = None
@@ -2932,8 +2868,8 @@ async def main():
             log_component_error("cli", "RAG_FACTORY", f"Failed to create system for {language}", e)
             raise e
 
-    from ..utils.folder_manager import TenantFolderManager
-    from ..utils.folder_manager_providers import (
+    from ..utils.folder_manager import TenantFolderManager  # type: ignore[import-not-found]
+    from ..utils.folder_manager_providers import (  # type: ignore[import-not-found]
         ProductionConfigProvider,
         ProductionFileSystemProvider,
         StandardLoggerProvider,
@@ -2951,8 +2887,8 @@ async def main():
 
         def _ensure_initialized(self):
             if self._vector_db is None:
-                from ..utils.config_loader import get_paths_config
-                from ..vectordb.database_factory import create_vector_database
+                from ..utils.config_loader import get_paths_config  # type: ignore[import-not-found]
+                from ..vectordb.database_factory import create_vector_database  # type: ignore[import-not-found]
 
                 paths_config = get_paths_config()
                 db_path_template = paths_config["chromadb_path_template"]
@@ -3020,14 +2956,18 @@ def create_mock_config_provider(
     """
     # If full config_dict provided, use it directly
     if config_dict is not None:
-        return MockConfigProvider(config_dict=config_dict)
+        provider = MockConfigProvider(config_dict=config_dict)
+        # Ensure "config" key exists for ranker tests - use the ACTUAL config_dict, not defaults
+        if "config" not in provider.mock_configs:
+            provider.mock_configs["config"] = config_dict
+        return provider
 
     # Otherwise build config from components
-    config = {}
+    config: dict[str, Any] = {}
     if templates:
-        config["templates"] = templates
+        config["templates"] = templates  # type: ignore[assignment]
     if keyword_patterns:
-        config["keyword_patterns"] = keyword_patterns
+        config["keyword_patterns"] = keyword_patterns  # type: ignore[assignment]
     if formatting:
         config["formatting"] = formatting
 
@@ -3035,6 +2975,9 @@ def create_mock_config_provider(
     config.update(kwargs)
 
     provider = MockConfigProvider(config_dict=config if config else None)
+    # Ensure "config" key exists for ranker tests - use empty dict when no config
+    if "config" not in provider.mock_configs:
+        provider.mock_configs["config"] = config
     return provider
 
 def create_mock_database(
@@ -3077,17 +3020,17 @@ def create_mock_language_provider(
         return provider
 
     # Default: return MockLanguageDataProvider for query processing
-    provider = MockLanguageDataProvider()
+    provider = MockLanguageDataProvider()  # type: ignore[assignment]
 
     # Set default data for language
     if language == "hr":
-        provider.set_stop_words("hr", {"i", "a", "u", "na", "za", "od", "do", "iz", "s", "sa", "se"})
-        provider.set_question_patterns("hr", [r"^što\s", r"^kako\s", r"^kada\s", r"^gdje\s", r"^zašto\s"])
-        provider.set_synonym_groups("hr", {"brz": ["brži", "brzo", "hitno"], "dobro": ["odlično", "izvrsno", "super"]})
+        provider.set_stop_words("hr", {"i", "a", "u", "na", "za", "od", "do", "iz", "s", "sa", "se"})  # type: ignore[attr-defined]
+        provider.set_question_patterns("hr", [r"^što\s", r"^kako\s", r"^kada\s", r"^gdje\s", r"^zašto\s"])  # type: ignore[attr-defined]
+        provider.set_synonym_groups("hr", {"brz": ["brži", "brzo", "hitno"], "dobro": ["odlično", "izvrsno", "super"]})  # type: ignore[attr-defined]
     else:  # English
-        provider.set_stop_words("en", {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"})
-        provider.set_question_patterns("en", [r"^what\s", r"^how\s", r"^when\s", r"^where\s", r"^why\s"])
-        provider.set_synonym_groups(
+        provider.set_stop_words("en", {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"})  # type: ignore[attr-defined]
+        provider.set_question_patterns("en", [r"^what\s", r"^how\s", r"^when\s", r"^where\s", r"^why\s"])  # type: ignore[attr-defined]
+        provider.set_synonym_groups(  # type: ignore[attr-defined]
             "en", {"fast": ["quick", "rapid", "swift"], "good": ["great", "excellent", "awesome"]}
         )
 
@@ -3095,13 +3038,13 @@ def create_mock_language_provider(
     if custom_data:
         for key, value in custom_data.items():
             if key == "stop_words":
-                provider.set_stop_words(language, set(value))
+                provider.set_stop_words(language, set(value))  # type: ignore[attr-defined]
             elif key == "question_patterns":
-                provider.set_question_patterns(language, value)
+                provider.set_question_patterns(language, value)  # type: ignore[attr-defined]
             elif key == "synonym_groups":
-                provider.set_synonym_groups(language, value)
+                provider.set_synonym_groups(language, value)  # type: ignore[attr-defined]
             elif key == "morphological_patterns":
-                provider.set_morphological_patterns(language, value)
+                provider.set_morphological_patterns(language, value)  # type: ignore[attr-defined]
 
     return provider
 
@@ -3163,7 +3106,7 @@ def create_mock_ranker(language: str = "hr", config_dict: dict[str, Any] | None 
     config_provider = create_mock_config_provider(config_dict)
     language_provider = create_mock_language_provider()
 
-    return DocumentRanker(config_provider, language_provider, language)
+    return DocumentRanker(config_provider, language_provider, language)  # type: ignore[arg-type]
 
 def create_mock_score_calculator(base_scores: list[float] | None = None, add_noise: bool = False) -> ScoreCalculator:
     """
@@ -3277,6 +3220,34 @@ def create_mock_retriever_setup(
     )
 
     return query_processor, categorizer, search_engine, reranker, logger, config
+
+
+def create_test_retrieval_config(max_results: int = 5, performance_tracking: bool = True) -> RetrievalConfig:
+    """
+    Create test RetrievalConfig for hierarchical retriever tests.
+
+    Args:
+        max_results: Maximum results to return
+        performance_tracking: Whether to enable performance tracking
+
+    Returns:
+        RetrievalConfig instance
+    """
+    return RetrievalConfig(
+        default_max_results=max_results,
+        similarity_thresholds=get_similarity_thresholds(),
+        boost_weights={
+            "keyword": 0.2,
+            "technical": 0.1,
+            "exact_match": 0.2,
+            "temporal": 0.15,
+            "faq": 0.1,
+            "comparative": 0.1,
+        },
+        strategy_mappings={},
+        performance_tracking=performance_tracking,
+    )
+
 
 def create_mock_stop_words_provider(
     croatian_stop_words: set | None = None, english_stop_words: set | None = None
@@ -3415,8 +3386,8 @@ def create_prompt_builder(logger_name: str | None = None) -> tuple:
     Returns:
         Tuple of (config_provider, logger_provider)
     """
-    config_provider = ConfigProvider()
-    logger_provider = StandardLoggerProvider(logger_name or __name__)
+    config_provider = ConfigProvider()  # type: ignore[misc]
+    logger_provider = StandardLoggerProvider(logger_name or __name__)  # type: ignore[call-arg]
 
     return config_provider, logger_provider
 
@@ -3431,7 +3402,7 @@ def create_providers(language: str = "hr") -> tuple:
         Tuple of (config, language_provider, config_provider)
     """
     # Import real config provider
-    from ..utils.config_protocol import get_config_provider
+    from ..utils.config_protocol import get_config_provider  # type: ignore[import-not-found]
 
     config_provider = get_config_provider()
 
@@ -3445,7 +3416,7 @@ def create_providers(language: str = "hr") -> tuple:
 
 def create_query_processor(language: str = "hr"):
     """Create query processor with all dependencies."""
-    from .query_processor import MultilingualQueryProcessor
+    from .query_processor import MultilingualQueryProcessor  # type: ignore[import-not-found]
 
     config, language_provider, config_provider = create_providers(language)
 
@@ -3476,33 +3447,11 @@ def create_test_config(
     data_base_dir: str | None = None,
     models_base_dir: str | None = None,
     system_dir: str | None = None,
-) -> PromptConfig | FolderConfig:
+) -> PromptConfig:
     """
     Create test configuration with customizable parameters.
-    Polymorphic: returns FolderConfig if folder args provided, otherwise PromptConfig.
+    Returns PromptConfig (folder_manager args no longer supported).
     """
-    # Detect mode: if folder-specific args provided OR all defaults (for folder_manager tests)
-    # Check if this is likely a folder_manager test call by inspecting call stack
-    import inspect
-    frame = inspect.currentframe()
-    caller_filename = frame.f_back.f_code.co_filename if frame and frame.f_back else ""
-    is_folder_test = "test_folder_manager" in caller_filename
-
-    # Return FolderConfig if: explicit folder args OR folder test with defaults
-    if data_base_dir is not None or models_base_dir is not None or system_dir is not None or (is_folder_test and language == "hr"):
-        return FolderConfig(
-            data_base_dir=data_base_dir or "/test/data",
-            models_base_dir=models_base_dir or "/test/models",
-            system_dir=system_dir or "/test/system",
-            tenant_root_template="{data_base_dir}/tenants/{tenant_slug}",
-            user_documents_template="{data_base_dir}/users/{user_id}/documents/{language}",
-            tenant_shared_template="{data_base_dir}/shared/{language}",
-            user_processed_template="{data_base_dir}/processed/{user_id}/{language}",
-            tenant_processed_template="{data_base_dir}/processed/shared/{language}",
-            chromadb_path_template="{data_base_dir}/chromadb",
-            models_path_template="{models_base_dir}/{language}",
-            collection_name_template="{tenant_slug}_{user_id}_{language}",
-        )
 
     # Otherwise create PromptConfig
     category_templates = {}
@@ -3545,42 +3494,7 @@ def create_test_config(
         category_templates=category_templates, messages=messages, formatting=formatting, language=language
     )
 
-def create_test_folder_manager(
-    config: FolderConfig | None = None,
-    existing_folders: dict[str, bool] | None = None,
-    folder_stats: dict[str, FolderStats] | None = None,
-    filesystem_failures: dict[str, bool] | None = None,
-):
-    """
-    Create test folder manager setup with mock providers.
-
-    Returns:
-        Tuple of (manager, (config_provider, filesystem_provider, logger_provider))
-    """
-    from src.utils.folder_manager import create_tenant_folder_manager
-    from src.utils.folder_manager_providers import create_file_system_provider, create_logger_provider
-
-    # Create mock providers
-    config_provider = MockConfigProvider(config) if config else MockConfigProvider()
-    filesystem_provider = MockFileSystemProvider()
-    logger_provider = MockLoggerProvider()
-
-    # Configure mock filesystem if provided
-    if existing_folders:
-        filesystem_provider.existing_folders.update(existing_folders)
-    if folder_stats:
-        filesystem_provider.folder_stats.update(folder_stats)
-    if filesystem_failures:
-        filesystem_provider.should_fail.update(filesystem_failures)
-
-    # Call the actual factory function (which may be patched in tests)
-    manager = create_tenant_folder_manager(
-        config_provider=config_provider,
-        file_system_provider=filesystem_provider,
-        logger_provider=logger_provider
-    )
-
-    return manager, (config_provider, filesystem_provider, logger_provider)
+# create_test_folder_manager removed - folder_manager.py was deleted
 
 def create_test_language_manager(
     settings: LanguageSettings | None = None,
@@ -3595,8 +3509,20 @@ def create_test_language_manager(
     from unittest.mock import MagicMock
 
     # Create mock providers
-    config_provider = MockConfigProvider(settings) if settings else MockConfigProvider()
-    pattern_provider = MockConfigProvider(patterns) if patterns else MockConfigProvider()
+    # Config provider handles LanguageSettings
+    if settings:
+        config_provider = MockConfigProvider()
+        config_provider.settings = settings
+    else:
+        config_provider = MockConfigProvider()
+
+    # Pattern provider handles LanguagePatterns - use MockPatternProvider
+    if patterns:
+        pattern_provider = MockPatternProvider()
+        pattern_provider.patterns = patterns
+    else:
+        pattern_provider = MockPatternProvider()
+
     logger_provider = MockLoggerProvider()
 
     # Call the actual factory function (which may be patched in tests)
@@ -3697,18 +3623,32 @@ def create_test_providers(
 
         config_provider = MockConfigProvider()
 
+        # Set default cleaning config first
+        default_cleaning_config = {
+            "multiple_whitespace": r"\s+",
+            "min_meaningful_words": 3,
+            "max_line_length": 1000,
+        }
+
         # Set up mock configs if provided
         if mock_configs:
             if "language_configs" in mock_configs:
                 for lang, lang_config in mock_configs["language_configs"].items():
                     config_provider.set_language_config(lang, lang_config)
             if "cleaning_config" in mock_configs:
-                config_provider.set_config("cleaning", mock_configs["cleaning_config"])
+                # Merge with defaults
+                merged_cleaning = {**default_cleaning_config, **mock_configs["cleaning_config"]}
+                config_provider.set_config("cleaning", merged_cleaning)
+            else:
+                config_provider.set_config("cleaning", default_cleaning_config)
+        else:
+            config_provider.set_config("cleaning", default_cleaning_config)
 
         # Set default language config
         if language and language not in config_provider.mock_language_configs:
             config_provider.set_language_config(language, {
-                "diacritic_map": {"č": "c", "ć": "c", "š": "s", "ž": "z", "đ": "d"}
+                "diacritic_map": {"č": "c", "ć": "c", "š": "s", "ž": "z", "đ": "d"},
+                "word_char_pattern": r"[a-zA-ZčćšžđĆČŠŽĐ]"
             })
 
         logger_provider = MockLoggerProvider() if mock_logging else LoggerProvider()
@@ -3718,13 +3658,26 @@ def create_test_providers(
     if is_extractor_mode:
         # Extractor mode: return (config_provider, fs_provider, logger_provider)
         # For extractors, use the conftest MockConfigProvider with extraction config support
-        config_provider = MockConfigProvider(config or custom_config or {})
+        # Pass extraction config with defaults if not provided
+        extraction_config = config or custom_config
+        if extraction_config is None:
+            # Create default extraction config with all expected keys
+            extraction_config = {
+                "supported_formats": [".txt", ".pdf", ".docx"],
+                "text_encodings": ["utf-8", "latin-1"],
+                "max_file_size_mb": 10,
+                "enable_logging": True,
+            }
+        config_provider = MockConfigProvider(extraction_config)
 
-        # Use local MockFileSystemProvider for tests
-        fs_provider = MockFileSystemProvider()
-        if files:
+        # When files=None, use production FileSystemProvider. Otherwise use mock.
+        if files is None:
+            from src.preprocessing.extractors_providers import FileSystemProvider
+            fs_provider = FileSystemProvider()
+        else:
+            fs_provider = MockFileSystemProvider()  # type: ignore[assignment]
             for file_path, content in files.items():
-                fs_provider.add_file(file_path, content)
+                fs_provider.add_file(file_path, content)  # type: ignore[attr-defined]
 
         logger_provider = MockLoggerProvider() if mock_logging else create_logger_provider()
         return config_provider, fs_provider, logger_provider
@@ -3804,8 +3757,8 @@ def create_vector_database(
 
 def create_vector_search_provider(vector_storage_or_collection, embedding_provider=None) -> VectorSearchProvider:
     """Create vector search provider based on configured vector database."""
-    from ..utils.config_loader import get_config_section
-    from ..utils.logging_factory import get_system_logger
+    from ..utils.config_loader import get_config_section  # type: ignore[import-not-found]
+    from ..utils.logging_factory import get_system_logger  # type: ignore[import-not-found]
 
     logger = get_system_logger()
     vectordb_config = get_config_section("config", "vectordb")
@@ -3846,7 +3799,7 @@ def create_vector_search_provider(vector_storage_or_collection, embedding_provid
     search_provider: VectorSearchProvider
     if provider == "weaviate":
         # For Weaviate, create a search provider wrapper that handles text-to-embedding conversion
-        search_provider = WeaviateSearchProvider(collection, embedding_provider)
+        search_provider = WeaviateSearchProvider(collection, embedding_provider)  # type: ignore[name-defined]
         logger.info(
             "search_providers",
             "create_vector_search_provider",
@@ -3854,7 +3807,7 @@ def create_vector_search_provider(vector_storage_or_collection, embedding_provid
         )
         return search_provider
     elif provider == "chromadb":
-        search_provider = ChromaDBSearchProvider(collection, embedding_provider)
+        search_provider = ChromaDBSearchProvider(collection, embedding_provider)  # type: ignore[name-defined]
         logger.info(
             "search_providers",
             "create_vector_search_provider",
@@ -3864,16 +3817,8 @@ def create_vector_search_provider(vector_storage_or_collection, embedding_provid
     else:
         raise ValueError(f"Unsupported vector database provider: {provider}")
 
-def log_component_start(component: str, operation: str, **kwargs) -> None:
-    """Log component start for AI debugging."""
-    logger = get_system_logger()
-    details = " | ".join(f"{k}={v}" for k, v in kwargs.items())
-    logger.debug("component_start", f"{component}.{operation}", details if details else "Starting operation")
-
-def log_component_end(component: str, operation: str, message: str = "") -> None:
-    """Log component end for AI debugging."""
-    logger = get_system_logger()
-    logger.debug("component_end", f"{component}.{operation}", message)
+# Note: log_component_start, log_component_end, and log_decision_point are imported from logging_factory
+# The following helpers are test-specific and remain here:
 
 def log_component_info(component: str, operation: str, message: str) -> None:
     """Log component info for AI debugging."""
@@ -3885,12 +3830,6 @@ def log_component_error(component: str, operation: str, message: str, error: Exc
     logger = get_system_logger()
     error_msg = f"{message} | error={error}" if error else message
     logger.error(component, operation, error_msg)
-
-def log_decision_point(component: str, decision: str, **context) -> None:
-    """Log decision point for AI debugging."""
-    logger = get_system_logger()
-    details = " | ".join(f"{k}={v}" for k, v in context.items())
-    logger.info(component, "decision", f"{decision} | {details}" if details else decision)
 
 
 # ============================================================================
@@ -3929,10 +3868,10 @@ src.preprocessing.extractors_providers.create_file_system_provider = _patched_cr
 import src.retrieval.ranker_providers
 
 # Use the real factory from conftest (defined earlier at line 2950)
-src.retrieval.ranker_providers.create_mock_language_provider = lambda *a, **kw: MockLanguageProvider()
-src.retrieval.ranker_providers.create_mock_config_provider = lambda config=None, **kw: MockConfigProvider(config_dict=config or {})
+src.retrieval.ranker_providers.create_mock_language_provider = lambda *a, **kw: MockLanguageProvider()  # type: ignore[attr-defined]
+src.retrieval.ranker_providers.create_mock_config_provider = lambda config=None, **kw: MockConfigProvider(config_dict=config or {})  # type: ignore[attr-defined]
 
 # Add MockConfigProvider to config_protocol module for test patching
 import src.utils.config_protocol
-src.utils.config_protocol.MockConfigProvider = MockConfigProvider
+src.utils.config_protocol.MockConfigProvider = MockConfigProvider  # type: ignore[attr-defined]
 

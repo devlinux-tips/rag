@@ -157,11 +157,17 @@ class EmbeddingConfig:
                 model_name=original_model,
             )
 
+        # Determine batch size - use batch_processing config if available, otherwise use embed_config default
+        if "batch_processing" in main_config and "embedding_batch_size" in main_config["batch_processing"]:
+            batch_size = main_config["batch_processing"]["embedding_batch_size"]
+        else:
+            batch_size = embed_config["batch_size"]
+
         config_instance = cls(
             model_name=embed_config["model_name"],
             device=embed_config["device"],
             max_seq_length=embed_config["max_seq_length"],
-            batch_size=main_config.get("batch_processing", {}).get("embedding_batch_size", embed_config["batch_size"]),
+            batch_size=batch_size,
             normalize_embeddings=embed_config["normalize_embeddings"],
             use_safetensors=embed_config["use_safetensors"],
             trust_remote_code=embed_config["trust_remote_code"],

@@ -1,11 +1,12 @@
 """
 Simple query type classifier for determining data source routing.
-Determines whether a query should use user documents or feature sources like Narodne Novine.
+Determines whether a query should use user documents or feature sources
+like Narodne Novine.
 """
 
 import re
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List
 from dataclasses import dataclass
 
 from ..utils.logging_factory import get_system_logger
@@ -13,9 +14,9 @@ from ..utils.logging_factory import get_system_logger
 
 class QueryType(Enum):
     """Query types for data source routing."""
-    USER_DOCUMENTS = "user"           # Query user's personal documents
-    NARODNE_NOVINE = "narodne_novine" # Query Croatian Official Gazette
-    MIXED = "mixed"                   # Query both sources
+    USER_DOCUMENTS = "user"  # Query user's personal documents
+    NARODNE_NOVINE = "narodne_novine"  # Query Croatian Official Gazette
+    MIXED = "mixed"  # Query both sources
 
 
 @dataclass
@@ -54,8 +55,8 @@ class SimpleQueryClassifier:
             "republic", "republika", "upravni", "javni sektor",
 
             # Legal procedures
-            "stupanje na snagu", "objava", "izmjena", "dopuna", "prestanak važenja",
-            "implementacija", "primjena zakona",
+            "stupanje na snagu", "objava", "izmjena", "dopuna",
+            "prestanak važenja", "implementacija", "primjena zakona",
 
             # Common legal phrases
             "članak", "stavak", "točka", "odredba", "odredbe", "propisi",
@@ -101,14 +102,20 @@ class SimpleQueryClassifier:
         has_year_reference = self._check_year_reference(query_lower)
 
         # Calculate confidence and make decision
-        legal_score = len(legal_matches) + (2 if has_nn_reference else 0) + \
-                     (1 if has_legal_entities else 0) + (0.5 if has_year_reference else 0)
+        legal_score = (
+            len(legal_matches)
+            + (2 if has_nn_reference else 0)
+            + (1 if has_legal_entities else 0)
+            + (0.5 if has_year_reference else 0)
+        )
         personal_score = len(personal_matches)
 
         self.logger.debug(
             "query_classifier", "classify",
-            f"Legal score: {legal_score}, Personal score: {personal_score}, "
-            f"Legal matches: {legal_matches}, Personal matches: {personal_matches}"
+            f"Legal score: {legal_score}, "
+            f"Personal score: {personal_score}, "
+            f"Legal matches: {legal_matches}, "
+            f"Personal matches: {personal_matches}"
         )
 
         # Decision logic
@@ -117,14 +124,20 @@ class SimpleQueryClassifier:
                 # Mixed query - check both sources
                 primary_type = QueryType.MIXED
                 confidence = 0.8
-                reasoning = f"Mixed query: legal keywords ({legal_matches}) + personal keywords ({personal_matches})"
+                reasoning = (
+                    f"Mixed query: legal keywords ({legal_matches}) + "
+                    f"personal keywords ({personal_matches})"
+                )
                 should_include_user_docs = True
                 should_include_nn = True
             else:
                 # Pure legal query
                 primary_type = QueryType.NARODNE_NOVINE
                 confidence = 0.9
-                reasoning = f"Legal query: detected legal keywords ({legal_matches})"
+                reasoning = (
+                    f"Legal query: detected legal keywords "
+                    f"({legal_matches})"
+                )
                 should_include_user_docs = False
                 should_include_nn = True
 
@@ -132,7 +145,10 @@ class SimpleQueryClassifier:
             # Include both sources with lower confidence
             primary_type = QueryType.MIXED
             confidence = 0.6
-            reasoning = f"Possible legal query: some legal keywords ({legal_matches})"
+            reasoning = (
+                f"Possible legal query: some legal keywords "
+                f"({legal_matches})"
+            )
             should_include_user_docs = True
             should_include_nn = True
 
@@ -140,7 +156,11 @@ class SimpleQueryClassifier:
             # Default to user documents
             primary_type = QueryType.USER_DOCUMENTS
             confidence = 0.8 if personal_score > 0 else 0.5
-            reasoning = f"Personal/general query: {personal_matches if personal_matches else 'no specific indicators'}"
+            default_indicator = (
+                personal_matches if personal_matches
+                else 'no specific indicators'
+            )
+            reasoning = f"Personal/general query: {default_indicator}"
             should_include_user_docs = True
             should_include_nn = False
 
@@ -157,7 +177,8 @@ class SimpleQueryClassifier:
 
         self.logger.info(
             "query_classifier", "classify",
-            f"Query classified as {primary_type.value} (confidence: {confidence:.2f}): {reasoning}"
+            f"Query classified as {primary_type.value} "
+            f"(confidence: {confidence:.2f}): {reasoning}"
         )
 
         return result
@@ -166,11 +187,14 @@ class SimpleQueryClassifier:
         """Check for explicit Narodne Novine references."""
         patterns = [
             r'\bnn\s+\d+/\d+',          # "NN 85/2009"
-            r'narodne novine\s+\d+',     # "Narodne novine 85"
-            r'\d+/\d+',                  # "85/2009" (generic year pattern)
+            r'narodne novine\s+\d+',    # "Narodne novine 85"
+            r'\d+/\d+',                 # "85/2009" (generic year pattern)
         ]
 
-        return any(re.search(pattern, query, re.IGNORECASE) for pattern in patterns)
+        return any(
+            re.search(pattern, query, re.IGNORECASE)
+            for pattern in patterns
+        )
 
     def _check_legal_entities(self, query: str) -> bool:
         """Check for legal entity patterns like law names."""
@@ -178,10 +202,13 @@ class SimpleQueryClassifier:
             r'zakon\s+o\s+\w+',         # "Zakon o radu"
             r'uredba\s+o\s+\w+',        # "Uredba o ..."
             r'pravilnik\s+o\s+\w+',     # "Pravilnik o ..."
-            r'\b[A-ZČĆŽŠĐ]{2,5}\b',     # Law abbreviations like "ZOR", "ZOZPP"
+            r'\b[A-ZČĆŽŠĐ]{2,5}\b',     # Law abbreviations like "ZOR"
         ]
 
-        return any(re.search(pattern, query, re.IGNORECASE) for pattern in patterns)
+        return any(
+            re.search(pattern, query, re.IGNORECASE)
+            for pattern in patterns
+        )
 
     def _check_year_reference(self, query: str) -> bool:
         """Check for year references that might indicate legal documents."""

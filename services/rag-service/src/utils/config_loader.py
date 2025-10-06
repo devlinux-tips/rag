@@ -494,7 +494,9 @@ def get_embeddings_config() -> dict[str, Any]:
 def get_storage_config() -> dict[str, Any]:
     """Get storage configuration."""
     vectordb_config = get_vectordb_config()
-    return cast(dict[str, Any], vectordb_config.get("storage", {}))
+    if "storage" not in vectordb_config:
+        raise ValueError("Missing required config: vectordb.storage")
+    return cast(dict[str, Any], vectordb_config["storage"])
 
 
 def get_search_config() -> dict[str, Any]:

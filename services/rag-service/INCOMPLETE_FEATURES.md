@@ -2,6 +2,8 @@
 
 This document tracks features that have partial implementations or interfaces but are not fully functional.
 
+**Note:** Model folder removed - multitenant models are integrated into `src/utils/folder_manager.py`
+
 ## Reranker System
 
 **Status:** Interface only, no concrete implementation

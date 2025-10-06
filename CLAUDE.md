@@ -126,8 +126,11 @@ cd /home/x/src/rag/learn-rag && source venv/bin/activate && python services/rag-
 # ALWAYS from repo root with venv activated
 cd /home/x/src/rag/learn-rag && source venv/bin/activate
 
-# Testing
-pytest tests/ -v
+# Testing - Use python_test_runner.py (repository root)
+python python_test_runner.py                     # Run all tests
+python python_test_runner.py --coverage          # With coverage report
+python python_test_runner.py --category rag-service  # Run specific category
+python python_test_runner.py -vv --trace         # Verbose with AI trace logging
 
 # Code Quality
 black src/ --line-length 88

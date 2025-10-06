@@ -831,8 +831,8 @@ class TestFactoryFunctions:
         mock_config_provider.assert_called_once()
         mock_lang_provider.assert_called_once()
 
-    @patch('src.retrieval.ranker_providers.create_mock_config_provider')
-    @patch('src.retrieval.ranker_providers.create_mock_language_provider')
+    @patch('tests.conftest.create_mock_config_provider')
+    @patch('tests.conftest.create_mock_language_provider')
     def test_create_mock_ranker(self, mock_lang_provider, mock_config_provider):
         """Test creating mock ranker."""
         mock_config = Mock()
@@ -871,8 +871,8 @@ class TestFactoryFunctions:
         mock_config_provider.assert_called_once_with(custom_config)
         mock_lang_provider.assert_called_once()
 
-    @patch('src.retrieval.ranker_providers.create_mock_config_provider')
-    @patch('src.retrieval.ranker_providers.create_mock_language_provider')
+    @patch('tests.conftest.create_mock_config_provider')
+    @patch('tests.conftest.create_mock_language_provider')
     def test_create_mock_ranker_default_config(self, mock_lang_provider, mock_config_provider):
         """Test creating mock ranker with default config."""
         mock_config = Mock()
@@ -907,4 +907,4 @@ class TestFactoryFunctions:
 
         assert isinstance(ranker, DocumentRanker)
         assert ranker.language == "hr"  # Default language
-        mock_config_provider.assert_called_once_with({})
+        mock_config_provider.assert_called_once_with(None)

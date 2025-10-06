@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from ..pipeline.rag_system import create_rag_system
-from .folder_manager import Tenant, User
 from .json_logging import write_debug_json
 from .logging_factory import get_system_logger, log_component_end, log_component_start, log_error_context
+from .multitenant_models import Tenant, User
 
 
 class ProviderAdapterClient:
@@ -39,7 +39,9 @@ class ProviderAdapterClient:
         prompts_config = get_language_specific_config("prompts", language)
 
         # Get the appropriate system prompt from config
-        system_prompt_base = prompts_config.get("question_answering_system", "")
+        if "question_answering_system" not in prompts_config:
+            raise ValueError(f"Missing required config: prompts.question_answering_system for language {language}")
+        system_prompt_base = prompts_config["question_answering_system"]
 
         # Convert GenerationRequest to ChatMessage format
         messages = []
@@ -56,8 +58,12 @@ class ProviderAdapterClient:
 
         # Get model and max_tokens from primary provider config
         primary_config = self.llm_manager.config[self.llm_manager.primary_provider]
-        model = primary_config.get("model", "default")
-        max_tokens = primary_config.get("max_tokens", 2000)
+        if "model" not in primary_config:
+            raise ValueError(f"Missing required config: {self.llm_manager.primary_provider}.model")
+        if "max_tokens" not in primary_config:
+            raise ValueError(f"Missing required config: {self.llm_manager.primary_provider}.max_tokens")
+        model = primary_config["model"]
+        max_tokens = primary_config["max_tokens"]
 
         # Log and store RAG→LLM request details
         rag_to_llm_request = {
@@ -149,7 +155,9 @@ class ProviderAdapterClient:
         try:
             # Return the configured model from primary provider
             primary_config = self.llm_manager.config[self.llm_manager.primary_provider]
-            return [primary_config.get("model", "default")]
+            if "model" not in primary_config:
+                return []
+            return [primary_config["model"]]
         except Exception:
             return []
 
@@ -228,16 +236,31 @@ def create_complete_rag_system(
         shared_config = main_config["shared"]
 
         # Create a chroma section that matches ChromaConfig expectations
-        chromadb_section = storage_config.get("chromadb", {})
+        if "chromadb" not in storage_config:
+            raise ValueError("Missing required config: vectordb.chromadb")
+        chromadb_section = storage_config["chromadb"]
+
+        # Get chunk_size with validation
+        if "chunking" in main_config and "chunk_size" in main_config["chunking"]:
+            chunk_size = main_config["chunking"]["chunk_size"]
+        else:
+            chunk_size = 512  # Hard default if chunking config not present
+
+        # Validate required chromadb keys
+        if "persist" not in chromadb_section:
+            raise ValueError("Missing required config: vectordb.chromadb.persist")
+        if "allow_reset" not in chromadb_section:
+            raise ValueError("Missing required config: vectordb.chromadb.allow_reset")
+
         main_config["chroma"] = {
             "db_path": "./data/vectordb",  # Default path, will be updated per tenant
             "collection_name": f"{language}_documents",  # Default, will be updated per tenant
             "distance_metric": storage_config["distance_metric"],
-            "chunk_size": main_config.get("chunking", {}).get("chunk_size", 512),
+            "chunk_size": chunk_size,
             "ef_construction": 200,  # HNSW default
             "m": 16,  # HNSW default
-            "persist": chromadb_section.get("persist", True),
-            "allow_reset": chromadb_section.get("allow_reset", True),
+            "persist": chromadb_section["persist"],
+            "allow_reset": chromadb_section["allow_reset"],
         }
 
         # Promote shared config values to root level for config models that expect them there
@@ -483,7 +506,13 @@ def create_tenant_and_user_from_cli_args(tenant: str, user: str) -> tuple[Tenant
     """Create Tenant and User objects from CLI arguments."""
     tenant_obj = Tenant(id=f"tenant_{tenant}", name=tenant.replace("_", " ").title(), slug=tenant)
 
-    user_obj = User(id=f"user_{user}", username=user, tenant_id=tenant_obj.id, email=f"{user}@{tenant}.local")
+    user_obj = User(
+        id=f"user_{user}",
+        username=user,
+        tenant_id=tenant_obj.id,
+        email=f"{user}@{tenant}.local",
+        full_name=user.replace("_", " ").title(),
+    )
 
     return tenant_obj, user_obj
 

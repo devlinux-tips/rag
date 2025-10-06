@@ -6,10 +6,14 @@ with support for multiple languages and tenants.
 """
 
 import argparse
+import asyncio
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
+
+from ..utils.logging_factory import log_component_start, log_error_context, setup_system_logging
 
 
 # Pure data structures
@@ -134,18 +138,8 @@ class RAGSystemProtocol(Protocol):
     async def add_documents(self, document_paths: list[str]) -> dict[str, Any]: ...
 
 
-class FolderManagerProtocol(Protocol):
-    """Protocol for folder management."""
-
-    def ensure_context_folders(self, context: Any, language: str) -> bool: ...
-
-    def get_collection_storage_paths(self, context: Any, language: str) -> Any: ...
-
-    def get_tenant_folder_structure(self, tenant: Any, user: Any, language: str) -> dict[str, Any]: ...
-
-    def create_tenant_folder_structure(
-        self, tenant: Any, user: Any, languages: list[str]
-    ) -> tuple[bool, list[str]]: ...
+# FolderManagerProtocol removed - Weaviate doesn't need local folder management
+# Collection names come from TenantUserContext.get_collection_name(language)
 
 
 class StorageProtocol(Protocol):
@@ -630,7 +624,6 @@ class MultiTenantRAGCLI:
         output_writer: OutputWriterProtocol,
         logger: LoggerProtocol,
         rag_system_factory: Any,  # Factory function
-        folder_manager: FolderManagerProtocol,
         storage: StorageProtocol,
         config_loader: ConfigLoaderProtocol,
     ):
@@ -638,7 +631,6 @@ class MultiTenantRAGCLI:
         self.output_writer = output_writer
         self.logger = logger
         self.rag_system_factory = rag_system_factory
-        self.folder_manager = folder_manager
         self.storage = storage
         self.config_loader = config_loader
 
@@ -720,8 +712,7 @@ class MultiTenantRAGCLI:
     ) -> DocumentProcessingResult:
         """Execute document processing command using pure business logic."""
         try:
-            # Import multitenant types from folder_manager (where they're now defined)
-            from ..utils.folder_manager import Tenant, TenantUserContext, User
+            from ..utils.multitenant_models import Tenant, TenantUserContext, User
 
             # Create tenant user context from CLI context
             tenant_obj = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
@@ -732,14 +723,7 @@ class MultiTenantRAGCLI:
                 username=context.user_username,
                 full_name=context.user_full_name,
             )
-            tenant_user_context = TenantUserContext(tenant=tenant_obj, user=user_obj)
-
-            # Ensure folder structure exists
-            success = self.folder_manager.ensure_context_folders(tenant_user_context, language)
-            if not success:
-                return DocumentProcessingResult(
-                    success=False, processing_time=0.0, error_message="Failed to create folder structure"
-                )
+            TenantUserContext(tenant=tenant_obj, user=user_obj)
 
             # Initialize RAG system
             rag = self.rag_system_factory(
@@ -789,8 +773,7 @@ class MultiTenantRAGCLI:
     async def execute_list_collections_command(self, context: TenantContext, language: str) -> CollectionInfo:
         """Execute list collections command using pure business logic."""
         try:
-            # Import multitenant types from folder_manager (where they're now defined)
-            from ..utils.folder_manager import Tenant, TenantUserContext, User
+            from ..utils.multitenant_models import DocumentScope, Tenant, TenantUserContext, User
 
             # Create tenant user context from CLI context
             tenant_obj = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
@@ -803,16 +786,13 @@ class MultiTenantRAGCLI:
             )
             tenant_user_context = TenantUserContext(tenant=tenant_obj, user=user_obj)
 
-            collections_info = self.folder_manager.get_collection_storage_paths(tenant_user_context, language)
+            user_collection = tenant_user_context.get_collection_name(language)
+            tenant_scope_context = TenantUserContext(tenant=tenant_obj, user=user_obj, scope=DocumentScope.TENANT)
+            tenant_collection = tenant_scope_context.get_collection_name(language)
 
-            # Get available collections from storage
             available_collections = self.storage.list_collections()
 
-            # Get document counts
             document_counts = {}
-            user_collection = collections_info.user_collection_name
-            tenant_collection = collections_info.tenant_collection_name
-
             if user_collection in available_collections:
                 document_counts[user_collection] = self.storage.get_document_count(user_collection)
 
@@ -822,7 +802,7 @@ class MultiTenantRAGCLI:
             return CollectionInfo(
                 user_collection_name=user_collection,
                 tenant_collection_name=tenant_collection,
-                base_path=str(collections_info.base_path),
+                base_path="N/A",
                 available_collections=available_collections,
                 document_counts=document_counts,
             )
@@ -850,21 +830,8 @@ class MultiTenantRAGCLI:
             rag_status = "failed"
             error_messages.append(f"RAG System: {str(e)}")
 
-        # Check folder structure
-        try:
-            # Import Tenant from folder_manager (where it's now defined)
-            from ..utils.folder_manager import Tenant
-
-            tenant = Tenant(id=context.tenant_id, name=context.tenant_name, slug=context.tenant_slug)
-            paths = self.folder_manager.get_tenant_folder_structure(tenant, None, language)
-            folder_structure = {}
-            # Convert dict to folder checking structure
-            for path_name, path_value in paths.items():
-                if path_value is not None:
-                    folder_structure[f"{path_name}: {path_value}"] = Path(str(path_value)).exists()
-        except Exception as e:
-            folder_structure = {}
-            error_messages.append(f"Folder check: {str(e)}")
+        # Weaviate uses cloud-based storage, no local folders needed
+        folder_structure: dict[str, Any] = {}
 
         # Test configuration loading
         try:
@@ -884,46 +851,20 @@ class MultiTenantRAGCLI:
         )
 
     async def execute_create_folders_command(self, context: TenantContext, languages: list[str]) -> dict[str, Any]:
-        """Execute create-folders command using pure business logic."""
-        try:
-            created_folders = []
-            existing_folders = []
-
-            for language in languages:
-                paths = self.folder_manager.get_tenant_folder_structure(context, None, language)
-
-                for path_name, path in paths.items():
-                    path_obj = Path(str(path))
-                    if path_obj.exists():
-                        existing_folders.append(f"{path_name}: {path}")
-                    else:
-                        # Create folder (mock implementation)
-                        created_folders.append(f"{path_name}: {path}")
-
-            return {
-                "success": True,
-                "created_folders": created_folders,
-                "existing_folders": existing_folders,
-                "languages": languages,
-                "message": f"Processed folder creation for languages: {', '.join(languages)}",
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "created_folders": [],
-                "existing_folders": [],
-                "languages": languages,
-                "error": str(e),
-                "message": f"Failed to create folders: {str(e)}",
-            }
+        """Execute create-folders command - not needed for Weaviate (cloud-based)."""
+        return {
+            "success": True,
+            "created_folders": [],
+            "existing_folders": [],
+            "languages": languages,
+            "message": "Weaviate manages collections automatically, no local folder creation needed",
+        }
 
     async def execute_clear_data_command(
         self, context: TenantContext, language: str, dry_run: bool, confirm: bool
     ) -> DataClearResult:
         """Execute clear-data command for tenant/user/language context."""
         import shutil
-        from pathlib import Path
 
         if not dry_run and not confirm:
             return DataClearResult(
@@ -1156,3 +1097,239 @@ class MultiTenantRAGCLI:
 
 
 # Mock implementations for testing
+class MockOutputWriter:
+    """Mock output writer for testing."""
+
+    def __init__(self):
+        self.written_lines = []
+
+    def write(self, text: str) -> None:
+        self.written_lines.append(text.rstrip("\n"))
+
+    def flush(self) -> None:
+        pass
+
+
+class MockLogger:
+    """Mock logger for testing."""
+
+    def __init__(self):
+        self.logs = []
+
+    def info(self, message: str) -> None:
+        self.logs.append(("INFO", message))
+
+    def error(self, message: str) -> None:
+        self.logs.append(("ERROR", message))
+
+    def exception(self, message: str) -> None:
+        self.logs.append(("EXCEPTION", message))
+
+
+class MockRAGSystem:
+    """Mock RAG system for testing."""
+
+    def __init__(self, should_fail: bool = False):
+        self.should_fail = should_fail
+        self.initialized = False
+
+    async def initialize(self) -> None:
+        if self.should_fail:
+            raise Exception("Mock initialization failure")
+        self.initialized = True
+
+    async def query(self, query: Any) -> Any:
+        if self.should_fail:
+            raise Exception("Mock query failure")
+
+        class MockResponse:
+            answer = f"Mock answer for: {query['text']}"
+            sources = ["mock_doc1.txt", "mock_doc2.txt"]
+            retrieved_chunks = [
+                {"content": "Mock chunk 1", "similarity_score": 0.9, "final_score": 0.9, "source": "mock_doc1.txt"},
+                {"content": "Mock chunk 2", "similarity_score": 0.8, "final_score": 0.8, "source": "mock_doc2.txt"},
+            ]
+
+        return MockResponse()
+
+    async def add_documents(self, document_paths: list[str]) -> dict[str, Any]:
+        if self.should_fail:
+            raise Exception("Mock processing failure")
+
+        return {
+            "processed_documents": len(document_paths),
+            "failed_documents": 0,
+            "total_chunks": len(document_paths) * 5,
+            "processing_time": 1.0,
+            "documents_per_second": len(document_paths),
+        }
+
+
+class MockStorage:
+    """Mock storage for testing."""
+
+    def list_collections(self) -> list[str]:
+        return ["collection1", "collection2", "user_dev_user_hr"]
+
+    def get_document_count(self, collection_name: str) -> int:
+        return 42  # Mock count
+
+
+class MockConfigLoader:
+    """Mock config loader for testing."""
+
+    def get_shared_config(self) -> dict[str, Any]:
+        return {"key": "value"}
+
+    def get_storage_config(self) -> dict[str, Any]:
+        return {"storage": "config"}
+
+
+def create_mock_cli(should_fail: bool = False, output_writer: OutputWriterProtocol | None = None) -> MultiTenantRAGCLI:
+    """Create a fully mocked CLI for testing."""
+    output_writer = output_writer or MockOutputWriter()
+
+    def mock_rag_factory(language: str, tenant_context=None, scope: str = "user", feature_name: str | None = None):
+        return MockRAGSystem(should_fail=should_fail)
+
+    return MultiTenantRAGCLI(
+        output_writer=output_writer,
+        logger=MockLogger(),
+        rag_system_factory=mock_rag_factory,
+        storage=MockStorage(),
+        config_loader=MockConfigLoader(),
+    )
+
+
+# Main entry point
+async def main():
+    args = parse_cli_arguments(sys.argv[1:])
+
+    # Setup new logging system with configurable backends
+    backend_kwargs = {"console": {"level": args.log_level, "colored": True}}
+
+    # Add file logging in debug mode
+    if args.log_level.upper() == "DEBUG":
+        backend_kwargs["file"] = {"log_file": "logs/rag_debug.log", "format_type": "text"}
+
+    setup_system_logging(["console"], **backend_kwargs)
+    log_component_start("cli", "STARTUP", command=args.command, language=args.language)
+
+    class StandardOutputWriter:
+        def write(self, text: str) -> None:
+            sys.stdout.write(text)
+
+        def flush(self) -> None:
+            sys.stdout.flush()
+
+    class StandardLogger:
+        def info(self, message: str) -> None:
+            log_component_start("cli", "OPERATION", message=message)
+
+        def error(self, message: str) -> None:
+            from ..utils.logging_factory import get_system_logger
+
+            logger = get_system_logger()
+            logger.error("cli", "OPERATION", message)
+
+        def exception(self, message: str) -> None:
+            from ..utils.logging_factory import get_system_logger
+
+            logger = get_system_logger()
+            logger.error("cli", "EXCEPTION", message)
+
+    def real_rag_factory(language: str, tenant_context=None, scope: str = "user", feature_name: str | None = None):
+        log_component_start("cli", "RAG_FACTORY", language=language, scope=scope, feature_name=feature_name)
+
+        try:
+            from ..utils.factories import Tenant, User, create_complete_rag_system
+
+            tenant_obj = None
+            user_obj = None
+            if tenant_context and scope in ["user", "tenant"]:
+                tenant_obj = Tenant(
+                    id=tenant_context.tenant_id, name=tenant_context.tenant_name, slug=tenant_context.tenant_slug
+                )
+                user_obj = User(
+                    id=tenant_context.user_id,
+                    tenant_id=tenant_obj.id,
+                    email=tenant_context.user_email,
+                    username=tenant_context.user_username,
+                    full_name=tenant_context.user_full_name,
+                )
+
+            rag_system = create_complete_rag_system(
+                language=language,
+                tenant=tenant_obj if scope in ["user", "tenant"] else None,
+                user=user_obj if scope == "user" else None,
+                scope=scope,
+                feature_name=feature_name,
+            )
+
+            log_component_start("cli", "RAG_FACTORY_SUCCESS", language=language, scope=scope)
+            return rag_system
+
+        except Exception as e:
+            log_error_context("cli", "RAG_FACTORY", e, {"language": language, "scope": scope})
+            raise e
+
+    class VectorDatabaseStorage:
+        def __init__(self):
+            self._vector_db = None
+
+        def _ensure_initialized(self):
+            if self._vector_db is None:
+                from ..utils.config_loader import get_paths_config
+                from ..vectordb.database_factory import create_vector_database
+
+                paths_config = get_paths_config()
+                db_path_template = paths_config["chromadb_path_template"]
+                data_base_dir = paths_config["data_base_dir"]
+                db_path = db_path_template.format(data_base_dir=data_base_dir, tenant_slug="development")
+                self._vector_db = create_vector_database(db_path=db_path)
+
+        def list_collections(self) -> list[str]:
+            try:
+                self._ensure_initialized()
+                return self._vector_db.list_collections()
+            except Exception:
+                return []
+
+        def get_document_count(self, collection_name: str) -> int:
+            try:
+                self._ensure_initialized()
+                return self._vector_db.get_collection_size(collection_name)
+            except Exception:
+                return 0
+
+    class TomlConfigLoader:
+        def get_shared_config(self) -> dict[str, Any]:
+            from ..utils.config_loader import get_shared_config
+
+            return get_shared_config()
+
+        def get_storage_config(self) -> dict[str, Any]:
+            from ..utils.config_loader import load_config
+
+            config = load_config("config")
+            return config["vectordb"]
+
+    cli = MultiTenantRAGCLI(
+        output_writer=StandardOutputWriter(),
+        logger=StandardLogger(),
+        rag_system_factory=real_rag_factory,
+        storage=VectorDatabaseStorage(),
+        config_loader=TomlConfigLoader(),
+    )
+
+    await cli.execute_command(args)
+    log_component_start("cli", "SHUTDOWN", status="completed")
+
+
+def cli_main():
+    """Entry point for CLI."""
+    asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli_main()

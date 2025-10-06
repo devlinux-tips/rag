@@ -25,6 +25,7 @@ from tests.conftest import (
     MockLoggerProvider,
     create_mock_retriever_setup,
     create_test_config,
+    create_test_retrieval_config,
 )
 
 
@@ -403,7 +404,7 @@ class TestMockLoggerProvider(unittest.TestCase):
     def test_initialization(self):
         """Test logger initialization."""
         logger = MockLoggerProvider()
-        expected_levels = {"info", "debug", "error"}
+        expected_levels = {"info", "debug", "warning", "error"}
         self.assertEqual(set(logger.messages.keys()), expected_levels)
         for level in expected_levels:
             self.assertEqual(logger.messages[level], [])
@@ -847,16 +848,16 @@ class TestFactoryFunctions(unittest.TestCase):
         mock_search_class.return_value = mock_search_adapter
         mock_reranker_class.return_value = mock_reranker_adapter
 
-        result = create_hierarchical_retriever(mock_search_engine, "hr", mock_reranker, True)
+        result = create_hierarchical_retriever(mock_search_engine, mock_reranker, "hr")
 
         # Should return HierarchicalRetriever instance
         self.assertEqual(result, mock_retriever)
 
         # Verify component creation
-        mock_query_class.assert_called_once_with("hr")
-        mock_cat_class.assert_called_once_with("hr")
+        mock_query_class.assert_called_once_with(language="hr")
+        mock_cat_class.assert_called_once_with(language="hr")
         mock_search_class.assert_called_once_with(mock_search_engine)
-        mock_reranker_class.assert_called_once_with(mock_reranker, "hr")
+        mock_reranker_class.assert_called_once_with(mock_reranker, language="hr")
 
         # Verify HierarchicalRetriever creation
         mock_hierarchical_class.assert_called_once()
@@ -876,7 +877,7 @@ class TestFactoryFunctions(unittest.TestCase):
         mock_retriever = Mock()
         mock_hierarchical_class.return_value = mock_retriever
 
-        result = create_hierarchical_retriever(mock_search_engine, "en", None, False)
+        result = create_hierarchical_retriever(mock_search_engine, None, "en")
 
         # Should return HierarchicalRetriever instance
         self.assertEqual(result, mock_retriever)
@@ -891,7 +892,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
     def test_create_test_config_default(self):
         """Test creating default test configuration."""
-        config = create_test_config()
+        config = create_test_retrieval_config()
 
         self.assertIsInstance(config, RetrievalConfig)
         self.assertEqual(config.default_max_results, 5)
@@ -901,7 +902,7 @@ class TestFactoryFunctions(unittest.TestCase):
 
     def test_create_test_config_custom(self):
         """Test creating custom test configuration."""
-        config = create_test_config(max_results=10, performance_tracking=False)
+        config = create_test_retrieval_config(max_results=10, performance_tracking=False)
 
         self.assertEqual(config.default_max_results, 10)
         self.assertFalse(config.performance_tracking)
@@ -909,7 +910,7 @@ class TestFactoryFunctions(unittest.TestCase):
     def test_config_consistency_across_factories(self):
         """Test that all factory functions create consistent configurations."""
         mock_config = create_mock_retriever_setup()[5]
-        test_config = create_test_config()
+        test_config = create_test_retrieval_config()
 
         # Should have same structure
         self.assertEqual(mock_config.similarity_thresholds, test_config.similarity_thresholds)

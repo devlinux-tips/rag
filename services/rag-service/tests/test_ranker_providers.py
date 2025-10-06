@@ -552,35 +552,24 @@ class TestFactoryFunctions(unittest.TestCase):
         self.assertIs(result.config_provider, mock_config)
         mock_create_config.assert_called_once()
 
-    @patch('src.utils.config_protocol.MockConfigProvider')
-    def test_create_mock_config_provider_without_config(self, mock_full_provider):
+    def test_create_mock_config_provider_without_config(self):
         """Test mock config provider creation without custom config."""
-        mock_instance = MagicMock()
-        mock_full_provider.return_value = mock_instance
-
         result = create_mock_config_provider()
 
-        self.assertIs(result, mock_instance)
-        mock_full_provider.assert_called_once()
-        # Should call set_config once for default config
-        mock_instance.set_config.assert_called_once_with("config", unittest.mock.ANY)
+        self.assertIsInstance(result, MockConfigProvider)
+        # Should have "config" key with empty dict when no config provided
+        self.assertIn("config", result.mock_configs)
+        self.assertEqual(result.mock_configs["config"], {})
 
-    @patch('src.utils.config_protocol.MockConfigProvider')
-    def test_create_mock_config_provider_with_config(self, mock_full_provider):
+    def test_create_mock_config_provider_with_config(self):
         """Test mock config provider creation with custom config."""
-        mock_instance = MagicMock()
-        mock_full_provider.return_value = mock_instance
-
         config_dict = {"key1": "value1", "key2": "value2"}
         result = create_mock_config_provider(config_dict)
 
-        self.assertIs(result, mock_instance)
-        mock_full_provider.assert_called_once()
-        # Should call set_config for default config plus each key-value pair
-        mock_instance.set_config.assert_any_call("key1", "value1")
-        mock_instance.set_config.assert_any_call("key2", "value2")
-        # Default config + 2 custom configs = 3 total calls
-        self.assertEqual(mock_instance.set_config.call_count, 3)
+        self.assertIsInstance(result, MockConfigProvider)
+        # Should have "config" key with the provided config_dict
+        self.assertIn("config", result.mock_configs)
+        self.assertEqual(result.mock_configs["config"], config_dict)
 
     def test_create_mock_language_provider(self):
         """Test mock language provider creation."""
