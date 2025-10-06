@@ -57,9 +57,9 @@ RUN chown -R raguser:raguser /app/data /app/models /app/system
 # Switch to non-root user
 USER raguser
 
-# Health check
+# Health check - just verify Python imports work
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.path.insert(0, '/app/src'); from utils.config_loader import get_unified_config; get_unified_config()" || exit 1
+    CMD python -c "import sys; sys.path.insert(0, '/app/src'); from utils.config_loader import get_config_section; get_config_section('config', 'paths')" || exit 1
 
 # Default command - keep container running for CLI operations
 # Can be overridden in docker-compose

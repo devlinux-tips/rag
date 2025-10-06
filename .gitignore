@@ -264,3 +264,4 @@ crawler/data/**
 **/rag-service/logs/**
 
 test_logs/**
+weaviate_data/**

@@ -50,6 +50,7 @@ services/rag-service/data/
 services/rag-service/models/
 services/web-ui/node_modules/
 services/web-api/node_modules/
+weaviate_data/
 
 # Build directories
 services/web-ui/dist/

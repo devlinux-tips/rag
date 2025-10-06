@@ -122,7 +122,7 @@ services:
       POSTGRES_USER: raguser
       POSTGRES_PASSWORD: "x|B&h@p4F@o|k6t;~X]1A((Z.,RG"
       # OpenRouter configuration (from config.toml)
-      OPENROUTER_API_KEY: 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
+      OPENROUTER_API_KEY: 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
     volumes:
       # Mount data directories
       - ./services/rag-service/data:/app/data

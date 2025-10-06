@@ -80,8 +80,27 @@ export class RAGService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`RAG service error: ${response.status} - ${error}`);
+        let errorMessage = `RAG service error: ${response.status}`;
+        try {
+          // Try to parse as JSON first
+          const errorData = await response.json() as { detail?: string; message?: string };
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If not JSON, try to get text (might be HTML)
+          try {
+            const errorText = await response.text();
+            // Check if it's HTML
+            if (errorText.trim().startsWith('<')) {
+              errorMessage = `RAG service returned HTML error (status ${response.status})`;
+            } else {
+              errorMessage = errorText.substring(0, 200); // Limit error message length
+            }
+          } catch {
+            // Can't read response body, use status code only
+            errorMessage = `RAG service error: ${response.status}`;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

@@ -256,27 +256,49 @@ export const messagesRouter = router({
           },
         });
 
+        // Create user-friendly error message based on language
+        const language = ctx.auth.language || 'hr';
+        let errorContent: string;
+
+        if (language === 'hr') {
+          errorContent = 'Žao mi je, dogodila se greška pri obradi pitanja. Molim pokušajte ponovno.';
+        } else {
+          errorContent = 'Sorry, I encountered an error processing your request. Please try again.';
+        }
+
         // Create error message
-        await prisma.message.create({
+        const errorMessage = await prisma.message.create({
           data: {
             chatId: input.chatId,
             role: 'assistant',
-            content: '❌ Sorry, I encountered an error processing your request. Please try again.',
+            content: errorContent,
             feature: chat.feature,
             status: 'failed',
             errorMessage: error instanceof Error ? error.message : 'Unknown error',
             metadata: {
               processingTaskId: processingTask.id,
               error: error instanceof Error ? error.message : 'Unknown error',
+              errorType: error instanceof Error ? error.name : 'UnknownError',
             },
           },
         });
 
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to process message',
-          cause: error,
+        // Update chat's lastMessageAt
+        await prisma.chat.update({
+          where: { id: input.chatId },
+          data: { lastMessageAt: new Date() },
         });
+
+        // Return the error message to the frontend instead of throwing
+        return {
+          userMessage,
+          assistantMessage: errorMessage,
+          processingTask: {
+            id: processingTask.id,
+            status: 'failed',
+            duration: 0,
+          },
+        };
       }
     }),
 
