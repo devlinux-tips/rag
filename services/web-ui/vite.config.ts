@@ -5,6 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: '0.0.0.0',
+    hmr: {
+      clientPort: 443,
+    },
+    allowedHosts: [
+      '.ngrok-free.dev',
+      '.ngrok.io',
+      '.ngrok.app',
+      'localhost',
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:80',
@@ -12,5 +22,10 @@ export default defineConfig({
         timeout: 60000,
       },
     },
+  },
+  preview: {
+    port: 5173,
+    host: '0.0.0.0',
+    strictPort: true,
   },
 })

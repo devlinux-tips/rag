@@ -215,7 +215,11 @@ class BaseLLMProvider(ABC):
 
         # Add authentication for OpenRouter
         if self.get_provider_type() == ProviderType.OPENROUTER:
-            headers["Authorization"] = f"Bearer {self.config['api_key']}"
+            api_key = self.config['api_key']
+            # AI-FRIENDLY DEBUG LOG: Check if API key is being loaded
+            key_preview = f"{api_key[:15]}...{api_key[-10:]}" if api_key and len(api_key) > 25 else "MISSING_OR_SHORT"
+            self.logger.info("openrouter_provider", "_get_headers", f"DEBUG_API_KEY | key_preview={key_preview} | key_length={len(api_key) if api_key else 0}")
+            headers["Authorization"] = f"Bearer {api_key}"
 
         return headers
 

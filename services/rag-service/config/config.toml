@@ -116,7 +116,7 @@ max_batch_size = 1000
 
 # Weaviate-specific configuration (primary focus)
 [vectordb.weaviate]
-host = "weaviate"  # Docker container name
+host = "localhost"  # Local Weaviate installation
 port = 8080
 grpc_port = 50051
 scheme = "http"
@@ -479,7 +479,7 @@ enable_audit_logging = true
 # ============================================================================
 [openrouter]
 base_url = "https://openrouter.ai/api/v1"
-api_key = "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"
+api_key = "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"
 model = "qwen/qwen3-30b-a3b-instruct-2507"
 timeout = 30.0
 temperature = 0.1

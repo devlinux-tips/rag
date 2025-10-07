@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { trpc } from '../utils/trpc';
 
@@ -6,10 +6,13 @@ interface SidebarProps {
   selectedChatId: string | null;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  onClearSelection: () => void;
+  refreshTrigger?: number; // Optional prop to trigger refresh
 }
 
-export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProps) {
+export function Sidebar({ selectedChatId, onSelectChat, onNewChat, onClearSelection, refreshTrigger }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [localChats, setLocalChats] = useState<any[]>([]);
 
   // Fetch chat list
   const { data: chatsData, isLoading, error, refetch } = (trpc as any).chats.list.useQuery(
@@ -22,15 +25,54 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProp
       onError: (err: any) => {
         console.error('Failed to fetch chats:', err);
       },
+      refetchOnMount: true,
+      refetchOnWindowFocus: false,
+      staleTime: 0, // Always consider data stale
+      cacheTime: 0, // Don't cache
     }
   );
 
-  const deleteChatMutation = (trpc as any).chats.delete.useMutation({
-    onSuccess: () => {
+  // Update local chats when data changes
+  useEffect(() => {
+    if (chatsData?.chats) {
+      setLocalChats(chatsData.chats);
+    }
+  }, [chatsData]);
+
+  // Refetch when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined) {
       refetch();
+    }
+  }, [refreshTrigger, refetch]);
+
+  const deleteChatMutation = (trpc as any).chats.delete.useMutation({
+    onSuccess: async () => {
+      // Immediately remove from local state
+      setLocalChats(prev => prev.filter(chat => chat.id !== deletingId));
+
+      // If deleted chat was selected, clear selection (don't create new chat)
       if (selectedChatId === deletingId) {
-        onNewChat();
+        onClearSelection();
       }
+
+      // Refetch from server to ensure consistency
+      await refetch();
+      setDeletingId(null);
+    },
+    onError: (error: any) => {
+      // AI-FRIENDLY ERROR LOG: Structured for quick AI pattern recognition
+      console.error('ERROR_DELETE_CHAT | CONTEXT:', {
+        error_type: 'CHAT_DELETE_FAILED',
+        error_code: error?.code || error?.data?.code || 'UNKNOWN',
+        error_message: error?.message,
+        error_data: error?.data,
+        context_chat_id: deletingId,
+        context_timestamp: new Date().toISOString(),
+        http_status: error?.response?.status,
+        trpc_path: error?.shape?.data?.path,
+      });
+      alert('Nije moguće obrisati razgovor. Molim pokušajte ponovno.');
       setDeletingId(null);
     },
   });
@@ -40,8 +82,24 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProp
   const [editTitle, setEditTitle] = useState('');
 
   const updateChatMutation = (trpc as any).chats.update.useMutation({
-    onSuccess: () => {
-      refetch();
+    onSuccess: async () => {
+      await refetch();
+      setEditingId(null);
+    },
+    onError: (error: any) => {
+      // AI-FRIENDLY ERROR LOG: Structured for quick AI pattern recognition
+      console.error('ERROR_UPDATE_CHAT | CONTEXT:', {
+        error_type: 'CHAT_UPDATE_FAILED',
+        error_code: error?.code || error?.data?.code || 'UNKNOWN',
+        error_message: error?.message,
+        error_data: error?.data,
+        context_chat_id: editingId,
+        context_new_title: editTitle,
+        context_timestamp: new Date().toISOString(),
+        http_status: error?.response?.status,
+        trpc_path: error?.shape?.data?.path,
+      });
+      alert('Nije moguće ažurirati naslov razgovora. Molim pokušajte ponovno.');
       setEditingId(null);
     },
   });
@@ -54,8 +112,10 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProp
   const handleEditSave = (chatId: string) => {
     if (editTitle.trim()) {
       updateChatMutation.mutate({
-        id: chatId,
-        title: editTitle.trim(),
+        chatId: chatId,
+        updates: {
+          title: editTitle.trim(),
+        },
       });
     }
   };
@@ -68,7 +128,7 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProp
   const handleDelete = (chatId: string) => {
     if (window.confirm('Are you sure you want to delete this chat?')) {
       setDeletingId(chatId);
-      deleteChatMutation.mutate({ id: chatId });
+      deleteChatMutation.mutate({ chatId: chatId });
     }
   };
 
@@ -136,27 +196,64 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat }: SidebarProp
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto">
         {error ? (
-          <div className="p-4 text-center text-red-400">
-            <p>Failed to load chats</p>
-            <p className="text-xs mt-1">{error.message}</p>
-            <button
-              onClick={() => refetch()}
-              className="mt-2 text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded"
-            >
-              Retry
-            </button>
+          <div className="p-4 text-center">
+            {!isCollapsed && (
+              <>
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-gray-300 font-medium mb-2">Unable to load chats</p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Try again later
+                </p>
+                <button
+                  onClick={() => refetch()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                >
+                  Try Again
+                </button>
+              </>
+            )}
+            {isCollapsed && (
+              <div className="w-3 h-3 bg-red-500 rounded-full mx-auto" title="Unable to load chats" />
+            )}
           </div>
         ) : isLoading ? (
-          <div className="p-4 text-center text-gray-500">
-            Loading chats...
+          <div className="p-4 text-center">
+            {!isCollapsed && (
+              <>
+                <svg className="w-8 h-8 mx-auto mb-2 text-gray-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <p className="text-sm text-gray-500">Loading chats...</p>
+              </>
+            )}
+            {isCollapsed && (
+              <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto animate-pulse" />
+            )}
           </div>
-        ) : !chatsData?.chats || chatsData.chats.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">
-            {!isCollapsed && 'No chats yet. Start a new conversation!'}
+        ) : localChats.length === 0 ? (
+          <div className="p-4 text-center">
+            {!isCollapsed && (
+              <>
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <p className="text-gray-400 text-sm mb-2">No chats yet</p>
+                <p className="text-xs text-gray-600">
+                  Click "New Chat" to start a conversation
+                </p>
+              </>
+            )}
+            {isCollapsed && (
+              <div className="w-2 h-2 bg-gray-700 rounded-full mx-auto" title="No chats" />
+            )}
           </div>
         ) : (
           <div className="py-2">
-            {chatsData.chats.map((chat: any) => (
+            {localChats.map((chat: any) => (
               <div
                 key={chat.id}
                 className={clsx(

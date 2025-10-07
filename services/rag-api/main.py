@@ -15,7 +15,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 # Add the rag-service directory to the Python path
-sys.path.insert(0, "/app/src")
+# Support both Docker (/app/src) and local deployment
+rag_service_path = os.path.join(os.path.dirname(__file__), "..", "rag-service", "src")
+if os.path.exists(rag_service_path):
+    sys.path.insert(0, os.path.abspath(os.path.join(rag_service_path, "..")))
+elif os.path.exists("/app/src"):
+    sys.path.insert(0, "/app/src")
+else:
+    # Rely on PYTHONPATH from environment
+    pass
 
 # Import RAG service components
 from src.generation.llm_provider import (
@@ -214,15 +222,24 @@ async def startup_event():
     print("INFO: RAG API server starting...")
     print("INFO: Loading configuration...")
 
+    # Load OpenRouter config from config.toml
+    from src.utils.config_loader import load_config
+    config = load_config("config")
+    openrouter_toml_config = config.get("openrouter", {})
+
     openrouter_config = {
-        "api_key": os.getenv("OPENROUTER_API_KEY"),  # From environment
-        "base_url": "https://openrouter.ai/api/v1",
+        "api_key": openrouter_toml_config.get("api_key", os.getenv("OPENROUTER_API_KEY")),  # From config.toml or environment
+        "base_url": openrouter_toml_config.get("base_url", "https://openrouter.ai/api/v1"),
         "model": "qwen/qwen3-30b-a3b-instruct-2507",
-        "timeout": 30.0,
+        "timeout": float(openrouter_toml_config.get("timeout", 30.0)),
         "temperature": 0.1,
         "max_tokens": 2048,
         "stream": False,
     }
+
+    # AI-FRIENDLY DEBUG LOG: Verify API key loaded
+    key_preview = f"{openrouter_config['api_key'][:15]}...{openrouter_config['api_key'][-10:]}" if openrouter_config['api_key'] and len(openrouter_config['api_key']) > 25 else "MISSING"
+    print(f"INFO: OpenRouter API key loaded: {key_preview}")
 
     # Create LLM Manager with proper config structure
     llm_config = {
@@ -292,7 +309,7 @@ async def query_rag(request: RAGQueryRequest):
             )
 
         print(
-            f"INFO: RAG query | scope: {scope} | requested_scope: {request.scope} | feature: {request.feature} | lang: {request.language}"
+            f"INFO_RAG_QUERY | scope={scope} | requested_scope={request.scope} | feature={request.feature} | language={request.language} | tenant={request.tenant} | user={request.user}"
         )
 
         # Get or create RAG system for this scope
@@ -324,39 +341,102 @@ async def query_rag(request: RAGQueryRequest):
             context_filters=scope_context,
         )
 
-        # Execute RAG search
-        rag_response = await rag_system.query(rag_query)
+        # Execute RAG search - handle missing collections gracefully
+        rag_response = None
+        try:
+            rag_response = await rag_system.query(rag_query)
+        except Exception as search_error:
+            # AI-FRIENDLY LOG: Structured for pattern recognition
+            error_msg = str(search_error)
+            error_type = type(search_error).__name__
+            is_collection_missing = "could not find class" in error_msg.lower() or "collection" in error_msg.lower()
+
+            print(f"ERROR_RAG_SEARCH | error_type={error_type} | is_collection_missing={is_collection_missing} | scope={scope} | tenant={request.tenant} | user={request.user} | language={request.language} | error_msg={error_msg[:200]}")
+
+            # Check if it's a "collection not found" error (no data in Weaviate yet)
+            if is_collection_missing:
+                print(f"INFO_COLLECTION_MISSING | scope={scope} | tenant={request.tenant} | feature={request.feature} | language={request.language} | status=no_documents_indexed")
+
+            # Create empty response to trigger LLM-only generation
+            from src.core.rag_types import RAGResponse
+            rag_response = RAGResponse(
+                answer=None,
+                retrieved_chunks=[],
+                confidence=0.0,
+                search_time_ms=0,
+                llm_response_time_ms=0,
+                total_time_ms=0,
+            )
 
         search_time = time.time()
         search_time_ms = int((search_time - start_time) * 1000)
 
         # Check if we have documents OR a generated answer
-        # The system can return an answer even if retrieved_chunks is None/empty
-        if not rag_response.retrieved_chunks and not rag_response.answer:
-            print(f"INFO: No documents found for query in scope: {scope}")
+        # If no documents found OR error occurred, send question directly to LLM (general knowledge)
+        has_no_data = not rag_response.retrieved_chunks and not rag_response.answer
+        has_error = rag_response.metadata and rag_response.metadata.get("error_type") is not None
 
-            # Return empty result response
-            no_data_message = "I don't have relevant information in my knowledge base to answer your question. Please try rephrasing your question or asking about a different topic."
+        if has_no_data or has_error:
+            reason = "error_fallback" if has_error else "no_documents"
+            print(f"INFO_LLM_FALLBACK | scope={scope} | tenant={request.tenant} | language={request.language} | reason={reason} | fallback=llm_general_knowledge")
+
+            # Send question directly to LLM without context (general knowledge mode)
+            from src.utils.config_loader import get_language_specific_config
+
+            prompts_config = get_language_specific_config("prompts", request.language)
+
+            # Use a simple prompt for general questions
+            system_prompt = prompts_config.get('system_prompt', 'You are a helpful assistant.')
+
+            # Create messages in the format expected by chat_completion
+            messages = [
+                ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=MessageRole.USER, content=request.query)
+            ]
+
+            llm_response = await llm_manager.chat_completion(
+                messages=messages,
+                model="qwen/qwen3-30b-a3b-instruct-2507",  # OpenRouter model
+                max_tokens=2048,
+                temperature=request.temperature,
+            )
+
+            end_time = time.time()
+            total_time_ms = int((end_time - start_time) * 1000)
 
             return RAGQueryResponse(
-                response=no_data_message,
+                response=llm_response.content,
                 sources=[],
                 documentsRetrieved=0,
                 documentsUsed=0,
-                confidence=0.7,
+                confidence=0.5,  # Lower confidence since no documents
                 searchTimeMs=search_time_ms,
-                responseTimeMs=search_time_ms,
-                model="system-generic",
+                responseTimeMs=total_time_ms,
+                model=llm_response.model,
                 tokensUsed=TokenUsage(
-                    input=len(request.query.split()),
-                    output=len(no_data_message.split()),
-                    total=len(request.query.split()) + len(no_data_message.split()),
+                    input=llm_response.usage.input_tokens,
+                    output=llm_response.usage.output_tokens,
+                    total=llm_response.usage.total_tokens,
                 ),
             )
 
+        # Check if RAG response is an error (has error_type in metadata)
+        is_error_response = rag_response.metadata and rag_response.metadata.get("error_type") is not None
+
+        # AI-FRIENDLY LOG: Error detection
+        if is_error_response:
+            error_type = rag_response.metadata.get("error_type")
+            error_msg = rag_response.metadata.get("error_message", "")[:200]
+            is_weaviate_missing = "could not find class" in error_msg.lower() or "collection" in error_msg.lower()
+
+            print(f"INFO_ERROR_DETECTED | error_type={error_type} | is_weaviate_missing={is_weaviate_missing} | fallback_to_llm=True | language={request.language}")
+
+            # Treat error as "no answer" to trigger LLM fallback
+            rag_response.answer = None
+
         # If RAG found documents, use the RAG-generated answer if available,
         # otherwise send to LLM for generation
-        if rag_response.answer:
+        if rag_response.answer and not is_error_response:
             # Use RAG-generated answer directly
             final_response = rag_response.answer
             model_used = "rag-generated"
@@ -457,7 +537,7 @@ Please provide a detailed answer:"""
             )
 
         print(
-            f"INFO: Query completed | documents: {len(retrieved_chunks)} | model: {model_used} | time: {total_time_ms}ms"
+            f"INFO_QUERY_COMPLETED | documents_retrieved={len(retrieved_chunks)} | model={model_used} | total_time_ms={total_time_ms} | search_time_ms={search_time_ms} | scope={scope} | language={request.language}"
         )
 
         # Create response object
@@ -489,12 +569,21 @@ Please provide a detailed answer:"""
         return response_obj
 
     except Exception as e:
-        # All errors should fail with 500 status
-        print(f"ERROR: RAG query failed: {str(e)}")
-        import traceback
+        # AI-FRIENDLY ERROR LOG: Structured for quick pattern recognition
+        error_type = type(e).__name__
+        error_msg = str(e)
+        print(f"ERROR_RAG_QUERY_FAILED | error_type={error_type} | tenant={request.tenant} | user={request.user} | language={request.language} | scope={request.scope} | feature={request.feature} | error_msg={error_msg[:500]}")
 
+        import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+
+        # Return user-friendly error message based on language
+        if request.language == 'hr':
+            user_message = "Žao mi je, dogodila se greška pri obradi pitanja."
+        else:
+            user_message = "Sorry, I encountered an error processing your request."
+
+        raise HTTPException(status_code=500, detail=user_message)
 
 
 if __name__ == "__main__":

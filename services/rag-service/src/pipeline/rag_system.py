@@ -568,11 +568,26 @@ def create_empty_response(query: RAGQuery, retrieval_time: float, start_time: fl
 
 
 def create_error_response(query: RAGQuery, error: Exception, start_time: float) -> RAGResponse:
-    """Create error response in the appropriate language - configuration-driven."""
+    """Create error response in the appropriate language - configuration-driven.
+
+    CRITICAL: Only user-friendly message in answer field. Technical details in metadata for AI debugging.
+    """
+    # Get clean user-friendly error message (e.g., "Žao mi je, dogodila se greška pri obradi pitanja")
     error_msg = get_language_message(query.language, "error_message")
 
+    # AI-FRIENDLY ERROR METADATA: All technical details for debugging
+    error_metadata = {
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        "error_details": repr(error),
+        "query_id": query.query_id,
+        "user_id": query.user_id,
+        "language": query.language,
+        "timestamp": time.time(),
+    }
+
     return RAGResponse(
-        answer=f"{error_msg}: {str(error)}",
+        answer=error_msg,  # CLEAN message only - no technical details
         query=query.text,
         retrieved_chunks=[],
         confidence=0.0,
@@ -580,7 +595,7 @@ def create_error_response(query: RAGQuery, error: Exception, start_time: float) 
         retrieval_time=0.0,
         total_time=time.time() - start_time,
         sources=[],
-        metadata={"error": str(error), "query_id": query.query_id, "user_id": query.user_id},
+        metadata=error_metadata,  # Technical details here for AI debugging
     )
 
 

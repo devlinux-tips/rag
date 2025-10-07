@@ -59,9 +59,19 @@ function ChatApp() {
           setRefreshKey(prev => prev + 1);
         },
         onError: (error: any) => {
-          console.error('Failed to create chat:', error);
+          // AI-FRIENDLY ERROR LOG: Structured for quick AI pattern recognition
+          console.error('ERROR_CREATE_CHAT | CONTEXT:', {
+            error_type: 'CHAT_CREATE_FAILED',
+            error_code: error?.code || error?.data?.code || 'UNKNOWN',
+            error_message: error?.message,
+            error_data: error?.data,
+            context_feature: 'narodne-novine',
+            context_timestamp: new Date().toISOString(),
+            http_status: error?.response?.status,
+            trpc_path: error?.shape?.data?.path,
+          });
           setIsCreatingChat(false);
-          alert(`Failed to create chat: ${error.message || 'Unknown error'}`);
+          alert('Nije moguće stvoriti novi razgovor. Molim pokušajte ponovno.');
         },
       }
     );
@@ -71,14 +81,24 @@ function ChatApp() {
     setSelectedChatId(chatId);
   };
 
+  const handleClearSelection = () => {
+    setSelectedChatId(null);
+  };
+
+  const handleMessageSent = () => {
+    // Refresh sidebar when a message is sent (chat was updated)
+    setRefreshKey(prev => prev + 1);
+  };
+
   return (
     <div className="flex h-screen bg-gray-900">
       {/* Sidebar */}
       <Sidebar
-        key={refreshKey} // Force refresh when key changes
         selectedChatId={selectedChatId}
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
+        onClearSelection={handleClearSelection}
+        refreshTrigger={refreshKey}
       />
 
       {/* Main Content */}
@@ -115,6 +135,7 @@ function ChatApp() {
             <ChatInterface
               key={selectedChatId} // Force remount when chat changes
               chatId={selectedChatId}
+              onMessageSent={handleMessageSent}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">

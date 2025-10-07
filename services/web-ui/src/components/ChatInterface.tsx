@@ -5,9 +5,10 @@ import { trpc } from '../utils/trpc';
 
 interface ChatInterfaceProps {
   chatId: string;
+  onMessageSent?: () => void; // Optional callback when message is sent
 }
 
-export function ChatInterface({ chatId }: ChatInterfaceProps) {
+export function ChatInterface({ chatId, onMessageSent }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -80,16 +81,32 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
             data.userMessage,
             data.assistantMessage,
           ]);
+          // Notify parent that a message was sent (to update sidebar)
+          onMessageSent?.();
         },
         onError: (error: any) => {
-          console.error('Failed to send message:', error);
-          // Add error message
+          // AI-FRIENDLY ERROR LOG: Structured for quick AI pattern recognition
+          console.error('ERROR_SEND_MESSAGE | CONTEXT:', {
+            error_type: 'MESSAGE_SEND_FAILED',
+            error_code: error?.code || error?.data?.code || 'UNKNOWN',
+            error_message: error?.message,
+            error_data: error?.data,
+            error_cause: error?.cause,
+            error_stack: error?.stack,
+            context_chat_id: chatId,
+            context_timestamp: new Date().toISOString(),
+            context_url: window.location.href,
+            http_status: error?.response?.status,
+            trpc_path: error?.shape?.data?.path,
+          });
+
+          // Add user-friendly error message (technical details logged only)
           setMessages(prev => [
             ...prev,
             {
               id: `error-${Date.now()}`,
               role: 'assistant',
-              content: `Error: ${error.message}`,
+              content: 'Žao mi je, dogodila se greška pri obradi pitanja. Molim pokušajte ponovno.',
               createdAt: new Date().toISOString(),
               isError: true,
             },
