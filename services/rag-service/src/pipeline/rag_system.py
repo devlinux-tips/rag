@@ -940,14 +940,18 @@ class RAGSystem:
             all_embeddings = []
 
             embed_batch_size = self.batch_config.embedding_batch_size
+            total_batches = (len(chunk_contents) - 1) // embed_batch_size + 1
+
             for i in range(0, len(chunk_contents), embed_batch_size):
                 batch_contents = chunk_contents[i : i + embed_batch_size]
                 batch_start = time.time()
+                current_batch = i // embed_batch_size + 1
 
-                system_logger.debug(
+                # AI-FRIENDLY PROGRESS LOG: Track embedding generation progress
+                system_logger.info(
                     "batch_processing",
                     "embedding_batch",
-                    f"Generating embeddings for batch {i // embed_batch_size + 1}/{(len(chunk_contents) - 1) // embed_batch_size + 1}: {len(batch_contents)} chunks",
+                    f"EMBEDDING_PROGRESS | batch={current_batch}/{total_batches} | chunks={len(batch_contents)} | processed={i}/{len(chunk_contents)} | progress={(i/len(chunk_contents)*100):.1f}%",
                 )
 
                 # Generate embeddings for entire batch at once
