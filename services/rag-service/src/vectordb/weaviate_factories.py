@@ -315,6 +315,16 @@ class WeaviateCollection(VectorCollection):
                 metadata.pop("content", None)  # Remove content from metadata
                 metadata.pop("text", None)  # Remove text from metadata
 
+                # Deserialize nn_metadata if present (was stored as JSON string)
+                if "nn_metadata" in metadata and isinstance(metadata["nn_metadata"], str):
+                    import json
+
+                    try:
+                        metadata["nn_metadata"] = json.loads(metadata["nn_metadata"])
+                    except json.JSONDecodeError:
+                        # If deserialization fails, keep as string
+                        pass
+
                 # Extract distance from Weaviate metadata (lower = more similar)
                 # AI DEBUGGING: Comprehensive trace logging for distance extraction
                 logger = get_system_logger()

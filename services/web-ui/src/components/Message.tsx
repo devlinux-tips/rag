@@ -178,17 +178,22 @@ export function Message({ message }: MessageProps) {
             <div className="mt-4 pt-3 border-t border-gray-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 text-xs text-gray-400">
+                  {/* Timestamp */}
+                  {message.createdAt && (
+                    <span>🕐 {new Date(message.createdAt).toLocaleTimeString()}</span>
+                  )}
+
                   {message.metadata?.ragContext && (
                     <>
-                      {message.metadata.ragContext.documentsRetrieved && (
-                        <span>📄 {message.metadata.ragContext.documentsUsed || 0}/{message.metadata.ragContext.documentsRetrieved} docs</span>
-                      )}
-                      {message.metadata.ragContext.searchTimeMs && (
-                        <span>🔍 {(message.metadata.ragContext.searchTimeMs / 1000).toFixed(1)}s</span>
-                      )}
+                      {/* Token usage (priority info) */}
                       {message.metadata.ragContext.tokensUsed?.total && (
                         <span>🎯 {message.metadata.ragContext.tokensUsed.total} tokens</span>
                       )}
+                      {/* Search time */}
+                      {message.metadata.ragContext.searchTimeMs && (
+                        <span>🔍 {(message.metadata.ragContext.searchTimeMs / 1000).toFixed(1)}s</span>
+                      )}
+                      {/* Response time (fallback if no tokens) */}
                       {!message.metadata.ragContext.tokensUsed?.total && message.metadata.ragContext.responseTimeMs && (
                         <span>⏱️ {(message.metadata.ragContext.responseTimeMs / 1000).toFixed(1)}s</span>
                       )}

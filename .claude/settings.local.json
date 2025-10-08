@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(know when they actually happen\" - now users can see exact message time\n\n**Metadata flow verified:**\n- ✅ Extraction: nn_metadata extracted from HTML\n- ✅ Storage: Serialized to JSON in Weaviate\n- ✅ Retrieval: Deserialized back to dict\n- ✅ Ready for: LLM prompt citations & frontend display\n\n**Next:** Phase 3.2 - Add [1],[2] citations to LLM prompts\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
