@@ -479,7 +479,9 @@ enable_audit_logging = true
 # ============================================================================
 [openrouter]
 base_url = "https://openrouter.ai/api/v1"
-api_key = "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"
+# SECURITY: API key MUST be set via environment variable OPENROUTER_API_KEY
+# NEVER commit API keys to git - use .env.local file instead
+api_key = "${OPENROUTER_API_KEY}"
 model = "qwen/qwen3-30b-a3b-instruct-2507"
 timeout = 30.0
 temperature = 0.1

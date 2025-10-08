@@ -23,6 +23,8 @@ Usage:
 """
 
 import logging
+import os
+import re
 import tomllib
 from pathlib import Path
 from typing import Any, cast
@@ -105,6 +107,9 @@ class ConfigLoader:
             with open(config_path, "rb") as f:
                 config_data = tomllib.load(f)
 
+            # Expand environment variables in config values (security: avoid hardcoded secrets)
+            config_data = self._expand_env_vars(config_data)
+
             self._cache[config_name] = config_data
             logger.info(f"Loaded configuration: {config_name} from {config_path}, sections: {list(config_data.keys())}")
             return config_data
@@ -165,6 +170,35 @@ class ConfigLoader:
         """Clear the configuration cache."""
         self._cache.clear()
         logger.debug("Configuration cache cleared")
+
+    def _expand_env_vars(self, config: Any) -> Any:
+        """
+        Recursively expand environment variables in config values.
+
+        Supports ${VAR_NAME} syntax for environment variable substitution.
+        SECURITY: Prevents hardcoded secrets in git-tracked config files.
+
+        Args:
+            config: Configuration dict, list, or primitive value
+
+        Returns:
+            Configuration with expanded environment variables
+        """
+        if isinstance(config, dict):
+            return {k: self._expand_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [self._expand_env_vars(item) for item in config]
+        elif isinstance(config, str):
+            # Match ${VAR_NAME} pattern
+            def replace_env_var(match):
+                var_name = match.group(1)
+                value = os.environ.get(var_name, "")
+                if not value:
+                    logger.warning(f"Environment variable {var_name} not set, using empty string")
+                return value
+            return re.sub(r'\$\{([A-Z_][A-Z0-9_]*)\}', replace_env_var, config)
+        else:
+            return config
 
 
 # Global config loader instance

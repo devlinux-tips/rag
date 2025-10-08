@@ -16,7 +16,10 @@
       "Read(//etc/systemd/system/**)",
       "Bash(npm run build:*)",
       "Bash(curl -s -X POST http://localhost:8082/api/v1/query -H \"Content-Type: application/json\" -d '{\n    \"\"\"\"query\"\"\"\": \"\"\"\"test\"\"\"\",\n    \"\"\"\"tenant\"\"\"\": \"\"\"\"development\"\"\"\",\n    \"\"\"\"user\"\"\"\": \"\"\"\"dev_user\"\"\"\",\n    \"\"\"\"language\"\"\"\": \"\"\"\"hr\"\"\"\",\n    \"\"\"\"scope\"\"\"\": \"\"\"\"feature\"\"\"\",\n    \"\"\"\"feature\"\"\"\": \"\"\"\"narodne-novine\"\"\"\"\n  }')",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebSearch",
+      "Bash(cat:*)",
+      "Bash(systemctl cat:*)"
     ],
     "deny": [],
     "ask": []
