@@ -360,10 +360,27 @@ def calculate_processing_metrics(processed_count: int, total_time: float, total_
 
 
 def create_chunk_metadata(
-    doc_path: str, chunk_idx: int, chunk: Any, language: str, processing_timestamp: float
+    doc_path: str,
+    chunk_idx: int,
+    chunk: Any,
+    language: str,
+    processing_timestamp: float,
+    nn_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Create metadata for a document chunk."""
-    return {
+    """Create metadata for a document chunk.
+
+    Args:
+        doc_path: Path to source document
+        chunk_idx: Index of chunk in document
+        chunk: Chunk object with content and attributes
+        language: Language code
+        processing_timestamp: Processing timestamp
+        nn_metadata: Optional Narodne Novine metadata (feature-specific)
+
+    Returns:
+        Metadata dict for chunk storage
+    """
+    metadata = {
         "source": doc_path,
         "chunk_index": chunk_idx,
         "language": language,
@@ -374,6 +391,12 @@ def create_chunk_metadata(
         "char_count": getattr(chunk, "char_count", len(chunk.content)),
         "processing_timestamp": processing_timestamp,
     }
+
+    # Add feature-specific metadata if present (narodne-novine documents)
+    if nn_metadata:
+        metadata["nn_metadata"] = nn_metadata
+
+    return metadata
 
 
 def extract_sources_from_chunks(retrieved_chunks: list[dict[str, Any]]) -> list[str]:
@@ -669,13 +692,25 @@ class RAGSystem:
         processing_config: ProcessingConfig,
         retrieval_config: RetrievalConfig,
         batch_config: dict[str, Any],  # Raw batch config dict for BatchProcessingConfig.from_config()
+        # Feature context (for feature-specific behavior)
+        scope: str = "user",
+        feature_name: str | None = None,
     ):
-        """Initialize with all dependencies injected."""
+        """Initialize with all dependencies injected.
+
+        Args:
+            language: Language code (hr, en, etc.)
+            scope: Data scope (user, tenant, feature, global)
+            feature_name: Feature name when scope='feature' (e.g., 'narodne-novine')
+            ... (other dependencies)
+        """
         system_logger = get_system_logger()
-        log_component_start("rag_system", "initialize", target_language=language)
+        log_component_start("rag_system", "initialize", target_language=language, scope=scope, feature=feature_name)
 
         self.language = validate_language_code(language)
-        system_logger.info("rag_system", "initialize", f"Language validated: {self.language}")
+        self.scope = scope
+        self.feature_name = feature_name
+        system_logger.info("rag_system", "initialize", f"Language validated: {self.language} | Scope: {scope} | Feature: {feature_name or 'N/A'}")
 
         self.embedding_config = embedding_config
         self.ollama_config = ollama_config
@@ -813,6 +848,61 @@ class RAGSystem:
         self._initialized = True
         log_component_end("rag_system", "post_init", "All components initialized successfully")
 
+    def _get_feature_scope(self) -> str | None:
+        """Get current feature name from scope context.
+
+        Returns feature name if scope='feature', otherwise None.
+        Enables feature-specific behavior without configuration files.
+
+        Returns:
+            Feature name (e.g., 'narodne-novine') or None
+        """
+        return self.feature_name if self.scope == "feature" else None
+
+    def _is_nn_feature(self) -> bool:
+        """Check if processing narodne-novine feature.
+
+        Convention-based detection:
+        - No configuration needed
+        - Based on --scope feature --feature narodne-novine
+        - Enables NN-specific metadata extraction automatically
+
+        Returns:
+            True if narodne-novine feature scope is active
+        """
+        return self._get_feature_scope() == "narodne-novine"
+
+    def _should_extract_nn_metadata(self, file_path: Path, html_content: str) -> bool:
+        """Determine if NN metadata extraction should run.
+
+        Triple-check ensures safety and efficiency:
+        1. Must be in narodne-novine feature scope
+        2. Must be HTML file
+        3. Must contain ELI metadata tags
+
+        Args:
+            file_path: Path to document file
+            html_content: Raw HTML content
+
+        Returns:
+            True if all conditions met for NN metadata extraction
+
+        This ensures:
+        - No metadata extraction for non-NN features (zero overhead)
+        - No wasted processing on non-HTML files
+        - No errors on non-NN HTML files
+        """
+        if not self._is_nn_feature():
+            return False
+
+        if file_path.suffix.lower() != ".html":
+            return False
+
+        # Quick check for ELI metadata presence
+        from ..extraction.nn_metadata_extractor import is_nn_document
+
+        return is_nn_document(html_content)
+
     async def _validate_configuration(self) -> None:
         """Validate configuration using ConfigValidator - minimal integration."""
         from ..utils.config_loader import get_language_config, load_config
@@ -885,6 +975,36 @@ class RAGSystem:
                         failed_docs += 1
                         continue
 
+                    # Extract Narodne Novine metadata (feature-specific, fail-safe)
+                    nn_metadata = None
+                    is_html = doc_path.suffix.lower() == ".html"
+                    is_nn_feat = self._is_nn_feature()
+                    system_logger.debug(
+                        "nn_metadata",
+                        "check",
+                        f"doc={doc_path.name} | is_html={is_html} | is_nn_feature={is_nn_feat} | scope={self.scope} | feature_name={self.feature_name}",
+                    )
+                    if is_html and is_nn_feat:
+                        try:
+                            with open(doc_path, "r", encoding="utf-8") as f:
+                                html_content = f.read()
+                            if self._should_extract_nn_metadata(doc_path, html_content):
+                                from ..extraction.nn_metadata_extractor import extract_nn_metadata
+
+                                nn_metadata = extract_nn_metadata(html_content, doc_path)
+                                if nn_metadata:
+                                    title_preview = nn_metadata.get("title", "")[:50]
+                                    system_logger.info(
+                                        "nn_metadata",
+                                        "extracted",
+                                        f"title={title_preview} | eli={nn_metadata.get('eli_url', 'N/A')} | issue={nn_metadata.get('issue', 'N/A')}",
+                                    )
+                        except Exception as e:
+                            # NN metadata extraction is optional - don't fail document processing
+                            system_logger.warning(
+                                "nn_metadata", "extraction_failed", f"Failed to extract NN metadata from {doc_path}: {e}"
+                            )
+
                     # Clean text
                     system_logger.trace("document_processing", "clean_text", f"Cleaning: {len(extracted_text)} chars")
                     cleaning_result = self._text_cleaner.clean_text(extracted_text)
@@ -903,7 +1023,9 @@ class RAGSystem:
                     # Collect chunk data (but don't generate embeddings yet)
                     for chunk_idx, chunk in enumerate(chunks):
                         chunk_id = f"{doc_path.stem}_{chunk_idx}_{hash(chunk.content) % 1000000}"
-                        metadata = create_chunk_metadata(str(doc_path), chunk_idx, chunk, self.language, time.time())
+                        metadata = create_chunk_metadata(
+                            str(doc_path), chunk_idx, chunk, self.language, time.time(), nn_metadata
+                        )
                         all_chunks_data.append((chunk.content, chunk_id, metadata))
 
                     processed_docs += 1
@@ -1439,6 +1561,8 @@ def create_rag_system(
     processing_config: ProcessingConfig,
     retrieval_config: RetrievalConfig,
     batch_config: dict[str, Any] | None = None,
+    scope: str = "user",
+    feature_name: str | None = None,
 ) -> RAGSystem:
     """Factory function to create RAG system with validated config dependency injection."""
     return RAGSystem(
@@ -1461,6 +1585,8 @@ def create_rag_system(
         processing_config=processing_config,
         retrieval_config=retrieval_config,
         batch_config=batch_config or {},
+        scope=scope,
+        feature_name=feature_name,
     )
 
 

@@ -482,6 +482,8 @@ def create_complete_rag_system(
             processing_config=processing_config,
             retrieval_config=retrieval_config,
             batch_config=batch_config,
+            scope=scope,
+            feature_name=feature_name,
         )
 
         logger.info("rag_factory", "create_complete_rag_system", f"RAG system created successfully for {language}")
