@@ -1299,9 +1299,11 @@ class RAGSystem:
                 # Format context with citations for NN documents
                 formatted_chunks = []
                 nn_sources = []  # Track sources for citation list
+
                 for idx, (chunk, doc) in enumerate(zip(context_chunks, hierarchical_results.documents), 1):
                     # Check if document has NN metadata
                     metadata = doc.get("metadata", {})
+
                     nn_metadata = metadata.get("nn_metadata") if isinstance(metadata, dict) else None
 
                     if nn_metadata and isinstance(nn_metadata, dict):

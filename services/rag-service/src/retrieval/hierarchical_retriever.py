@@ -731,9 +731,32 @@ class HierarchicalRetriever:
         for i, result in enumerate(filtered_results):
             self._log_debug(f"🔧 Result {i}: boosts type={type(result.boosts)}, value={result.boosts}")
             try:
+                metadata_dict = dict(result.metadata)
+                logger.trace(
+                    "hierarchical_retriever",
+                    f"metadata_before_deser_{i}",
+                    f"keys={list(metadata_dict.keys())} | has_nn_metadata={'nn_metadata' in metadata_dict}",
+                )
+
+                if "nn_metadata" in metadata_dict and isinstance(metadata_dict["nn_metadata"], str):
+                    import json
+                    try:
+                        metadata_dict["nn_metadata"] = json.loads(metadata_dict["nn_metadata"])
+                        logger.trace(
+                            "hierarchical_retriever",
+                            "nn_metadata_deserialization",
+                            f"Deserialized nn_metadata for result {i}",
+                        )
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            "hierarchical_retriever",
+                            "nn_metadata_deserialization_failed",
+                            f"Failed to deserialize nn_metadata for result {i}",
+                        )
+
                 result_dict = {
                     "content": result.content,
-                    "metadata": {**result.metadata, "detected_category": categorization.category.value},
+                    "metadata": {**metadata_dict, "detected_category": categorization.category.value},
                     "similarity_score": result.similarity_score,
                     "final_score": result.final_score,
                     **result.boosts,  # Add boost scores

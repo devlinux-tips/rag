@@ -207,22 +207,29 @@ class SearchEngineAdapter:
             )
 
             if raw_results:
+                if len(raw_results) > 0:
+                    first_result = list(raw_results)[0] if hasattr(raw_results, '__iter__') else None
+                    logger.trace(
+                        "search_engine_adapter",
+                        "first_result_type",
+                        f"first_result_type={type(first_result).__name__} | is_dict={isinstance(first_result, dict)} | "
+                        f"has_score={hasattr(first_result, 'score') if first_result else False} | "
+                        f"has_metadata={hasattr(first_result, 'metadata') if first_result else False}",
+                    )
+
                 for i, result in enumerate(raw_results):
                     if isinstance(result, dict):
                         similarity = result.get("similarity_score", 0.5)
-                        passes_filter = similarity >= similarity_threshold
-                        filter_status = "PASS" if passes_filter else "FAIL"
-
-                        logger.trace(
-                            "search_engine_adapter",
-                            "weaviate_filtering",
-                            f"WEAVIATE_RESULT_{i:02d} | similarity={similarity:.6f} | "
-                            f"threshold={similarity_threshold} | passes={passes_filter} | "
-                            f"status={filter_status} | content_preview={str(result.get('content', ''))[:50]}",
-                        )
-
-                        if passes_filter:
-                            results.append(result)
+                        content_preview = str(result.get('content', ''))[:50]
+                        metadata = result.get("metadata", {})
+                        result_dict = result
+                        logger.trace("search_engine_adapter", f"dict_path_{i}", f"metadata_keys={list(metadata.keys())}")
+                    elif hasattr(result, 'score') and hasattr(result, 'content') and hasattr(result, 'metadata'):
+                        similarity = result.score
+                        content_preview = str(result.content)[:50]
+                        metadata = result.metadata
+                        result_dict = {"content": result.content, "metadata": metadata, "similarity_score": similarity}
+                        logger.trace("search_engine_adapter", f"vectorsearch_path_{i}", f"metadata_keys={list(metadata.keys()) if isinstance(metadata, dict) else 'NOT_DICT'}")
                     else:
                         # Fallback for unexpected result format
                         logger.warning(
@@ -230,7 +237,23 @@ class SearchEngineAdapter:
                             "unexpected_format",
                             f"UNEXPECTED_FORMAT | result_type={type(result).__name__} | fallback_similarity=0.5",
                         )
-                        results.append({"content": str(result), "metadata": {}, "similarity_score": 0.5})
+                        similarity = 0.5
+                        content_preview = str(result)[:50]
+                        result_dict = {"content": str(result), "metadata": {}, "similarity_score": 0.5}
+
+                    passes_filter = similarity >= similarity_threshold
+                    filter_status = "PASS" if passes_filter else "FAIL"
+
+                    logger.trace(
+                        "search_engine_adapter",
+                        "weaviate_filtering",
+                        f"WEAVIATE_RESULT_{i:02d} | similarity={similarity:.6f} | "
+                        f"threshold={similarity_threshold} | passes={passes_filter} | "
+                        f"status={filter_status} | content_preview={content_preview}",
+                    )
+
+                    if passes_filter:
+                        results.append(result_dict)
 
             logger.trace(
                 "search_engine_adapter",
@@ -241,11 +264,17 @@ class SearchEngineAdapter:
 
         # Convert to our SearchResult format
         adapted_results = []
-        for result in results:
-            # Results are already in dict format from our conversion above
+        for i, result in enumerate(results):
             content = result.get("content", "")
             metadata = result.get("metadata", {})
             similarity = result.get("similarity_score", 0.5)
+
+            logger.trace(
+                "search_engine_adapter",
+                f"adapt_result_{i}",
+                f"metadata_keys={list(metadata.keys()) if isinstance(metadata, dict) else 'NOT_DICT'} | "
+                f"has_nn_metadata={'nn_metadata' in metadata if isinstance(metadata, dict) else False}",
+            )
 
             adapted_results.append(
                 SearchResult(

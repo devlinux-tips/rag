@@ -315,19 +315,28 @@ class WeaviateCollection(VectorCollection):
                 metadata.pop("content", None)  # Remove content from metadata
                 metadata.pop("text", None)  # Remove text from metadata
 
-                # Deserialize nn_metadata if present (was stored as JSON string)
+                logger = get_system_logger()
+                logger.trace(
+                    "weaviate_query",
+                    f"before_deser_{len(results)}",
+                    f"metadata_keys={list(metadata.keys())} | has_nn_metadata={'nn_metadata' in metadata}",
+                )
+
                 if "nn_metadata" in metadata and isinstance(metadata["nn_metadata"], str):
                     import json
 
                     try:
                         metadata["nn_metadata"] = json.loads(metadata["nn_metadata"])
+                        logger.trace(
+                            "weaviate_query",
+                            "nn_metadata_deserialized",
+                            f"Deserialized nn_metadata | keys={list(metadata['nn_metadata'].keys())}",
+                        )
                     except json.JSONDecodeError:
-                        # If deserialization fails, keep as string
-                        pass
+                        logger.warning("weaviate_query", "nn_metadata_deser_failed", "Failed to deserialize")
 
                 # Extract distance from Weaviate metadata (lower = more similar)
                 # AI DEBUGGING: Comprehensive trace logging for distance extraction
-                logger = get_system_logger()
 
                 # Log raw metadata structure for AI debugging
                 metadata_structure = {
@@ -459,6 +468,13 @@ class WeaviateCollection(VectorCollection):
                         f"FILTERED OUT: similarity {similarity:.4f} < threshold {similarity_threshold}",
                     )
                     continue
+
+                logger.trace(
+                    "weaviate_search",
+                    f"result_metadata_{len(results)}",
+                    f"metadata_keys={list(result.metadata.keys()) if isinstance(result.metadata, dict) else 'NOT_DICT'} | "
+                    f"has_nn_metadata={'nn_metadata' in result.metadata if isinstance(result.metadata, dict) else False}",
+                )
 
                 results.append({"content": result.content, "metadata": result.metadata, "similarity_score": similarity})
 
