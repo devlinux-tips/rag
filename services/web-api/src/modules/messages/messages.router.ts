@@ -145,50 +145,17 @@ export const messagesRouter = router({
         // Call RAG service
         const startTime = Date.now();
 
-        // For development fallback if RAG service is unavailable
-        const useMock = process.env.USE_MOCK_RAG === 'true';
-
-        let ragResponse;
-
-        if (useMock) {
-          // Mock response for development
-          const mockResponse = {
-          response: `### Analysis Results\n\nBased on the **${chat.feature}** documents, here are the key findings:\n\n1. **First Point**: Important information with *emphasis*\n2. **Second Point**: Additional details\n3. **Third Point**: Supporting evidence\n\n| Category | Value | Status |\n|----------|-------|--------|\n| Relevance | 92% | ✅ High |\n| Confidence | 0.89 | ⚠️ Good |\n\n> 💡 **Note**: This analysis is based on the latest available documents.\n\n\`\`\`json\n{\n  "source": "document_123",\n  "date": "2024-01-01"\n}\n\`\`\`\n\n---\n\nFor more information, see [Official Documentation](https://example.com).`,
-          sources: [
-            {
-              documentId: 'doc_123',
-              title: 'Sample Document',
-              relevance: 0.92,
-              chunk: 'Relevant excerpt from the document...'
-            }
-          ],
-          documentsRetrieved: 5,
-          documentsUsed: 3,
-          confidence: 0.89,
-          searchTimeMs: 234,
-          responseTimeMs: 1000,
-          model: 'qwen2.5:7b',
-          tokensUsed: {
-            input: 150,
-            output: 300,
-            total: 450
+        // Call RAG service
+        const ragResponse = await ragService.query(
+          input.content,
+          ctx.auth,
+          chat.feature,
+          {
+            maxDocuments: ragConfig.maxDocuments,
+            minConfidence: ragConfig.minConfidence,
+            temperature: ragConfig.temperature,
           }
-        };
-
-          ragResponse = mockResponse;
-        } else {
-          // Call actual RAG service
-          ragResponse = await ragService.query(
-            input.content,
-            ctx.auth,
-            chat.feature,
-            {
-              maxDocuments: ragConfig.maxDocuments,
-              minConfidence: ragConfig.minConfidence,
-              temperature: ragConfig.temperature,
-            }
-          );
-        }
+        );
 
         const endTime = Date.now();
 
@@ -205,12 +172,12 @@ export const messagesRouter = router({
                 documentsUsed: ragResponse.documentsUsed,
                 confidence: ragResponse.confidence,
                 searchTimeMs: ragResponse.searchTimeMs,
-                sources: ragResponse.sources,
+                responseTimeMs: endTime - startTime,
+                tokensUsed: ragResponse.tokensUsed,
               },
+              nnSources: ragResponse.nnSources || undefined,
               model: ragResponse.model,
               provider: 'ollama',
-              tokensUsed: ragResponse.tokensUsed,
-              responseTimeMs: endTime - startTime,
               processingTaskId: processingTask.id,
             },
           },

@@ -31,6 +31,15 @@ interface RAGQueryResponse {
     output: number;
     total: number;
   };
+  nnSources?: Array<{
+    title: string;
+    issue: string;
+    eli: string;
+    year?: string;
+    publisher?: string;
+    start_page?: string | null;
+    end_page?: string | null;
+  }>;
 }
 
 export class RAGService {
