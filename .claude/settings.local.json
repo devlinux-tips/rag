@@ -1,29 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Read(//tmp/**)",
-      "Bash(sudo strace:*)",
-      "Bash(for i in {1..5})",
-      "Bash(do ps:*)",
-      "Bash(awk:*)",
-      "Bash(done)",
-      "Bash(for i in {1..4})",
-      "Bash(do sleep:*)",
-      "Bash(ps:*)",
-      "Bash(curl:*)",
-      "Bash(python3:*)",
-      "Bash(source:*)",
-      "Bash(python:*)",
-      "Bash(npm run build:*)",
-      "Bash(cat:*)",
-      "Bash(lynx:*)",
-      "Bash(kill:*)",
-      "Bash(make status:*)",
-      "Bash(systemctl:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(eli=...)",
-      "Bash(issue=...\"\n\n**Next Steps:**\n- Phase 2: Verify metadata storage/retrieval in Weaviate\n- Phase 3: LLM prompt enhancement with [1],[2] citations\n- Phase 4: Frontend SourcesList component\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

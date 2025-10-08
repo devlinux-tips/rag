@@ -149,7 +149,7 @@ class WeaviateCollection(VectorCollection):
             for i, (doc_id, document, metadata) in enumerate(zip(ids, documents, metadatas, strict=False)):
                 logger.trace("weaviate_collection", "add", f"Processing document {i}: {doc_id}")
 
-                # Prepare properties
+                # Prepare properties - start with standard fields
                 properties = {
                     "content": document,
                     "source_file": metadata.get("source_file", ""),
@@ -157,6 +157,19 @@ class WeaviateCollection(VectorCollection):
                     "language": metadata.get("language", ""),
                     "timestamp": metadata.get("timestamp", ""),
                 }
+
+                # Add all additional metadata fields (feature-specific metadata like nn_metadata)
+                # Weaviate auto-creates properties, so we can safely add any dict/list/str/number fields
+                for key, value in metadata.items():
+                    if key not in properties:  # Don't overwrite standard fields
+                        # Weaviate supports: text, number, boolean, object (dict), and array
+                        # Complex objects need to be serialized to JSON strings
+                        if isinstance(value, dict):
+                            import json
+
+                            properties[key] = json.dumps(value, ensure_ascii=False)
+                        elif value is not None:  # Skip None values
+                            properties[key] = value
 
                 # Add vector if provided - handle both numpy arrays and lists
                 if embeddings and i < len(embeddings):
