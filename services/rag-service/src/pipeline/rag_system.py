@@ -51,6 +51,7 @@ class RAGResponse:
     total_time: float
     sources: list[str]
     metadata: dict[str, Any]
+    nn_sources: list[dict[str, Any]] | None = None  # Narodne Novine metadata for citations
 
     @property
     def has_high_confidence(self) -> bool:
@@ -1459,6 +1460,7 @@ class RAGSystem:
                     total_time=total_time,
                     sources=sources,
                     metadata=response_metadata,
+                    nn_sources=nn_sources if nn_sources else None,
                 )
 
             except Exception as e:

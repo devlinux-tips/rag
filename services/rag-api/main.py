@@ -87,6 +87,18 @@ class TokenUsage(BaseModel):
     total: int
 
 
+class NNSource(BaseModel):
+    """Narodne Novine source metadata."""
+
+    title: str = Field(..., description="Document title")
+    issue: str = Field(..., description="NN issue number")
+    eli: Optional[str] = Field(None, description="European Legislation Identifier")
+    year: Optional[str] = Field(None, description="Publication year")
+    publisher: Optional[str] = Field(None, description="Publishing authority")
+    start_page: Optional[int] = Field(None, description="Starting page number")
+    end_page: Optional[int] = Field(None, description="Ending page number")
+
+
 class RAGQueryResponse(BaseModel):
     """Response model for RAG queries."""
 
@@ -101,6 +113,7 @@ class RAGQueryResponse(BaseModel):
     responseTimeMs: int = Field(0)
     model: str = Field("qwen2.5:7b-instruct")
     tokensUsed: TokenUsage
+    nnSources: Optional[List[NNSource]] = Field(None, description="Narodne Novine source metadata for citations")
 
 
 def get_collection_name(tenant: str, user: str, feature: str, language: str) -> str:
@@ -540,6 +553,22 @@ Please provide a detailed answer:"""
             f"INFO_QUERY_COMPLETED | documents_retrieved={len(retrieved_chunks)} | model={model_used} | total_time_ms={total_time_ms} | search_time_ms={search_time_ms} | scope={scope} | language={request.language}"
         )
 
+        # Convert nn_sources if present
+        nn_sources = None
+        if hasattr(rag_response, 'nn_sources') and rag_response.nn_sources:
+            nn_sources = [
+                NNSource(
+                    title=src.get("title", "Nepoznat dokument"),
+                    issue=src.get("issue", ""),
+                    eli=src.get("eli"),
+                    year=src.get("year"),
+                    publisher=src.get("publisher"),
+                    start_page=src.get("start_page"),
+                    end_page=src.get("end_page"),
+                )
+                for src in rag_response.nn_sources
+            ]
+
         # Create response object
         response_obj = RAGQueryResponse(
             response=final_response,
@@ -551,6 +580,7 @@ Please provide a detailed answer:"""
             responseTimeMs=total_time_ms,
             model=model_used,
             tokensUsed=llm_tokens,
+            nnSources=nn_sources,
         )
 
         # Log FastAPI request/response
