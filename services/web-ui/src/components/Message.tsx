@@ -4,28 +4,11 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import clsx from 'clsx';
+import { SourcesList } from './SourcesList';
+import type { Message } from '../types/message';
 
 interface MessageProps {
-  message: {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    createdAt: string;
-    isError?: boolean;
-    metadata?: {
-      ragContext?: {
-        documentsRetrieved?: number;
-        documentsUsed?: number;
-        searchTimeMs?: number;
-        responseTimeMs?: number;
-        tokensUsed?: {
-          input?: number;
-          output?: number;
-          total?: number;
-        };
-      };
-    };
-  };
+  message: Message;
 }
 
 export function Message({ message }: MessageProps) {
@@ -171,6 +154,11 @@ export function Message({ message }: MessageProps) {
             >
               {message.content}
             </ReactMarkdown>
+          )}
+
+          {/* Source citations - only for assistant messages with sources */}
+          {!isUser && message.metadata?.nnSources && message.metadata.nnSources.length > 0 && (
+            <SourcesList sources={message.metadata.nnSources} />
           )}
 
           {/* Copy button and metadata for assistant messages */}
