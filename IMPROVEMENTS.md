@@ -62,9 +62,59 @@ python rag.py --language hr --scope feature --feature narodne-novine clear-data 
 
 ---
 
+## Security Issues
+
+### 3. OpenRouter API Key Exposure (CRITICAL)
+**Priority:** 🔴 CRITICAL
+**Status:** ✅ FIXED
+**Issue:** API keys were hardcoded in `config.toml` and logged, causing automatic revocation by GitHub secret scanning.
+
+**Root Cause:**
+- OpenRouter is a GitHub secret scanning partner
+- Hardcoded keys in `config/config.toml` (even in private repos)
+- API key preview logging in `llm_provider.py`
+- GitHub automatically revokes detected keys → "API key disabled" errors
+
+**Fixes Applied:**
+1. ✅ Removed API key logging from `llm_provider.py`
+2. ✅ Added environment variable expansion to `config_loader.py`
+3. ✅ Changed `config.toml` to use `${OPENROUTER_API_KEY}` placeholder
+4. ✅ `.env.local` already in `.gitignore`
+
+**Migration Steps (REQUIRED):**
+```bash
+# 1. Get fresh API key from OpenRouter (https://openrouter.ai/keys)
+# 2. Edit systemd service
+sudo nano /etc/systemd/system/rag-api.service
+
+# Add after line 21:
+Environment="OPENROUTER_API_KEY=sk-or-v1-YOUR_NEW_KEY_HERE"
+
+# 3. Reload and restart
+sudo systemctl daemon-reload
+sudo systemctl restart rag-api
+
+# 4. Rotate logs to remove old key traces
+sudo journalctl --rotate
+sudo journalctl --vacuum-time=1s
+```
+
+**Security Best Practices Now Enforced:**
+- ✅ No secrets in git-tracked files
+- ✅ Environment variable expansion for all sensitive config
+- ✅ No API key logging (even partially)
+- ✅ Proper `.gitignore` for `.env.local`
+
+**Files Modified:**
+- `services/rag-service/config/config.toml` - Replaced hardcoded key
+- `services/rag-service/src/utils/config_loader.py` - Added `_expand_env_vars()`
+- `services/rag-service/src/generation/llm_provider.py` - Removed logging
+
+---
+
 ## Bug Fixes
 
-### 3. Token Count Tracking from Ollama
+### 4. Token Count Tracking from Ollama
 **Priority:** Medium
 **Status:** Not Started
 **Issue:** The `tokensUsed` field always returns 0 because Ollama token tracking is not implemented.
@@ -91,7 +141,7 @@ python rag.py --language hr --scope feature --feature narodne-novine clear-data 
 
 ---
 
-### 4. NN Sources Deduplication
+### 5. NN Sources Deduplication
 **Priority:** High
 **Status:** ✅ FIXED
 **Issue:** Multiple chunks from the same NN document created duplicate source entries in the UI.
