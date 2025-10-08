@@ -166,23 +166,23 @@ export function Message({ message }: MessageProps) {
             <div className="mt-4 pt-3 border-t border-gray-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 text-xs text-gray-400">
-                  {/* Timestamp */}
+                  {/* Timestamp - 24h EU format */}
                   {message.createdAt && (
-                    <span>🕐 {new Date(message.createdAt).toLocaleTimeString()}</span>
+                    <span>🕐 {new Date(message.createdAt).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
                   )}
 
                   {message.metadata?.ragContext && (
                     <>
-                      {/* Token usage (priority info) */}
-                      {message.metadata.ragContext.tokensUsed?.total && (
+                      {/* Token usage (only show if > 0) */}
+                      {message.metadata.ragContext.tokensUsed?.total && message.metadata.ragContext.tokensUsed.total > 0 && (
                         <span>🎯 {message.metadata.ragContext.tokensUsed.total} tokens</span>
                       )}
                       {/* Search time */}
                       {message.metadata.ragContext.searchTimeMs && (
                         <span>🔍 {(message.metadata.ragContext.searchTimeMs / 1000).toFixed(1)}s</span>
                       )}
-                      {/* Response time (fallback if no tokens) */}
-                      {!message.metadata.ragContext.tokensUsed?.total && message.metadata.ragContext.responseTimeMs && (
+                      {/* Response time */}
+                      {message.metadata.ragContext.responseTimeMs && (
                         <span>⏱️ {(message.metadata.ragContext.responseTimeMs / 1000).toFixed(1)}s</span>
                       )}
                     </>
