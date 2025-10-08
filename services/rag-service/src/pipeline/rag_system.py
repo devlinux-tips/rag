@@ -1295,7 +1295,40 @@ class RAGSystem:
                 prompts_config = get_language_specific_config("prompts", self.language)
                 log_config_usage("query_processing", "load_prompts", {"language": self.language})
 
-                context_text = "\n\n".join(context_chunks) if context_chunks else "Nema dostupnih informacija."
+                # Format context with citations for NN documents
+                formatted_chunks = []
+                nn_sources = []  # Track sources for citation list
+                for idx, (chunk, doc) in enumerate(zip(context_chunks, hierarchical_results.documents), 1):
+                    # Check if document has NN metadata
+                    metadata = doc.get("metadata", {})
+                    nn_metadata = metadata.get("nn_metadata") if isinstance(metadata, dict) else None
+
+                    if nn_metadata and isinstance(nn_metadata, dict):
+                        # NN document: add numbered citation
+                        title = nn_metadata.get("title", "Nepoznat dokument")
+                        issue = nn_metadata.get("issue", "")
+                        formatted_chunks.append(f"[{idx}] {chunk}")
+                        nn_sources.append(nn_metadata)
+                        system_logger.debug(
+                            "rag_citation",
+                            "nn_source",
+                            f"[{idx}] {title} ({issue})",
+                        )
+                    else:
+                        # Non-NN document: no citation
+                        formatted_chunks.append(chunk)
+
+                context_text = "\n\n".join(formatted_chunks) if formatted_chunks else "Nema dostupnih informacija."
+
+                # Add citation instructions to system prompt if we have NN sources
+                if nn_sources:
+                    citation_instruction = (
+                        "\n\nVAŽNO: U kontekstu su dokumenti označeni brojevima [1], [2], itd. "
+                        "Kada koristiš informacije iz dokumenta, DODAJ oznaku broja izvora odmah nakon tvrdnje. "
+                        "Primjer: 'Najviša cijena goriva je 1,50 EUR/l [1].'"
+                    )
+                else:
+                    citation_instruction = ""
 
                 # AI-friendly TRACE logging for context being sent to LLM
                 system_logger.trace(
@@ -1304,10 +1337,11 @@ class RAGSystem:
                     f"CONTEXT_TO_LLM | chunks_used={len(context_chunks)} | "
                     f"context_length={len(context_text)} | "
                     f"sending_to_model={self.ollama_config.model} | "
-                    f"has_context={len(context_chunks) > 0}",
+                    f"has_context={len(context_chunks) > 0} | "
+                    f"nn_sources={len(nn_sources)}",
                 )
 
-                system_prompt = prompts_config["question_answering_system"]
+                system_prompt = prompts_config["question_answering_system"] + citation_instruction
                 user_prompt = prompts_config["question_answering_user"].format(
                     query=validated_query.text, context=context_text
                 )
