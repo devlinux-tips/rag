@@ -1323,6 +1323,22 @@ class RAGSystem:
 
                 context_text = "\n\n".join(formatted_chunks) if formatted_chunks else "Nema dostupnih informacija."
 
+                # Deduplicate nn_sources by eli_url (multiple chunks from same document)
+                if nn_sources:
+                    seen_eli = set()
+                    unique_nn_sources = []
+                    for source in nn_sources:
+                        eli_url = source.get("eli_url")
+                        if eli_url and eli_url not in seen_eli:
+                            seen_eli.add(eli_url)
+                            unique_nn_sources.append(source)
+                    nn_sources = unique_nn_sources
+                    system_logger.debug(
+                        "rag_citation",
+                        "deduplicate",
+                        f"Deduplicated {len(seen_eli)} unique sources from {len(nn_sources)} chunks",
+                    )
+
                 # Add citation instructions to system prompt if we have NN sources
                 if nn_sources:
                     citation_instruction = (

@@ -8,11 +8,27 @@ import sys
 import os
 import time
 import json
+import logging
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+
+# Configure file logging
+log_dir = "/home/rag/src/rag/services/rag-api/logs"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "fastapi.log")
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Add the rag-service directory to the Python path
 # Support both Docker (/app/src) and local deployment
@@ -90,6 +106,7 @@ class TokenUsage(BaseModel):
 class NNSource(BaseModel):
     """Narodne Novine source metadata."""
 
+    citationId: int = Field(..., description="Citation number for referencing [1], [2], etc.")
     title: str = Field(..., description="Document title")
     issue: str = Field(..., description="NN issue number")
     eli: Optional[str] = Field(None, description="European Legislation Identifier")
@@ -553,20 +570,21 @@ Please provide a detailed answer:"""
             f"INFO_QUERY_COMPLETED | documents_retrieved={len(retrieved_chunks)} | model={model_used} | total_time_ms={total_time_ms} | search_time_ms={search_time_ms} | scope={scope} | language={request.language}"
         )
 
-        # Convert nn_sources if present
+        # Convert nn_sources if present and add citation IDs
         nn_sources = None
         if hasattr(rag_response, 'nn_sources') and rag_response.nn_sources:
             nn_sources = [
                 NNSource(
+                    citationId=idx,
                     title=src.get("title", "Nepoznat dokument"),
                     issue=src.get("issue", ""),
-                    eli=src.get("eli"),
-                    year=src.get("year"),
+                    eli=src.get("eli_url"),
+                    year=src.get("date_published", "")[:4] if src.get("date_published") else None,
                     publisher=src.get("publisher"),
                     start_page=src.get("start_page"),
                     end_page=src.get("end_page"),
                 )
-                for src in rag_response.nn_sources
+                for idx, src in enumerate(rag_response.nn_sources, 1)
             ]
 
         # Create response object

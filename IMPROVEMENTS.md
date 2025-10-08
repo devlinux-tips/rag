@@ -60,6 +60,52 @@ python rag.py --language hr --scope feature --feature narodne-novine clear-data 
 - [ ] Testing: Regression tests for non-NN features
 - [ ] Testing: Performance testing of metadata extraction
 
+---
+
+## Bug Fixes
+
+### 3. Token Count Tracking from Ollama
+**Priority:** Medium
+**Status:** Not Started
+**Issue:** The `tokensUsed` field always returns 0 because Ollama token tracking is not implemented.
+
+**Current behavior:**
+```json
+{
+  "tokensUsed": {
+    "input": 0,
+    "output": 0,
+    "total": 0
+  }
+}
+```
+
+**Expected behavior:**
+- Track actual token usage from Ollama responses
+- Display token count in UI when > 0
+
+**Files to investigate:**
+- `/home/rag/src/rag/services/rag-service/src/generation/ollama_provider.py` - Ollama LLM integration
+- Check if Ollama API returns token usage in response
+- Parse and return token counts in RAGResponse
+
+---
+
+### 4. NN Sources Deduplication
+**Priority:** High
+**Status:** ✅ FIXED
+**Issue:** Multiple chunks from the same NN document created duplicate source entries in the UI.
+
+**Fix Applied:**
+- Added deduplication logic in `rag_system.py` after collecting nn_sources
+- Deduplicate by `eli_url` to show each document only once
+- Log deduplication statistics for debugging
+
+**Files Modified:**
+- `services/rag-service/src/pipeline/rag_system.py:1326-1340`
+
+---
+
 **Requirements:**
 - **MANDATORY for:** `narodne-novine` feature
 - **OPTIONAL for:** All other features/scopes
