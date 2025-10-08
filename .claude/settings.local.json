@@ -19,7 +19,8 @@
       "Bash(python3:*)",
       "WebSearch",
       "Bash(cat:*)",
-      "Bash(systemctl cat:*)"
+      "Bash(systemctl cat:*)",
+      "Bash(curl -s http://localhost:11434/api/generate -d '{\n  \"\"\"\"model\"\"\"\": \"\"\"\"qwen2.5:7b-instruct\"\"\"\",\n  \"\"\"\"prompt\"\"\"\": \"\"\"\"Hello\"\"\"\",\n  \"\"\"\"stream\"\"\"\": false\n}')"
     ],
     "deny": [],
     "ask": []

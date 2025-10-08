@@ -142,18 +142,88 @@ rag_system.py
   → Returns real model name and usage stats
 ```
 
-**Fix Required:**
-1. Refactor `rag_system.py` to use `llm_manager` instead of `ollama_client`
-2. Add `token_usage` field to `RAGResponse` dataclass
-3. Pass token counts from LLM response to RAG-API
-4. Update main.py to use `rag_response.token_usage` instead of hardcoded zeros
+**Implementation Plan:**
 
-**Files to Modify:**
-- `services/rag-service/src/pipeline/rag_system.py:1382` - Replace ollama_client
-- `services/rag-service/src/pipeline/rag_system.py:42` - Add token_usage to RAGResponse
-- `services/rag-api/main.py:473` - Use actual token counts
+**Step 1:** Add token_usage field to RAGResponse
+```python
+# services/rag-service/src/pipeline/rag_system.py:42
+from ..generation.llm_provider import TokenUsage
 
-**Complexity:** Medium - requires refactoring core RAG pipeline
+@dataclass
+class RAGResponse:
+    # ... existing fields
+    token_usage: TokenUsage | None = None
+    model_used: str = "unknown"
+```
+
+**Step 2:** Update RAGSystem to accept LLM manager
+```python
+# services/rag-service/src/pipeline/rag_system.py (constructor)
+from ..generation.llm_provider import LLMManager, ChatMessage, MessageRole
+
+def __init__(self, ..., llm_manager: LLMManager | None = None):
+    self.llm_manager = llm_manager
+```
+
+**Step 3:** Replace ollama_client with llm_manager
+```python
+# services/rag-service/src/pipeline/rag_system.py:1350-1400
+messages = [
+    ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+    ChatMessage(role=MessageRole.USER, content=user_prompt)
+]
+
+chat_response = await self.llm_manager.chat_completion(messages=messages)
+answer = chat_response.content
+token_usage = chat_response.usage
+model_used = chat_response.model
+```
+
+**Step 4:** Update RAGResponse creation
+```python
+# services/rag-service/src/pipeline/rag_system.py:1460
+return RAGResponse(
+    # ... existing fields
+    token_usage=token_usage,
+    model_used=model_used,
+)
+```
+
+**Step 5:** Initialize LLM manager in RAG-API
+```python
+# services/rag-api/main.py (startup)
+from src.generation.llm_provider import LLMManager
+
+llm_manager = LLMManager(llm_config)
+rag_system = RAGSystem(..., llm_manager=llm_manager)
+```
+
+**Step 6:** Use real token counts in API
+```python
+# services/rag-api/main.py:473
+if rag_response.token_usage:
+    llm_tokens = TokenUsage(
+        input=rag_response.token_usage.input_tokens,
+        output=rag_response.token_usage.output_tokens,
+        total=rag_response.token_usage.total_tokens
+    )
+```
+
+**Estimated Effort:** 3-4 hours
+
+**Use Case:** Enable rate limiting by token count
+```python
+# Future: Track daily usage per user
+await redis.incrby(f"tokens:{userId}:{date}", tokensUsed)
+if usage > limit: raise RateLimitError()
+```
+
+**Testing:**
+```bash
+# Verify tokens appear in response
+curl -X POST http://localhost:8082/api/v1/query ... | jq '.tokensUsed'
+# Expected: {"input": 1234, "output": 567, "total": 1801}
+```
 
 ---
 
