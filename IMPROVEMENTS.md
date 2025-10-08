@@ -114,30 +114,46 @@ sudo journalctl --vacuum-time=1s
 
 ## Bug Fixes
 
-### 4. Token Count Tracking from Ollama
+### 4. Token Count Tracking (Architecture Issue)
 **Priority:** Medium
-**Status:** Not Started
-**Issue:** The `tokensUsed` field always returns 0 because Ollama token tracking is not implemented.
+**Status:** 🔍 Root Cause Identified
+**Issue:** The `tokensUsed` field always returns 0 because RAG system bypasses the LLM manager.
 
-**Current behavior:**
-```json
-{
-  "tokensUsed": {
-    "input": 0,
-    "output": 0,
-    "total": 0
-  }
-}
+**Root Cause:**
+- RAG system uses old `ollama_client.py` directly (line 1382 in `rag_system.py`)
+- Does NOT use new `llm_manager.py` with OpenRouter support
+- OpenRouter provider DOES return token counts correctly (verified)
+- But RAG pipeline never calls it - uses hardcoded Ollama client instead
+
+**Current Architecture:**
+```
+rag_system.py (line 1382)
+  → ollama_client.GenerationRequest
+  → Direct Ollama API call
+  → No token tracking
+  → Returns "rag-generated" as model name
 ```
 
-**Expected behavior:**
-- Track actual token usage from Ollama responses
-- Display token count in UI when > 0
+**Correct Architecture (not implemented):**
+```
+rag_system.py
+  → llm_manager.chat_completion()
+  → OpenRouter provider (with token counts)
+  → Returns real model name and usage stats
+```
 
-**Files to investigate:**
-- `/home/rag/src/rag/services/rag-service/src/generation/ollama_provider.py` - Ollama LLM integration
-- Check if Ollama API returns token usage in response
-- Parse and return token counts in RAGResponse
+**Fix Required:**
+1. Refactor `rag_system.py` to use `llm_manager` instead of `ollama_client`
+2. Add `token_usage` field to `RAGResponse` dataclass
+3. Pass token counts from LLM response to RAG-API
+4. Update main.py to use `rag_response.token_usage` instead of hardcoded zeros
+
+**Files to Modify:**
+- `services/rag-service/src/pipeline/rag_system.py:1382` - Replace ollama_client
+- `services/rag-service/src/pipeline/rag_system.py:42` - Add token_usage to RAGResponse
+- `services/rag-api/main.py:473` - Use actual token counts
+
+**Complexity:** Medium - requires refactoring core RAG pipeline
 
 ---
 
