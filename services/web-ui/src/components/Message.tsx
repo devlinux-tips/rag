@@ -166,24 +166,25 @@ export function Message({ message }: MessageProps) {
             <div className="mt-4 pt-3 border-t border-gray-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 text-xs text-gray-400">
-                  {/* Timestamp - 24h EU format */}
+                  {/* Timestamp - Date + Time without seconds */}
                   {message.createdAt && (
-                    <span>🕐 {new Date(message.createdAt).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+                    <span>📅 {new Date(message.createdAt).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit' })} {new Date(message.createdAt).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
                   )}
 
                   {message.metadata?.ragContext && (
                     <>
-                      {/* Token usage (only show if > 0) */}
+                      {/* Token usage with breakdown (only show if > 0) */}
                       {message.metadata.ragContext.tokensUsed?.total && message.metadata.ragContext.tokensUsed.total > 0 && (
-                        <span>🎯 {message.metadata.ragContext.tokensUsed.total} tokens</span>
+                        <span>
+                          🎯 {message.metadata.ragContext.tokensUsed.total} tokens
+                          {(message.metadata.ragContext.tokensUsed.input ?? 0) > 0 && (message.metadata.ragContext.tokensUsed.output ?? 0) > 0 && (
+                            <span className="text-gray-500"> ({message.metadata.ragContext.tokensUsed.input}in + {message.metadata.ragContext.tokensUsed.output}out)</span>
+                          )}
+                        </span>
                       )}
-                      {/* Search time */}
+                      {/* Query processing time */}
                       {message.metadata.ragContext.searchTimeMs && (
-                        <span>🔍 {(message.metadata.ragContext.searchTimeMs / 1000).toFixed(1)}s</span>
-                      )}
-                      {/* Response time */}
-                      {message.metadata.ragContext.responseTimeMs && (
-                        <span>⏱️ {(message.metadata.ragContext.responseTimeMs / 1000).toFixed(1)}s</span>
+                        <span>⏱️ {(message.metadata.ragContext.searchTimeMs / 1000).toFixed(1)}s</span>
                       )}
                     </>
                   )}

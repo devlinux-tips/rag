@@ -467,10 +467,18 @@ async def query_rag(request: RAGQueryRequest):
         # If RAG found documents, use the RAG-generated answer if available,
         # otherwise send to LLM for generation
         if rag_response.answer and not is_error_response:
-            # Use RAG-generated answer directly
+            # Use RAG-generated answer directly (RAG already called LLM internally)
             final_response = rag_response.answer
-            model_used = "rag-generated"
-            llm_tokens = TokenUsage(input=0, output=0, total=0)
+            model_used = getattr(rag_response, 'model_used', 'rag-generated')
+            # Get token usage from RAG response with input/output breakdown
+            rag_tokens_total = getattr(rag_response, 'tokens_used', 0)
+            rag_tokens_input = getattr(rag_response, 'input_tokens', 0)
+            rag_tokens_output = getattr(rag_response, 'output_tokens', 0)
+            llm_tokens = TokenUsage(
+                input=rag_tokens_input,
+                output=rag_tokens_output,
+                total=rag_tokens_total
+            )
         else:
             # Send to LLM for generation
             context_text = "\n\n".join(

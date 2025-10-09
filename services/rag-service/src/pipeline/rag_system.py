@@ -52,6 +52,10 @@ class RAGResponse:
     sources: list[str]
     metadata: dict[str, Any]
     nn_sources: list[dict[str, Any]] | None = None  # Narodne Novine metadata for citations
+    tokens_used: int = 0  # LLM tokens consumed (total, for backward compatibility)
+    input_tokens: int = 0  # LLM input tokens (prompt + context)
+    output_tokens: int = 0  # LLM output tokens (generated response)
+    model_used: str = "unknown"  # Actual model name used for generation
 
     @property
     def has_high_confidence(self) -> bool:
@@ -1462,10 +1466,19 @@ class RAGSystem:
                     user_prompt,
                 )
 
+                # Extract token usage from generation response
+                tokens_used = getattr(generation_response, "tokens_used", 0)
+                model_used = getattr(generation_response, "model", "unknown")
+
+                # Extract input/output token breakdown from metadata
+                gen_metadata = getattr(generation_response, "metadata", {})
+                input_tokens = gen_metadata.get("input_tokens", 0)
+                output_tokens = gen_metadata.get("output_tokens", 0)
+
                 system_logger.info(
                     "pipeline",
                     "QUERY_PROCESSING",
-                    f"COMPLETED: retrieval={retrieval_time:.2f}s, generation={generation_time:.2f}s, total={total_time:.2f}s, sources={len(sources)}",
+                    f"COMPLETED: retrieval={retrieval_time:.2f}s, generation={generation_time:.2f}s, total={total_time:.2f}s, sources={len(sources)}, tokens={tokens_used} (in={input_tokens}, out={output_tokens})",
                 )
 
                 return RAGResponse(
@@ -1479,6 +1492,10 @@ class RAGSystem:
                     sources=sources,
                     metadata=response_metadata,
                     nn_sources=nn_sources if nn_sources else None,
+                    tokens_used=tokens_used,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    model_used=model_used,
                 )
 
             except Exception as e:

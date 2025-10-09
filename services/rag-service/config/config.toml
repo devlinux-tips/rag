@@ -162,7 +162,7 @@ model_name = "BAAI/bge-m3"  # Primary multilingual model
 device = "cpu"
 torch_dtype = "float32"
 max_seq_length = 512
-batch_size = 32
+batch_size = 200  # OPTIMIZED: Increased from 32 for faster processing (with 244GB RAM)
 normalize_embeddings = true
 use_safetensors = true
 trust_remote_code = false
@@ -252,11 +252,11 @@ paragraph_overlap_count = 0
 # BATCH PROCESSING CONFIGURATION
 # ============================================================================
 [batch_processing]
-# Core batch processing settings - PERFORMANCE OPTIMIZED FOR 115 DOCUMENTS
+# Core batch processing settings - PERFORMANCE OPTIMIZED
 enabled = true
-document_batch_size = 100  # Process documents in batches of 100
-embedding_batch_size = 1000  # Much larger embedding batches
-vector_insert_batch_size = 2000  # Larger vector insert batches
+document_batch_size = 50  # OPTIMIZED: Smaller batches for incremental processing
+embedding_batch_size = 200  # OPTIMIZED: Match embeddings.batch_size for consistency
+vector_insert_batch_size = 1000  # OPTIMIZED: Reduced for incremental stability
 max_parallel_workers = 8  # Utilize available CPU cores
 
 # Memory management

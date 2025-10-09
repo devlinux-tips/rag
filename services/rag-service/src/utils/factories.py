@@ -131,14 +131,17 @@ class ProviderAdapterClient:
             f"LLM_TO_RAG_RESPONSE: {json.dumps(llm_to_rag_response, indent=2, ensure_ascii=False)}",
         )
 
-        # Convert back to GenerationResponse format
+        # Convert back to GenerationResponse format with token breakdown
         return GenerationResponse(
             text=chat_response.content,
             model=chat_response.model,
             tokens_used=chat_response.usage.total_tokens if chat_response.usage else 0,
             generation_time=0.0,  # Not tracked in new system
             confidence=1.0,  # Not available in new system
-            metadata={},
+            metadata={
+                "input_tokens": chat_response.usage.input_tokens if chat_response.usage else 0,
+                "output_tokens": chat_response.usage.output_tokens if chat_response.usage else 0,
+            },
         )
 
     async def health_check(self) -> bool:

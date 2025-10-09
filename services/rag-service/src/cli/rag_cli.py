@@ -861,10 +861,12 @@ class MultiTenantRAGCLI:
         }
 
     async def execute_clear_data_command(
-        self, context: TenantContext, language: str, dry_run: bool, confirm: bool
+        self, context: TenantContext, language: str, dry_run: bool, confirm: bool,
+        scope: str = "user", feature_name: str | None = None
     ) -> DataClearResult:
-        """Execute clear-data command for tenant/user/language context."""
+        """Execute clear-data command for tenant/user/language or feature scope."""
         import shutil
+        import weaviate
 
         if not dry_run and not confirm:
             return DataClearResult(
@@ -880,51 +882,117 @@ class MultiTenantRAGCLI:
         errors = []
 
         try:
-            # Get tenant-specific paths
-            tenant_slug = context.tenant_slug
-            user_id = context.user_id if hasattr(context, "user_id") else "dev_user"
+            if scope == "feature" and feature_name:
+                # Feature scope: Clear Weaviate collection and feature progress files
+                from pathlib import Path as PathlibPath
 
-            # Paths to clear (tenant/user/language specific)
-            base_path = Path("./data") / tenant_slug
-            paths_to_clear = [
-                base_path / "users" / user_id / "processed" / language,
-                base_path / "users" / user_id / "cache" / language,
-                base_path / "shared" / "processed" / language,
-                base_path / "vectordb",  # Clear entire vectordb for tenant
-                Path("./models") / tenant_slug / language,  # Language-specific models
-                Path("./temp") / tenant_slug / user_id / language,  # Temp files
-            ]
+                # Collection name for feature scope: Features_{feature_name}_{language}
+                # Convert hyphens to underscores for Weaviate collection naming
+                feature_slug = feature_name.replace("-", "_")
+                collection_name = f"Features_{feature_slug}_{language}"
 
-            # Preserve paths (show what won't be cleared)
-            preserve_paths = [
-                base_path / "users" / user_id / "documents",  # Original documents
-                base_path / "shared" / "documents",  # Shared documents
-                Path("./config"),  # Configuration files
-                Path("./src"),  # Source code
-            ]
+                # Progress files to clear (hardcoded paths relative to repo root)
+                progress_files = [
+                    PathlibPath("logs/nn_processing_progress.json"),
+                    PathlibPath("logs/nn_processing_stats.json"),
+                ]
 
-            for path in preserve_paths:
-                if path.exists():
-                    preserved_paths.append(str(path))
-
-            # Clear data
-            for path in paths_to_clear:
-                if path.exists():
-                    if dry_run:
-                        cleared_paths.append(f"[DRY-RUN] Would clear: {path}")
-                    else:
-                        try:
-                            if path.is_file():
-                                path.unlink()
+                # Clear Weaviate collection
+                try:
+                    client = weaviate.connect_to_local(host="localhost", port=8080)
+                    try:
+                        if dry_run:
+                            # Check if collection exists
+                            collections = client.collections.list_all()
+                            collection_names = [name for name in collections.keys()]
+                            if collection_name in collection_names:
+                                cleared_paths.append(f"[DRY-RUN] Would delete Weaviate collection: {collection_name}")
                             else:
-                                shutil.rmtree(path)
-                            cleared_paths.append(str(path))
-                        except Exception as e:
-                            errors.append(f"Failed to clear {path}: {e}")
+                                cleared_paths.append(f"[DRY-RUN] Weaviate collection does not exist: {collection_name}")
+                        else:
+                            # Actually delete collection
+                            client.collections.delete(collection_name)
+                            cleared_paths.append(f"Deleted Weaviate collection: {collection_name}")
+                    finally:
+                        client.close()
+                except Exception as e:
+                    # Collection might not exist, that's OK
+                    if "does not exist" not in str(e).lower():
+                        errors.append(f"Weaviate collection clear: {e}")
 
-            success = len(errors) == 0
-            action = "Would clear" if dry_run else "Cleared"
-            message = f"{action} {len(cleared_paths)} paths for {tenant_slug}/{user_id}/{language}"
+                # Clear progress files
+                for path in progress_files:
+                    if path.exists():
+                        if dry_run:
+                            cleared_paths.append(f"[DRY-RUN] Would clear: {path}")
+                        else:
+                            try:
+                                path.unlink()
+                                cleared_paths.append(str(path))
+                            except Exception as e:
+                                errors.append(f"Failed to clear {path}: {e}")
+
+                # Preserve paths
+                preserve_paths = [
+                    PathlibPath(f"services/rag-service/data/features/narodne_novine/documents"),  # Original documents
+                    PathlibPath("./config"),  # Configuration files
+                    PathlibPath("./src"),  # Source code
+                ]
+
+                for path in preserve_paths:
+                    if path.exists():
+                        preserved_paths.append(str(path))
+
+                success = len(errors) == 0
+                action = "Would clear" if dry_run else "Cleared"
+                message = f"{action} {len(cleared_paths)} items for feature:{feature_name}/{language}"
+
+            else:
+                # User/tenant scope: Original implementation
+                tenant_slug = context.tenant_slug
+                user_id = context.user_id if hasattr(context, "user_id") else "dev_user"
+
+                # Paths to clear (tenant/user/language specific)
+                base_path = Path("./data") / tenant_slug
+                paths_to_clear = [
+                    base_path / "users" / user_id / "processed" / language,
+                    base_path / "users" / user_id / "cache" / language,
+                    base_path / "shared" / "processed" / language,
+                    base_path / "vectordb",  # Clear entire vectordb for tenant
+                    Path("./models") / tenant_slug / language,  # Language-specific models
+                    Path("./temp") / tenant_slug / user_id / language,  # Temp files
+                ]
+
+                # Preserve paths (show what won't be cleared)
+                preserve_paths = [
+                    base_path / "users" / user_id / "documents",  # Original documents
+                    base_path / "shared" / "documents",  # Shared documents
+                    Path("./config"),  # Configuration files
+                    Path("./src"),  # Source code
+                ]
+
+                for path in preserve_paths:
+                    if path.exists():
+                        preserved_paths.append(str(path))
+
+                # Clear data
+                for path in paths_to_clear:
+                    if path.exists():
+                        if dry_run:
+                            cleared_paths.append(f"[DRY-RUN] Would clear: {path}")
+                        else:
+                            try:
+                                if path.is_file():
+                                    path.unlink()
+                                else:
+                                    shutil.rmtree(path)
+                                cleared_paths.append(str(path))
+                            except Exception as e:
+                                errors.append(f"Failed to clear {path}: {e}")
+
+                success = len(errors) == 0
+                action = "Would clear" if dry_run else "Cleared"
+                message = f"{action} {len(cleared_paths)} paths for {tenant_slug}/{user_id}/{language}"
 
             return DataClearResult(
                 success=success,
@@ -940,7 +1008,7 @@ class MultiTenantRAGCLI:
                 cleared_paths=cleared_paths,
                 preserved_paths=preserved_paths,
                 errors=[f"Clear operation failed: {e}"],
-                message=f"Failed to clear data for {context.tenant_slug}/{language}",
+                message=f"Failed to clear data for {scope}:{feature_name if feature_name else 'N/A'}/{language}",
             )
 
     async def execute_reprocess_command(
@@ -1075,7 +1143,9 @@ class MultiTenantRAGCLI:
                 self.write_output(formatted_output)
 
             elif args.command == "clear-data":
-                clear_result = await self.execute_clear_data_command(context, args.language, args.dry_run, args.confirm)
+                clear_result = await self.execute_clear_data_command(
+                    context, args.language, args.dry_run, args.confirm, args.scope, args.feature_name
+                )
                 formatted_output = format_clear_data_result(clear_result, context, args.language)
                 self.write_output(formatted_output)
 
