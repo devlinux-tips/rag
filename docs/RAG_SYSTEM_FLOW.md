@@ -54,7 +54,7 @@ graph TB
     EmbedGen[🔢 Embedding Generator<br/>- Croatian: classla/bcms-bertic 768d<br/>- English: BAAI/bge-large-en-v1.5 1024d<br/>- Fallback: BAAI/bge-m3 1024d]
 
     %% Vector Database
-    Weaviate[(🗄️ Weaviate Vector DB<br/>Port: 8080/50051<br/>Collections:<br/>- Features_narodne_novine_hr<br/>- {tenant}_{user}_{lang}_documents)]
+    Weaviate[(🗄️ Weaviate Vector DB<br/>Port: 8080/50051<br/>606K+ documents)]
 
     %% Retrieval Components
     VectorSearch[🔍 Vector Search<br/>Cosine Similarity<br/>HNSW Index]
