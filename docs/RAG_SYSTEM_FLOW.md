@@ -69,7 +69,7 @@ graph TB
     %% LLM Generation
     PromptBuilder[📄 Prompt Builder<br/>- Template selection<br/>- System prompts<br/>- Context injection]
 
-    LLM[🤖 LLM Service<br/>Primary: OpenRouter (Qwen 3)<br/>Model: qwen3-30b-a3b-instruct-2507<br/>Local: Ollama qwen2.5:7b-instruct]
+    LLM[🤖 LLM Service<br/>OpenRouter Qwen 3<br/>qwen3-30b model<br/>Ollama local option]
 
     ResponseParser[✅ Response Parser<br/>- Answer extraction<br/>- Source attribution<br/>- Confidence scoring]
 
