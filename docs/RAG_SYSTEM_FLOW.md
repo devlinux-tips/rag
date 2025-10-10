@@ -18,7 +18,18 @@
               └─→ 🤖 OpenRouter - LLM (Qwen 3)
 ```
 
-**8 Docker Services** | **606K+ Documents** | **3-6s Query Time**
+**7 SystemD Services** | **606K+ Documents** | **3-6s Query Time** | **Native Ubuntu 24.04**
+
+### Deployment Model
+
+**Current Setup**: Native SystemD services on Ubuntu 24.04 LTS
+- No Docker containers - all services run directly on the host
+- Managed via `manage-services.sh` and systemd
+- Optimized for powerful servers (243GB RAM, 144 CPU cores)
+- Installation via `setup-local-server.sh`
+- Service control via `Makefile` commands
+
+**Alternative**: Docker Compose (see docker-compose.yml)
 
 ---
 
@@ -125,16 +136,16 @@ graph TB
     EmbedDocs -->|Generate embeddings| EmbedGen
     EmbedGen -->|Store vectors| Weaviate
 
-    %% Styling
-    classDef userLayer fill:#e1f5ff,stroke:#01579b,stroke-width:2px
-    classDef proxyLayer fill:#ffebee,stroke:#c62828,stroke-width:2px
-    classDef uiLayer fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
-    classDef apiLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    classDef ragLayer fill:#e8eaf6,stroke:#283593,stroke-width:2px
-    classDef dbLayer fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    classDef cacheLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    classDef llmLayer fill:#ffe0b2,stroke:#bf360c,stroke-width:2px
-    classDef processingLayer fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    %% Styling - Dark text for better contrast
+    classDef userLayer fill:#e1f5ff,stroke:#01579b,stroke-width:2px,color:#000
+    classDef proxyLayer fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000
+    classDef uiLayer fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
+    classDef apiLayer fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    classDef ragLayer fill:#e8eaf6,stroke:#283593,stroke-width:2px,color:#000
+    classDef dbLayer fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef cacheLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef llmLayer fill:#ffe0b2,stroke:#bf360c,stroke-width:2px,color:#000
+    classDef processingLayer fill:#e0f2f1,stroke:#004d40,stroke-width:2px,color:#000
 
     class User userLayer
     class Nginx proxyLayer
@@ -390,12 +401,12 @@ graph LR
 
     E -->|Store| F[Collection:<br/>tenant_user_lang_documents]
 
-    style A fill:#e3f2fd
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
-    style D fill:#e8f5e9
-    style E fill:#fce4ec
-    style F fill:#f1f8e9
+    style A fill:#e3f2fd,color:#000
+    style B fill:#fff3e0,color:#000
+    style C fill:#f3e5f5,color:#000
+    style D fill:#e8f5e9,color:#000
+    style E fill:#fce4ec,color:#000
+    style F fill:#f1f8e9,color:#000
 ```
 
 ### Ingestion Steps:
@@ -562,35 +573,46 @@ POST /api/query
 
 ## Technology Stack Summary
 
-| Service | Technology | Port | Purpose |
-|---------|-----------|------|---------|
+| Service | Technology | Port | Deployment | Purpose |
+|---------|-----------|------|------------|---------|
 | **Infrastructure** |
-| Nginx | Nginx Alpine | 80 | Reverse proxy, load balancer |
-| Redis | Redis 7 Alpine | 6379 | Cache, sessions, rate limiting |
+| Nginx | Nginx | 80 | SystemD | Reverse proxy, load balancer |
+| Redis | Redis 7 | 6379 | SystemD | Cache, sessions, rate limiting |
 | **Application** |
-| Web UI | React + Vite | 5173 | Frontend interface |
-| Web API | Node.js + Express | 3000 | API Gateway, auth |
-| RAG API | Python + FastAPI | 8082 | RAG query processing |
-| RAG Service | Python 3.12 | CLI | Core RAG engine |
+| Web UI | React + Vite | 5173 | SystemD | Frontend interface |
+| Web API | Node.js + Express | 3000 | SystemD | API Gateway, auth |
+| RAG API | Python + FastAPI | 8082 | SystemD | RAG query processing |
+| RAG Service | Python 3.12 | CLI | Native | Core RAG engine |
 | **Data** |
-| PostgreSQL | PostgreSQL 16 | 5434 | Relational data |
-| Weaviate | Weaviate 1.27 | 8080/50051 | Vector database |
+| PostgreSQL | PostgreSQL 16 | 5434 | SystemD | Relational data |
+| Weaviate | Weaviate 1.33 | 8080/50051 | SystemD | Vector database |
 | **AI/ML** |
-| OpenRouter | External API | HTTPS | LLM (Qwen 3) |
-| Ollama | Local service | 11434 | Local LLM (optional) |
-| Embeddings | HuggingFace | - | Vector generation |
-| **Tools** |
-| Docker | Docker Compose | - | Container orchestration |
-| TOML | Config files | - | Configuration |
-| JSON Logger | Custom | - | Structured logging |
+| OpenRouter | External API | HTTPS | Cloud | LLM (Qwen 3) |
+| Ollama | Local service | 11434 | Optional | Local LLM (optional) |
+| Embeddings | HuggingFace | - | Python | Vector generation |
+| **Management** |
+| SystemD | Service manager | - | Native | Service orchestration |
+| Makefile | Build automation | - | Native | Task management |
+| TOML | Config files | - | Native | Configuration |
+| JSON Logger | Custom | - | Python | Structured logging |
 
 ## Key Files & Locations
 
+### Application Files
 ```
 /home/rag/src/rag/
+├── Makefile                                   # Service management commands
+├── manage-services.sh                         # Service control script
+├── setup-local-server.sh                      # Installation script
+├── .env.local                                 # Environment configuration
 ├── services/
-│   ├── rag-api/              # FastAPI service (Port 8000)
+│   ├── rag-api/              # FastAPI service (Port 8082)
 │   │   └── main.py
+│   ├── web-api/              # Express service (Port 3000)
+│   │   ├── src/
+│   │   └── prisma/           # Database schema
+│   ├── web-ui/               # React frontend (Port 5173)
+│   │   └── src/
 │   └── rag-service/          # Core RAG logic
 │       ├── src/
 │       │   ├── pipeline/rag_system.py       # Main RAG orchestrator
@@ -614,13 +636,75 @@ POST /api/query
 ├── data/
 │   ├── features/narodne_novine/              # Feature data
 │   └── {tenant}/users/{user}/{lang}/         # User data
+├── weaviate_data/                            # Weaviate vector storage
+├── logs/                                     # Application logs
 └── rag.py                                     # CLI entry point
 ```
 
-## Docker Compose Stack
+### SystemD Service Files
+```
+/etc/systemd/system/
+├── weaviate.service          # Weaviate vector database
+├── rag-api.service           # RAG FastAPI service
+├── web-api.service           # Web Express API
+└── web-ui.service            # React frontend
+
+# System services (pre-installed)
+├── postgresql.service        # PostgreSQL 16
+├── redis-server.service      # Redis 7
+└── nginx.service             # Nginx reverse proxy
+```
+
+### Data Directories
+```
+/opt/weaviate/                # Weaviate binary
+/home/rag/src/rag/weaviate_data/  # Weaviate data
+/var/lib/postgresql/16/main/  # PostgreSQL data
+/var/lib/redis/               # Redis data
+```
+
+## Service Deployment Options
+
+### Option 1: Local SystemD Services (Current Setup)
+
+**Native Ubuntu deployment** without Docker:
+
+```bash
+# SystemD services (managed via manage-services.sh)
+● postgresql          # PostgreSQL 16 (Port 5434)
+● redis-server        # Redis 7 (Port 6379)
+● weaviate           # Weaviate 1.33.0 (Port 8080/50051)
+● rag-api            # FastAPI RAG API (Port 8082)
+● web-api            # Express Backend (Port 3000)
+● web-ui             # React Frontend (Port 5173)
+● nginx              # Reverse Proxy (Port 80)
+
+# Service control via Makefile
+make start           # Start all services
+make stop            # Stop all services
+make restart         # Restart all services
+make status          # Check service status
+make logs SERVICE=rag-api  # View logs
+```
+
+**Advantages:**
+- Native performance (no container overhead)
+- Direct systemd integration
+- Simpler debugging
+- Better resource utilization on powerful servers
+- Optimized for 243GB RAM / 144 CPU cores
+
+**Service locations:**
+- Weaviate binary: `/opt/weaviate/`
+- Weaviate data: `/home/rag/src/rag/weaviate_data/`
+- PostgreSQL data: `/var/lib/postgresql/16/main/`
+- Application code: `/home/rag/src/rag/`
+- SystemD configs: `/etc/systemd/system/`
+
+### Option 2: Docker Compose Stack
 
 ```yaml
-# Complete service orchestration
+# Complete service orchestration (docker-compose.yml)
 services:
   nginx:           # Reverse Proxy (Port 80)
   web-ui:          # React Frontend (Port 5173)
@@ -634,6 +718,12 @@ services:
 # Network: rag_network (bridge)
 # Volumes: postgres_data, redis_data, weaviate_data
 ```
+
+**Advantages:**
+- Portable across environments
+- Isolated dependencies
+- Easy scaling and orchestration
+- Simplified deployment
 
 ### Service Dependencies
 
@@ -649,53 +739,82 @@ graph LR
     E --> H[weaviate]
     D --> H
 
-    style A fill:#ffebee
-    style B fill:#f3e5f5
-    style C fill:#fff9c4
-    style D fill:#fff9c4
-    style E fill:#e8eaf6
-    style F fill:#fff3e0
-    style G fill:#e8f5e9
-    style H fill:#e8f5e9
+    style A fill:#ffebee,color:#000
+    style B fill:#f3e5f5,color:#000
+    style C fill:#fff9c4,color:#000
+    style D fill:#fff9c4,color:#000
+    style E fill:#e8eaf6,color:#000
+    style F fill:#fff3e0,color:#000
+    style G fill:#e8f5e9,color:#000
+    style H fill:#e8f5e9,color:#000
 ```
 
 ## Deployment Commands
 
-### Start All Services
+### Local SystemD Services (Current)
+
 ```bash
+# Installation (first time)
+sudo ./setup-local-server.sh
+
+# Start all services
+make start
+# or: sudo ./manage-services.sh start
+
+# Stop all services
+make stop
+# or: sudo ./manage-services.sh stop
+
+# Restart all services
+make restart
+# or: sudo ./manage-services.sh restart
+
+# Check service status
+make status
+# or: sudo ./manage-services.sh status
+
+# View logs for specific service
+make logs SERVICE=rag-api
+# or: sudo ./manage-services.sh logs rag-api
+
+# Follow all logs in real-time
+sudo ./manage-services.sh logs-all
+
+# Health checks
+make health
+# or: sudo ./manage-services.sh health
+
+# Restart specific service
+make restart-one SERVICE=weaviate
+# or: sudo systemctl restart weaviate
+
+# Enable auto-start on boot
+sudo ./manage-services.sh enable
+
+# Execute RAG CLI commands
+cd /home/rag/src/rag
+source venv/bin/activate
+python rag.py --language hr query "Što je RAG?"
+python rag.py --language hr process-docs data/features/narodne_novine/
+```
+
+### Docker Compose (Alternative)
+
+```bash
+# Start all services
 docker-compose up -d
-```
 
-### Check Service Status
-```bash
+# Check service status
 docker-compose ps
-```
 
-### View Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
+# View logs
 docker-compose logs -f rag-api
-docker-compose logs -f web-api
-```
 
-### Execute RAG CLI Commands
-```bash
-# Run CLI in container
+# Execute RAG CLI commands
 docker-compose exec rag-service python rag.py --language hr query "Što je RAG?"
 
-# Process documents
-docker-compose exec rag-service python rag.py --language hr process-docs /app/data/features/narodne_novine/
-```
-
-### Stop Services
-```bash
+# Stop services
 docker-compose down
-
-# With volume cleanup
-docker-compose down -v
 ```
 
 ## Health Check Endpoints
@@ -731,5 +850,7 @@ docker-compose down -v
 
 **Generated**: 2025-10-10
 **RAG System Version**: 1.0.0
-**Services**: 8 containers (10 including external LLMs)
-**Document**: Complete architecture flow diagram with service stack
+**Deployment**: Native SystemD services on Ubuntu 24.04 LTS
+**Services**: 7 SystemD services (9 including external LLMs)
+**Hardware**: 243GB RAM, 144 CPU cores
+**Document**: Complete architecture flow diagram with local and Docker deployment options
