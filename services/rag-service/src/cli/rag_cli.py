@@ -861,11 +861,17 @@ class MultiTenantRAGCLI:
         }
 
     async def execute_clear_data_command(
-        self, context: TenantContext, language: str, dry_run: bool, confirm: bool,
-        scope: str = "user", feature_name: str | None = None
+        self,
+        context: TenantContext,
+        language: str,
+        dry_run: bool,
+        confirm: bool,
+        scope: str = "user",
+        feature_name: str | None = None,
     ) -> DataClearResult:
         """Execute clear-data command for tenant/user/language or feature scope."""
         import shutil
+
         import weaviate
 
         if not dry_run and not confirm:
@@ -934,7 +940,7 @@ class MultiTenantRAGCLI:
 
                 # Preserve paths
                 preserve_paths = [
-                    PathlibPath(f"services/rag-service/data/features/narodne_novine/documents"),  # Original documents
+                    PathlibPath("services/rag-service/data/features/narodne_novine/documents"),  # Original documents
                     PathlibPath("./config"),  # Configuration files
                     PathlibPath("./src"),  # Source code
                 ]

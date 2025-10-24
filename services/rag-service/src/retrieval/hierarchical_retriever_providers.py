@@ -208,7 +208,7 @@ class SearchEngineAdapter:
 
             if raw_results:
                 if len(raw_results) > 0:
-                    first_result = list(raw_results)[0] if hasattr(raw_results, '__iter__') else None
+                    first_result = list(raw_results)[0] if hasattr(raw_results, "__iter__") else None
                     logger.trace(
                         "search_engine_adapter",
                         "first_result_type",
@@ -220,16 +220,22 @@ class SearchEngineAdapter:
                 for i, result in enumerate(raw_results):
                     if isinstance(result, dict):
                         similarity = result.get("similarity_score", 0.5)
-                        content_preview = str(result.get('content', ''))[:50]
+                        content_preview = str(result.get("content", ""))[:50]
                         metadata = result.get("metadata", {})
                         result_dict = result
-                        logger.trace("search_engine_adapter", f"dict_path_{i}", f"metadata_keys={list(metadata.keys())}")
-                    elif hasattr(result, 'score') and hasattr(result, 'content') and hasattr(result, 'metadata'):
+                        logger.trace(
+                            "search_engine_adapter", f"dict_path_{i}", f"metadata_keys={list(metadata.keys())}"
+                        )
+                    elif hasattr(result, "score") and hasattr(result, "content") and hasattr(result, "metadata"):
                         similarity = result.score
                         content_preview = str(result.content)[:50]
                         metadata = result.metadata
                         result_dict = {"content": result.content, "metadata": metadata, "similarity_score": similarity}
-                        logger.trace("search_engine_adapter", f"vectorsearch_path_{i}", f"metadata_keys={list(metadata.keys()) if isinstance(metadata, dict) else 'NOT_DICT'}")
+                        logger.trace(
+                            "search_engine_adapter",
+                            f"vectorsearch_path_{i}",
+                            f"metadata_keys={list(metadata.keys()) if isinstance(metadata, dict) else 'NOT_DICT'}",
+                        )
                     else:
                         # Fallback for unexpected result format
                         logger.warning(

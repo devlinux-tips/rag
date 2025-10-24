@@ -215,7 +215,7 @@ class BaseLLMProvider(ABC):
 
         # Add authentication for OpenRouter
         if self.get_provider_type() == ProviderType.OPENROUTER:
-            api_key = self.config['api_key']
+            api_key = self.config["api_key"]
             if not api_key or len(api_key) < 25:
                 self.logger.error("openrouter_provider", "_get_headers", "CRITICAL: API key missing or invalid")
                 raise ValueError("OpenRouter API key is missing or invalid")

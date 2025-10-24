@@ -715,7 +715,11 @@ class RAGSystem:
         self.language = validate_language_code(language)
         self.scope = scope
         self.feature_name = feature_name
-        system_logger.info("rag_system", "initialize", f"Language validated: {self.language} | Scope: {scope} | Feature: {feature_name or 'N/A'}")
+        system_logger.info(
+            "rag_system",
+            "initialize",
+            f"Language validated: {self.language} | Scope: {scope} | Feature: {feature_name or 'N/A'}",
+        )
 
         self.embedding_config = embedding_config
         self.ollama_config = ollama_config
@@ -991,7 +995,7 @@ class RAGSystem:
                     )
                     if is_html and is_nn_feat:
                         try:
-                            with open(doc_path, "r", encoding="utf-8") as f:
+                            with open(doc_path, encoding="utf-8") as f:
                                 html_content = f.read()
                             if self._should_extract_nn_metadata(doc_path, html_content):
                                 from ..extraction.nn_metadata_extractor import extract_nn_metadata
@@ -1007,7 +1011,9 @@ class RAGSystem:
                         except Exception as e:
                             # NN metadata extraction is optional - don't fail document processing
                             system_logger.warning(
-                                "nn_metadata", "extraction_failed", f"Failed to extract NN metadata from {doc_path}: {e}"
+                                "nn_metadata",
+                                "extraction_failed",
+                                f"Failed to extract NN metadata from {doc_path}: {e}",
                             )
 
                     # Clean text
@@ -1078,7 +1084,7 @@ class RAGSystem:
                 system_logger.info(
                     "batch_processing",
                     "embedding_batch",
-                    f"EMBEDDING_PROGRESS | batch={current_batch}/{total_batches} | chunks={len(batch_contents)} | processed={i}/{len(chunk_contents)} | progress={(i/len(chunk_contents)*100):.1f}%",
+                    f"EMBEDDING_PROGRESS | batch={current_batch}/{total_batches} | chunks={len(batch_contents)} | processed={i}/{len(chunk_contents)} | progress={(i / len(chunk_contents) * 100):.1f}%",
                 )
 
                 # Generate embeddings for entire batch at once
@@ -1304,7 +1310,9 @@ class RAGSystem:
                 formatted_chunks = []
                 nn_sources = []  # Track sources for citation list
 
-                for idx, (chunk, doc) in enumerate(zip(context_chunks, hierarchical_results.documents), 1):
+                for idx, (chunk, doc) in enumerate(
+                    zip(context_chunks, hierarchical_results.documents, strict=False), 1
+                ):
                     # Check if document has NN metadata
                     metadata = doc.get("metadata", {})
 
@@ -1316,11 +1324,7 @@ class RAGSystem:
                         issue = nn_metadata.get("issue", "")
                         formatted_chunks.append(f"[{idx}] {chunk}")
                         nn_sources.append(nn_metadata)
-                        system_logger.debug(
-                            "rag_citation",
-                            "nn_source",
-                            f"[{idx}] {title} ({issue})",
-                        )
+                        system_logger.debug("rag_citation", "nn_source", f"[{idx}] {title} ({issue})")
                     else:
                         # Non-NN document: no citation
                         formatted_chunks.append(chunk)

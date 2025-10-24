@@ -196,7 +196,8 @@ class ConfigLoader:
                 if not value:
                     logger.warning(f"Environment variable {var_name} not set, using empty string")
                 return value
-            return re.sub(r'\$\{([A-Z_][A-Z0-9_]*)\}', replace_env_var, config)
+
+            return re.sub(r"\$\{([A-Z_][A-Z0-9_]*)\}", replace_env_var, config)
         else:
             return config
 

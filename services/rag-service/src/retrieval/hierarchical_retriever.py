@@ -740,6 +740,7 @@ class HierarchicalRetriever:
 
                 if "nn_metadata" in metadata_dict and isinstance(metadata_dict["nn_metadata"], str):
                     import json
+
                     try:
                         metadata_dict["nn_metadata"] = json.loads(metadata_dict["nn_metadata"])
                         logger.trace(

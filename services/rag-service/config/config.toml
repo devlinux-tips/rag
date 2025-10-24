@@ -21,7 +21,7 @@ generation_timeout = 120.0
 
 # Common model settings - PERFORMANCE OPTIMIZED
 default_device = "cpu" # "cpu" "cuda"
-default_batch_size = 200  # Increased from 32 for faster processing
+default_batch_size = 32  # CPU performs better with smaller batches
 
 # Context and chunk size standards
 default_max_context_length = 2500
@@ -59,7 +59,7 @@ author = "RAG Team"
 
 [paths]
 # Multi-tenant base directories
-data_base_dir = "./data"
+data_base_dir = "/data"
 models_base_dir = "./models"
 system_dir = "./system"
 
@@ -74,9 +74,6 @@ tenant_processed_template = "{data_base_dir}/{tenant_slug}/processed/{language}"
 chromadb_path_template = "{data_base_dir}/{tenant_slug}/vectordb"
 models_path_template = "{models_base_dir}/{tenant_slug}/{language}"
 
-# Feature-specific data sources (outside tenant scope)
-# Features only store documents, so no need for extra folder level
-narodne_novine_documents_template = "{data_base_dir}/features/narodne-novine/{language}"
 
 # System-wide temp directory
 temp_dir = "./temp"
@@ -162,7 +159,7 @@ model_name = "BAAI/bge-m3"  # Primary multilingual model
 device = "cpu"
 torch_dtype = "float32"
 max_seq_length = 512
-batch_size = 200  # OPTIMIZED: Increased from 32 for faster processing (with 244GB RAM)
+batch_size = 32  # REVERTED: Large batches (200) were 10x slower on CPU - smaller batches perform better
 normalize_embeddings = true
 use_safetensors = true
 trust_remote_code = false
@@ -255,7 +252,7 @@ paragraph_overlap_count = 0
 # Core batch processing settings - PERFORMANCE OPTIMIZED
 enabled = true
 document_batch_size = 50  # OPTIMIZED: Smaller batches for incremental processing
-embedding_batch_size = 200  # OPTIMIZED: Match embeddings.batch_size for consistency
+embedding_batch_size = 32  # REVERTED: Match embeddings.batch_size (32) for consistency
 vector_insert_batch_size = 1000  # OPTIMIZED: Reduced for incremental stability
 max_parallel_workers = 8  # Utilize available CPU cores
 
@@ -347,11 +344,11 @@ enable_query_expansion = false
 
 # Hierarchical retrieval similarity thresholds
 [retrieval.similarity_thresholds]
-semantic_focused = 0.1
-default = 0.3
-comprehensive = 0.05
-strict = 0.7
-factual = 0.6
+semantic_focused = 0.75
+default = 0.6
+comprehensive = 0.4
+strict = 0.85
+factual = 0.8
 
 # ============================================================================
 # RANKING AND RERANKING CONFIGURATION
@@ -517,10 +514,10 @@ include_metadata = true
 # ============================================================================
 [features]
 enable_features = true
-features_base_dir = "./data/features"
+features_base_dir = "{data_base_dir}/features"
+collection_name_template = "features_{feature_key}_{language}"
+documents_template = "{features_base_dir}/{feature_name}/{language}"
 
 [features.narodne_novine]
 enabled = true
 name = "Narodne Novine"
-collection_name = "feature_narodne_novine_hr"
-documents_path = "./data/features/narodne_novine/documents/hr"

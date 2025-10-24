@@ -133,32 +133,6 @@ class RAGQueryResponse(BaseModel):
     nnSources: Optional[List[NNSource]] = Field(None, description="Narodne Novine source metadata for citations")
 
 
-def get_collection_name(tenant: str, user: str, feature: str, language: str) -> str:
-    """
-    Determine the correct collection name based on scope.
-
-    Features have three scopes:
-    - user: Personal documents for that user only
-    - tenant: Shared documents for all users in tenant
-    - feature: Specialized datasets available globally
-    """
-    # Map feature names to scopes
-    if feature in [
-        "narodne-novine",
-        "financial-reports",
-        "legal-docs",
-        "medical-records",
-    ]:
-        # Global feature collections
-        return f"Features_{feature.replace('-', '_')}_{language}"
-    elif feature == "tenant" or feature == "shared":
-        # Tenant-shared documents
-        return f"{tenant}_shared_{language}_documents"
-    else:
-        # Default to user scope (personal documents)
-        return f"{tenant}_{user}_{language}_documents"
-
-
 # Global variables for services
 llm_manager = None
 rag_systems = {}  # Store RAG systems per tenant/language/scope
@@ -192,17 +166,15 @@ def dump_request_response(
         print(f"ERROR: Failed to dump {log_type} logs: {str(e)}")
 
 
-async def get_or_create_rag_system(tenant: str, user: str, language: str, scope: str):
+async def get_or_create_rag_system(tenant: str, user: str, language: str, scope: str, feature_name: str = None):
     """Get or create RAG system for specific tenant/user/language/scope combination."""
     global rag_systems
 
-    # Key includes scope for proper routing
     rag_key = f"{tenant}_{user}_{language}_{scope}"
 
     if rag_key not in rag_systems:
         print(f"INFO: Creating RAG system for scope: {scope}")
 
-        # Create tenant and user objects
         tenant_obj = Tenant(
             id=f"tenant:{tenant}", name=f"Tenant {tenant.title()}", slug=tenant
         )
@@ -214,21 +186,18 @@ async def get_or_create_rag_system(tenant: str, user: str, language: str, scope:
             full_name=f"User {user.title()}",
         )
 
-        # Set environment variables for Weaviate connection before creating RAG system
         weaviate_host = os.getenv("WEAVIATE_HOST", "localhost")
         weaviate_port = os.getenv("WEAVIATE_PORT", "8080")
         print(f"INFO: Using Weaviate at {weaviate_host}:{weaviate_port}")
 
-        if scope == "narodne_novine":
-            # For Narodne Novine feature scope
-            print("INFO: Creating feature-scoped RAG system for narodne-novine")
+        if scope == "feature":
+            print(f"INFO: Creating feature-scoped RAG system for {feature_name}")
             rag_system = create_complete_rag_system(
                 language=language,
                 scope="feature",
-                feature_name="narodne-novine",  # Use hyphen format for feature name
+                feature_name=feature_name,
             )
         else:
-            # Default user/tenant scope
             print(f"INFO: Creating {scope}-scoped RAG system for {tenant}/{user}")
             rag_system = create_complete_rag_system(
                 language=language,
@@ -320,34 +289,51 @@ async def query_rag(request: RAGQueryRequest):
         raise HTTPException(status_code=503, detail="LLM manager not initialized")
 
     try:
-        # Validate and determine scope
+        from src.utils.config_loader import load_config
+        config = load_config("config")
+
+        scope = request.scope
+        feature_name = None
+
         if request.scope == "feature":
             if not request.feature:
                 raise HTTPException(
                     status_code=400,
                     detail="Feature name required when scope is 'feature'",
                 )
-            scope = request.feature.replace(
-                "-", "_"
-            )  # narodne-novine -> narodne_novine
-        elif request.scope in ["user", "tenant"]:
-            scope = request.scope
-        else:
+
+            feature_key = request.feature.replace("-", "_")
+
+            if "features" not in config or feature_key not in config["features"]:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Feature '{request.feature}' not configured",
+                )
+
+            if not config["features"][feature_key].get("enabled", False):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Feature '{request.feature}' is disabled",
+                )
+
+            feature_name = request.feature
+
+        elif request.scope not in ["user", "tenant"]:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid scope. Must be 'user', 'tenant', or 'feature'",
             )
 
         print(
-            f"INFO_RAG_QUERY | scope={scope} | requested_scope={request.scope} | feature={request.feature} | language={request.language} | tenant={request.tenant} | user={request.user}"
+            f"INFO_RAG_QUERY | scope={scope} | feature={feature_name} | language={request.language} | tenant={request.tenant} | user={request.user}"
         )
 
-        # Get or create RAG system for this scope
         rag_system = await get_or_create_rag_system(
             tenant=request.tenant,
             user=request.user,
             language=request.language,
             scope=scope,
+            feature_name=feature_name,
         )
 
         # Create RAG query with scope context for categorization
