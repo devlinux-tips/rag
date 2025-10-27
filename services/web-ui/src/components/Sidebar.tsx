@@ -23,7 +23,27 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat, onClearSelect
     },
     {
       onError: (err: any) => {
-        console.error('Failed to fetch chats:', err);
+        console.error('❌ Failed to fetch chats:', err);
+        console.error('Error details:', {
+          message: err?.message,
+          code: err?.code,
+          data: err?.data,
+          shape: err?.shape,
+          cause: err?.cause
+        });
+
+        // Log user auth state for debugging
+        console.log('🔍 Current auth state check:', {
+          hasError: !!err,
+          isLoading,
+          errorType: err?.code || 'UNKNOWN'
+        });
+      },
+      onSuccess: (data: any) => {
+        console.log('✅ Successfully loaded chats:', {
+          chatCount: data?.chats?.length || 0,
+          totalCount: data?.pagination?.totalCount || 0
+        });
       },
       refetchOnMount: true,
       refetchOnWindowFocus: false,
@@ -204,19 +224,31 @@ export function Sidebar({ selectedChatId, onSelectChat, onNewChat, onClearSelect
                     d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <p className="text-gray-300 font-medium mb-2">Unable to load chats</p>
-                <p className="text-xs text-gray-500 mb-3">
-                  Try again later
+                <p className="text-xs text-gray-500 mb-2">
+                  {error?.data?.code === 'UNAUTHORIZED'
+                    ? 'Please log in again'
+                    : error?.data?.code === 'FEATURE_NOT_ENABLED'
+                    ? 'Required features not enabled'
+                    : 'Try again later'}
                 </p>
+                {error?.data?.code && (
+                  <p className="text-xs text-gray-600 mb-3">
+                    Error: {error.data.code}
+                  </p>
+                )}
                 <button
                   onClick={() => refetch()}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
                 >
                   Try Again
                 </button>
+                <p className="text-xs text-gray-600 mt-2">
+                  Check browser console for details
+                </p>
               </>
             )}
             {isCollapsed && (
-              <div className="w-3 h-3 bg-red-500 rounded-full mx-auto" title="Unable to load chats" />
+              <div className="w-3 h-3 bg-red-500 rounded-full mx-auto" title={`Error: ${error?.data?.code || 'Unknown'}`} />
             )}
           </div>
         ) : isLoading ? (

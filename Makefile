@@ -28,6 +28,7 @@ help: ## Show this help message
 	@echo "  $(YELLOW)prisma-push$(NC)              Push schema without migration"
 	@echo "  $(YELLOW)prisma-studio$(NC)            Open database GUI"
 	@echo "  $(YELLOW)prisma-validate$(NC)          Validate schema"
+	@echo "  $(YELLOW)prisma-status$(NC)            Show migration status"
 	@echo ""
 	@echo "$(GREEN)Service Management:$(NC)"
 	@echo "  $(YELLOW)start$(NC)                    Start all services"
@@ -61,8 +62,12 @@ install-deps: ## Install Python and Node dependencies only
 	@cd services/web-ui && npm install
 	@echo "$(GREEN)Dependencies installed!$(NC)"
 
-setup: install-deps prisma-generate ## Setup environment (deps + Prisma)
+setup: install-deps sync-env prisma-migrate prisma-generate ## Setup environment (deps + sync env + Prisma migrate + generate)
 	@echo "$(GREEN)Setup complete!$(NC)"
+
+sync-env: ## Sync environment files to all services
+	@echo "$(GREEN)Syncing environment files...$(NC)"
+	@./scripts/sync-env.sh
 
 #==============================================================================
 # Build Commands
@@ -82,11 +87,11 @@ build-web-ui: ## Build web-ui (React/Vite)
 
 prisma-generate: ## Generate Prisma client
 	@echo "$(GREEN)Generating Prisma client...$(NC)"
-	@cd services/web-api && npx prisma generate
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma generate
 
 prisma-migrate: ## Run Prisma migrations (production)
 	@echo "$(GREEN)Running Prisma migrations...$(NC)"
-	@cd services/web-api && npx prisma migrate deploy
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma migrate deploy
 
 prisma-migrate-dev: ## Create and apply new migration (development)
 	@echo "$(GREEN)Creating new Prisma migration...$(NC)"
@@ -95,25 +100,25 @@ prisma-migrate-dev: ## Create and apply new migration (development)
 		echo "Usage: make prisma-migrate-dev NAME=migration_name"; \
 		exit 1; \
 	fi
-	@cd services/web-api && npx prisma migrate dev --name $(NAME)
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma migrate dev --name $(NAME)
 
 prisma-push: ## Push schema changes to database (without migration)
 	@echo "$(GREEN)Pushing Prisma schema to database...$(NC)"
-	@cd services/web-api && npx prisma db push
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma db push
 
 prisma-reset: ## Reset database (WARNING: deletes all data)
 	@echo "$(RED)WARNING: This will delete all data in the database!$(NC)"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		cd services/web-api && npx prisma migrate reset --force; \
+		cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma migrate reset --force; \
 	else \
 		echo "$(YELLOW)Operation cancelled$(NC)"; \
 	fi
 
 prisma-studio: ## Open Prisma Studio (database GUI)
 	@echo "$(GREEN)Opening Prisma Studio...$(NC)"
-	@cd services/web-api && npx prisma studio
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma studio
 
 prisma-format: ## Format Prisma schema file
 	@echo "$(GREEN)Formatting Prisma schema...$(NC)"
@@ -121,7 +126,7 @@ prisma-format: ## Format Prisma schema file
 
 prisma-validate: ## Validate Prisma schema
 	@echo "$(GREEN)Validating Prisma schema...$(NC)"
-	@cd services/web-api && npx prisma validate
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma validate
 
 #==============================================================================
 # Service Management (requires sudo)
@@ -254,12 +259,20 @@ db-reset: ## Reset database (WARNING: destroys all data)
 		sudo -u postgres psql -c "DROP USER IF EXISTS raguser;"; \
 		sudo -u postgres psql -c "CREATE USER raguser WITH PASSWORD 'x|B&h@p4F@o|k6t;~X]1A((Z.,RG';"; \
 		sudo -u postgres psql -c "CREATE DATABASE ragdb OWNER raguser;"; \
-		cd services/web-api && npx prisma migrate deploy; \
+		cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma migrate deploy; \
 		echo "$(GREEN)Database reset complete!$(NC)"; \
 	else \
 		echo ""; \
 		echo "Cancelled."; \
 	fi
+
+db-test: ## Test database connection
+	@echo "$(GREEN)Testing database connection...$(NC)"
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma db pull --force 2>/dev/null && echo "$(GREEN)✓ Database connection successful$(NC)" || echo "$(RED)✗ Database connection failed$(NC)"
+
+prisma-status: ## Show Prisma migration status
+	@echo "$(BLUE)Prisma Migration Status:$(NC)"
+	@cd services/web-api && eval "$$(grep '^DATABASE_URL=' ../../.env | sed 's/^/export /')" && npx prisma migrate status
 
 #==============================================================================
 # Information

@@ -1,9 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables based on NODE_ENV
-const envFile = process.env.NODE_ENV === 'production' ? '.env' : '.env.development';
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+// Load environment variables from unified .env file
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 export interface AuthConfig {
   mode: 'jwt' | 'production';

@@ -15,6 +15,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, continue without it
+    pass
+
 # Configure file logging
 log_dir = "/home/rag/src/rag/services/rag-api/logs"
 os.makedirs(log_dir, exist_ok=True)

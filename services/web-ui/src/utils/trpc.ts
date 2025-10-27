@@ -1,5 +1,6 @@
 import { createTRPCReact } from '@trpc/react-query';
 import { httpBatchLink } from '@trpc/client';
+import { api } from './config';
 
 // Use any for now - in production we'd share types from web-api
 export const trpc = createTRPCReact<any>();
@@ -30,7 +31,7 @@ function handleAuthError(error: any) {
 export const trpcClient = (trpc as any).createClient({
   links: [
     httpBatchLink({
-      url: `${window.location.origin}/api/trpc`,
+      url: api.trpcUrl,
       headers() {
         // Get token from localStorage for authenticated requests
         const token = localStorage.getItem('accessToken');

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { api } from '../utils/config';
 
 interface User {
   id: string;
@@ -30,7 +31,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserInfo = async () => {
     try {
-      const response = await fetch(`${API_URL}/user`, {
+      const response = await fetch(`${api.restUrl}/user`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await fetch(`${api.restUrl}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, name: string) => {
-    const response = await fetch(`${API_URL}/auth/register`, {
+    const response = await fetch(`${api.restUrl}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       if (refreshToken) {
-        await fetch(`${API_URL}/auth/logout`, {
+        await fetch(`${api.restUrl}/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

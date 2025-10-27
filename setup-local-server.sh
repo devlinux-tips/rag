@@ -569,6 +569,24 @@ server {
         proxy_read_timeout 60s;
     }
 
+    # tRPC API (Express) - /api/trpc
+    location /api/trpc/ {
+        proxy_pass http://web_api;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Increase timeouts for RAG operations
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
     # RAG API (FastAPI) - /rag/
     location /rag/ {
         proxy_pass http://rag_api/;
@@ -609,54 +627,93 @@ EOF
     log "Nginx configured"
 }
 
-# Create environment file
+# Create unified environment file
 create_env_file() {
-    log "Creating environment configuration..."
+    log "Creating unified environment configuration..."
 
-    cat > "${RAG_HOME}/.env.local" << EOF
-# RAG Platform - Local Server Configuration
+    cat > "${RAG_HOME}/.env" << EOF
+# RAG Platform - Unified Environment Configuration
+# This file replaces all scattered .env files - single source of truth
 # Generated: $(date)
 
+# ===========================================
 # Database Configuration
+# ===========================================
+# PostgreSQL (Primary Database)
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}"
 POSTGRES_HOST=localhost
 POSTGRES_PORT=${POSTGRES_PORT}
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
-# Weaviate Configuration
+# ===========================================
+# Vector Database
+# ===========================================
+# Weaviate
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=${WEAVIATE_PORT}
 WEAVIATE_GRPC_PORT=${WEAVIATE_GRPC_PORT}
 WEAVIATE_SCHEME=http
 
-# Redis Configuration
+# ===========================================
+# Cache & Session Storage
+# ===========================================
+# Redis
 REDIS_URL=redis://localhost:${REDIS_PORT}
 
+# ===========================================
+# Service Configuration
+# ===========================================
 # Service Ports
 RAG_API_PORT=${RAG_API_PORT}
 WEB_API_PORT=${WEB_API_PORT}
 WEB_UI_PORT=${WEB_UI_PORT}
 
+# Frontend API Configuration (for external access)
+VITE_API_HOST=
+VITE_WEB_API_PORT=${WEB_API_PORT}
+VITE_API_URL=
+
+# Web API Specific
+PORT=${WEB_API_PORT}
+NODE_ENV=production
+PYTHON_RAG_URL=http://localhost:${RAG_API_PORT}
+PYTHON_RAG_TIMEOUT=30000
+
+# ===========================================
+# Authentication
+# ===========================================
+AUTH_MODE=jwt
+JWT_SECRET=${JWT_SECRET}
+
+# ===========================================
+# CORS & Security
+# ===========================================
+CORS_ORIGIN=http://localhost:3001,http://localhost:5173
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX_REQUESTS=60
+
+# ===========================================
 # Application Configuration
+# ===========================================
 RAG_ENV=production
-RAG_LOG_LEVEL=INFO
+RAG_LOG_LEVEL=debug
 RAG_DEFAULT_TENANT=development
 RAG_DEFAULT_USER=admin
 RAG_DEFAULT_LANGUAGE=hr
 
-# Authentication
-AUTH_MODE=jwt
-JWT_SECRET=${JWT_SECRET}
-
+# ===========================================
+# External APIs
+# ===========================================
 # OpenRouter API (optional)
 # OPENROUTER_API_KEY=your-key-here
 EOF
 
-    chown rag:rag "${RAG_HOME}/.env.local"
-    chmod 600 "${RAG_HOME}/.env.local"
+    chown rag:rag "${RAG_HOME}/.env"
+    chmod 600 "${RAG_HOME}/.env"
 
-    log "Environment file created: ${RAG_HOME}/.env.local"
+    log "Unified environment file created: ${RAG_HOME}/.env"
     log_info "JWT Secret: ${JWT_SECRET:0:20}... (truncated for security)"
 }
 
@@ -784,6 +841,13 @@ main() {
     create_env_file
     echo ""
 
+    # Sync environment files to all services
+    log "Syncing environment files to services..."
+    cp "${RAG_HOME}/.env" "${RAG_HOME}/services/web-api/.env"
+    cp "${RAG_HOME}/.env" "${RAG_HOME}/services/web-ui/.env"
+    log "Environment files synchronized"
+    echo ""
+
     # Start services
     start_services
     echo ""
@@ -796,10 +860,17 @@ main() {
     log "Finished at: $(date)"
     echo ""
     log_info "Next steps:"
-    echo "  1. Review configuration: ${RAG_HOME}/.env.local"
+    echo "  1. Review configuration: ${RAG_HOME}/.env (unified environment file)"
     echo "  2. Check service logs: journalctl -u <service-name> -f"
     echo "  3. Access web UI: http://localhost or http://$(hostname -I | awk '{print $1}')"
     echo "  4. Run CLI commands: cd ${RAG_HOME} && source venv/bin/activate && python rag.py --help"
+    echo "  5. If external access fails, check nginx configuration includes tRPC routes"
+    echo ""
+    log_info "Key improvements in this setup:"
+    echo "  • Unified .env file (no more scattered configurations)"
+    echo "  • tRPC support in nginx reverse proxy"
+    echo "  • External access compatible configuration"
+    echo "  • Automatic environment file synchronization"
     echo ""
     log_warning "IMPORTANT: Change JWT_SECRET and other secrets in production!"
 }

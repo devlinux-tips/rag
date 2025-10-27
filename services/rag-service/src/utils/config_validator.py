@@ -273,8 +273,9 @@ class ConfigValidator:
         "features.features_base_dir": str,
         "features.narodne_novine.enabled": bool,
         "features.narodne_novine.name": str,
-        "features.narodne_novine.collection_name": str,
-        "features.narodne_novine.documents_path": str,
+        # Feature templates are used to generate these dynamically
+        "features.collection_name_template": str,
+        "features.documents_template": str,
         # Batch Processing configuration
         "batch_processing.enabled": bool,
         "batch_processing.document_batch_size": int,

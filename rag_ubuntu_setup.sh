@@ -76,37 +76,6 @@ if command_exists "node"; then
     echo "✅ npm version: $NPM_VERSION"
 fi
 
-# Install SurrealDB
-echo "🗄️  Installing SurrealDB..."
-if command_exists "surreal"; then
-    echo "✅ SurrealDB already installed"
-    SURREAL_VERSION=$(surreal version 2>/dev/null | head -1 || echo "version check failed")
-    echo "   Version: $SURREAL_VERSION"
-else
-    echo "📥 Downloading and installing SurrealDB..."
-    curl --proto '=https' --tlsv1.2 -sSf https://install.surrealdb.com | sh
-
-    # Add to PATH for current session
-    export PATH="$HOME/.surrealdb:$PATH"
-
-    # Add to PATH permanently
-    if ! grep -q 'export PATH="$HOME/.surrealdb:$PATH"' ~/.bashrc; then
-        echo 'export PATH="$HOME/.surrealdb:$PATH"' >> ~/.bashrc
-        echo "✅ Added SurrealDB to PATH in ~/.bashrc"
-    fi
-
-    # Verify installation
-    if command -v surreal >/dev/null 2>&1; then
-        SURREAL_VERSION=$(surreal version 2>/dev/null | head -1 || echo "version check failed")
-        echo "✅ SurrealDB installed successfully"
-        echo "   Version: $SURREAL_VERSION"
-    else
-        echo "❌ SurrealDB installation may have failed"
-        echo "   Try running: source ~/.bashrc"
-        echo "   Then test with: surreal version"
-    fi
-fi
-
 # Install Python dependencies for RAG system
 echo "🔧 Setting up Python RAG environment..."
 if [ -f "requirements.txt" ]; then
@@ -138,31 +107,10 @@ else
     echo "✅ Vite already available"
 fi
 
-# Test SurrealDB installation
-echo "🧪 Testing SurrealDB installation..."
-if command_exists "surreal"; then
-    echo "🔄 Testing SurrealDB startup..."
-    # Test with timeout to avoid hanging
-    timeout 5s surreal start --user root --pass root memory --log trace &
-    SURREAL_PID=$!
-    sleep 2
-
-    if kill -0 $SURREAL_PID 2>/dev/null; then
-        echo "✅ SurrealDB test startup successful"
-        kill $SURREAL_PID 2>/dev/null || true
-        wait $SURREAL_PID 2>/dev/null || true
-    else
-        echo "⚠️  SurrealDB test startup failed, but binary exists"
-    fi
-else
-    echo "❌ SurrealDB not found in PATH"
-    echo "   Try: source ~/.bashrc && surreal version"
-fi
 
 # Create basic project structure if not exists
 echo "📁 Checking project structure..."
 mkdir -p services/rag-service/data/vectordb
-mkdir -p services/rag-service/data/surrealdb
 mkdir -p services/web-api
 mkdir -p services/user-frontend
 mkdir -p docs
@@ -172,23 +120,6 @@ echo "✅ Project directories ensured"
 # Create basic development scripts
 echo "📝 Creating development scripts..."
 
-# SurrealDB start script
-cat > scripts/start_surrealdb.sh << 'EOF'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-DATA_DIR="$PROJECT_ROOT/services/rag-service/data/surrealdb"
-
-echo "🗄️  Starting SurrealDB..."
-mkdir -p "$DATA_DIR"
-
-surreal start \
-  --log trace \
-  --user root \
-  --pass root \
-  --bind 127.0.0.1:8000 \
-  "surrealkv://$DATA_DIR/rag.db"
-EOF
 
 # RAG development server script
 cat > scripts/start_rag_dev.sh << 'EOF'
